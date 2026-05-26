@@ -1,0 +1,313 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens ───────────────────────────────────────────────────── */
+:root {
+  --ease-out:    cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  --accent:      #10b981;
+  --accent-dim:  rgba(16, 185, 129, 0.12);
+  --accent-ring: rgba(16, 185, 129, 0.35);
+
+  /* Dark theme surfaces (default) */
+  --surface-0:  #07070f;
+  --surface-1:  #0c0c14;
+  --surface-2:  #111119;
+  --surface-3:  #18181f;
+
+  --border:     rgba(255, 255, 255, 0.06);
+  --border-mid: rgba(255, 255, 255, 0.10);
+  --border-lit: rgba(255, 255, 255, 0.15);
+
+  /* Semantic text */
+  --text-1: #f1f5f9;
+  --text-2: #a1a1aa;
+  --text-3: #71717a;
+  --text-4: #52525e;
+
+  /* Hover overlays */
+  --hover-1: rgba(255, 255, 255, 0.04);
+  --hover-2: rgba(255, 255, 255, 0.025);
+
+  /* Shimmer */
+  --shimmer-a: rgba(255, 255, 255, 0.05);
+  --shimmer-b: rgba(255, 255, 255, 0.11);
+
+  /* Input / form */
+  --input-bg:      rgba(255, 255, 255, 0.04);
+  --input-border:  rgba(255, 255, 255, 0.09);
+  --input-text:    #f1f5f9;
+  --input-placeholder: #52525e;
+}
+
+/* ── Light theme overrides ───────────────────────────────────────────── */
+[data-theme="light"] {
+  --surface-0:  #eef0f3;
+  --surface-1:  #ffffff;
+  --surface-2:  #f8fafc;
+  --surface-3:  #f1f5f9;
+
+  --border:     rgba(0, 0, 0, 0.08);
+  --border-mid: rgba(0, 0, 0, 0.13);
+  --border-lit: rgba(0, 0, 0, 0.20);
+
+  --text-1: #0f172a;
+  --text-2: #334155;
+  --text-3: #64748b;
+  --text-4: #94a3b8;
+
+  --hover-1: rgba(0, 0, 0, 0.04);
+  --hover-2: rgba(0, 0, 0, 0.025);
+
+  --shimmer-a: rgba(0, 0, 0, 0.04);
+  --shimmer-b: rgba(0, 0, 0, 0.09);
+
+  --accent-dim:  rgba(16, 185, 129, 0.10);
+
+  --input-bg:      #f8fafc;
+  --input-border:  rgba(0, 0, 0, 0.13);
+  --input-text:    #0f172a;
+  --input-placeholder: #94a3b8;
+}
+
+/* ── Base ────────────────────────────────────────────────────────────── */
+@layer base {
+  html {
+    background: var(--surface-0);
+    color: var(--text-1);
+    font-family: 'Satoshi', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv01' 1, 'cv02' 1, 'ss01' 1;
+    font-weight: 450;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    letter-spacing: -0.005em;
+    transition: background-color 220ms var(--ease-out), color 220ms var(--ease-out);
+  }
+
+  * { border-color: var(--border); }
+
+  ::-webkit-scrollbar        { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track  { background: transparent; }
+  ::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.14); border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.24); }
+
+  [data-theme="light"] ::-webkit-scrollbar-thumb       { background: rgba(0,0,0,0.15); }
+  [data-theme="light"] ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.28); }
+
+  ::selection { background: rgba(16, 185, 129, 0.25); color: var(--text-1); }
+}
+
+/* ── Components ──────────────────────────────────────────────────────── */
+@layer components {
+  a, button, [role="button"] {
+    transition: color 120ms var(--ease-out), background-color 120ms var(--ease-out),
+      border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out),
+      opacity 120ms var(--ease-out);
+  }
+
+  .pressable {
+    transition: transform 120ms var(--ease-out), background-color 120ms var(--ease-out),
+      border-color 120ms var(--ease-out), color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
+  }
+  .pressable:active { transform: scale(0.98) translateY(0.5px); }
+
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--shimmer-a) 0%,
+      var(--shimmer-b) 50%,
+      var(--shimmer-a) 100%
+    );
+    background-size: 400px 100%;
+    animation: shimmer 1.8s linear infinite;
+  }
+
+  .fade-up        { animation: fade-up        240ms var(--ease-out) both; }
+  .fade-in        { animation: fade-in        160ms var(--ease-out) both; }
+  .slide-in-right { animation: slide-in-right 220ms var(--ease-out) both; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pressable:active { transform: none; }
+    .fade-up, .fade-in, .slide-in-right { animation: none; }
+    .shimmer { animation: none; background: var(--shimmer-a); }
+  }
+
+  .focus-accent:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 4px var(--accent-ring);
+  }
+
+  .card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
+  }
+  .card:hover { border-color: var(--border-mid); }
+  .card-interactive:hover {
+    border-color: var(--border-mid);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  }
+
+  [data-theme="light"] .card {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+  }
+  [data-theme="light"] .card-interactive:hover {
+    box-shadow: 0 4px 14px rgba(0,0,0,0.10);
+  }
+
+  .grain-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    pointer-events: none;
+    opacity: 0.018;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 200px 200px;
+  }
+  [data-theme="light"] .grain-overlay { opacity: 0.006; }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   LIGHT MODE — comprehensive Tailwind class overrides
+   These patch every component without touching individual TSX files.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── Text colours ────────────────────────────────────────────────────── */
+[data-theme="light"] .text-white          { color: var(--text-1)  !important; }
+[data-theme="light"] .text-zinc-100       { color: var(--text-1)  !important; }
+[data-theme="light"] .text-zinc-200       { color: var(--text-2)  !important; }
+[data-theme="light"] .text-zinc-300       { color: var(--text-2)  !important; }
+[data-theme="light"] .text-zinc-400       { color: var(--text-3)  !important; }
+[data-theme="light"] .text-zinc-500       { color: var(--text-3)  !important; }
+[data-theme="light"] .text-zinc-600       { color: var(--text-4)  !important; }
+[data-theme="light"] .text-zinc-700       { color: var(--text-4)  !important; }
+[data-theme="light"] .text-gray-300       { color: var(--text-2)  !important; }
+[data-theme="light"] .text-gray-400       { color: var(--text-3)  !important; }
+[data-theme="light"] .text-gray-500       { color: var(--text-3)  !important; }
+[data-theme="light"] .text-gray-600       { color: var(--text-4)  !important; }
+[data-theme="light"] .text-slate-300      { color: var(--text-2)  !important; }
+[data-theme="light"] .text-slate-400      { color: var(--text-3)  !important; }
+[data-theme="light"] .text-slate-500      { color: var(--text-3)  !important; }
+
+/* ── Surface backgrounds ─────────────────────────────────────────────── */
+/* Very dark page/sidebar backgrounds */
+[data-theme="light"] .bg-zinc-950         { background-color: var(--surface-3) !important; }
+[data-theme="light"] .bg-zinc-900         { background-color: var(--surface-2) !important; }
+[data-theme="light"] .bg-zinc-800         { background-color: var(--surface-3) !important; }
+
+/* Opacity variants of zinc-900 used as cards/sections */
+[data-theme="light"] .bg-zinc-900\/40,
+[data-theme="light"] .bg-zinc-900\/50,
+[data-theme="light"] .bg-zinc-900\/60,
+[data-theme="light"] .bg-zinc-900\/70,
+[data-theme="light"] .bg-zinc-900\/80    { background-color: var(--surface-2) !important; }
+
+[data-theme="light"] .bg-zinc-950\/80    { background-color: var(--surface-1) !important; }
+
+/* Black overlay backgrounds → neutral light equivalent */
+[data-theme="light"] .bg-black\/20       { background-color: rgba(0,0,0,0.03) !important; }
+[data-theme="light"] .bg-black\/40       { background-color: rgba(0,0,0,0.06) !important; }
+[data-theme="light"] .bg-black\/60       { background-color: rgba(0,0,0,0.35) !important; } /* modal backdrop — keep dark */
+
+/* White semi-transparent overlays used as hover/bg */
+[data-theme="light"] .bg-white\/\[0\.04\] { background-color: var(--hover-1) !important; }
+[data-theme="light"] .bg-white\/\[0\.025\]{ background-color: var(--hover-2) !important; }
+[data-theme="light"] .bg-white\/5        { background-color: var(--hover-1) !important; }
+[data-theme="light"] .bg-white\/\[0\.03\] { background-color: var(--hover-2) !important; }
+[data-theme="light"] .bg-white\/\[0\.06\] { background-color: var(--surface-3) !important; }
+[data-theme="light"] .bg-white\/\[0\.08\] { background-color: var(--surface-3) !important; }
+
+/* Gray with opacity (section backgrounds) */
+[data-theme="light"] .bg-gray-700\/50    { background-color: var(--surface-3) !important; }
+[data-theme="light"] .bg-gray-700\/40    { background-color: var(--surface-3) !important; }
+[data-theme="light"] .bg-gray-800\/80    { background-color: var(--surface-2) !important; }
+
+/* ── Hover backgrounds ───────────────────────────────────────────────── */
+[data-theme="light"] .hover\:bg-white\/\[0\.04\]:hover  { background-color: var(--hover-1) !important; }
+[data-theme="light"] .hover\:bg-white\/\[0\.025\]:hover { background-color: var(--hover-2) !important; }
+[data-theme="light"] .hover\:bg-white\/5:hover          { background-color: var(--hover-1) !important; }
+[data-theme="light"] .hover\:bg-zinc-800:hover          { background-color: var(--surface-3) !important; }
+[data-theme="light"] .hover\:bg-zinc-900:hover          { background-color: var(--surface-2) !important; }
+[data-theme="light"] .hover\:text-zinc-200:hover        { color: var(--text-1) !important; }
+[data-theme="light"] .hover\:text-zinc-300:hover        { color: var(--text-2) !important; }
+
+/* ── Borders ─────────────────────────────────────────────────────────── */
+[data-theme="light"] .border-white\/\[0\.04\],
+[data-theme="light"] .border-white\/\[0\.06\]  { border-color: var(--border) !important; }
+[data-theme="light"] .border-white\/\[0\.08\],
+[data-theme="light"] .border-white\/\[0\.09\]  { border-color: var(--border-mid) !important; }
+[data-theme="light"] .border-white\/\[0\.10\],
+[data-theme="light"] .border-white\/\[0\.12\],
+[data-theme="light"] .border-white\/\[0\.15\]  { border-color: var(--border-lit) !important; }
+[data-theme="light"] .border-white\/5          { border-color: var(--border) !important; }
+[data-theme="light"] .border-white\/10         { border-color: var(--border-mid) !important; }
+
+[data-theme="light"] .border-gray-600\/50,
+[data-theme="light"] .border-gray-700\/40,
+[data-theme="light"] .border-gray-700\/60      { border-color: var(--border) !important; }
+
+/* ── Divide lines ────────────────────────────────────────────────────── */
+[data-theme="light"] .divide-gray-700\/40 > * + *,
+[data-theme="light"] .divide-gray-700\/60 > * + *,
+[data-theme="light"] .divide-white\/\[0\.06\] > * + * { border-color: var(--border) !important; }
+
+/* ── Tags / badge variants ───────────────────────────────────────────── */
+/* Risk/status tags often use dark bg + light text */
+[data-theme="light"] .bg-red-500\/10     { background-color: rgba(239,68,68,0.10) !important; }
+[data-theme="light"] .bg-orange-500\/10  { background-color: rgba(249,115,22,0.10) !important; }
+[data-theme="light"] .bg-yellow-500\/10  { background-color: rgba(234,179,8,0.10) !important; }
+[data-theme="light"] .bg-emerald-500\/10 { background-color: rgba(16,185,129,0.10) !important; }
+[data-theme="light"] .bg-green-500\/10   { background-color: rgba(34,197,94,0.10) !important; }
+[data-theme="light"] .bg-blue-500\/10    { background-color: rgba(59,130,246,0.10) !important; }
+
+/* ── Form inputs — global catch ──────────────────────────────────────── */
+[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="light"] select,
+[data-theme="light"] textarea {
+  background: var(--input-bg)      !important;
+  border-color: var(--input-border) !important;
+  color: var(--input-text)         !important;
+}
+[data-theme="light"] input::placeholder,
+[data-theme="light"] textarea::placeholder {
+  color: var(--input-placeholder)  !important;
+}
+
+/* ── Sidebar nav items ───────────────────────────────────────────────── */
+[data-theme="light"] .nav-item:not(.nav-item--active) { color: var(--text-3); }
+[data-theme="light"] .nav-item:not(.nav-item--active):hover {
+  color: var(--text-1);
+  background: var(--hover-1);
+}
+
+/* ── Keyframes ───────────────────────────────────────────────────────── */
+@keyframes scan-beam {
+  0%   { top: -4px; }
+  100% { top: 100%; }
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.45; transform: scale(0.75); }
+}

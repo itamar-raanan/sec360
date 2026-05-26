@@ -1,0 +1,54 @@
+# ── Secrets & credentials ────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+ssl/
+*.key
+*.pem
+*.p12
+*.pfx
+
+# ── Python ───────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+*.log
+
+# ── Node / Frontend ──────────────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+frontend/certs/
+frontend/.vite/
+*.tsbuildinfo
+
+# ── Docker / runtime ─────────────────────────────────────────────
+*.sock
+.dockerenv
+docker-compose.override.yml
+
+# ── OS & editors ─────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ── Alembic ──────────────────────────────────────────────────────
+# keep migrations — do NOT ignore alembic/versions/
+
+# ── Test artefacts ───────────────────────────────────────────────
+.tox/

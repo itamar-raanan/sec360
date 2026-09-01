@@ -12,7 +12,6 @@ import {
   ShieldOff,
   AlertCircle,
   CheckCircle2,
-  ChevronDown,
   Eye,
   EyeOff,
   Smartphone,
@@ -401,7 +400,7 @@ function UsersTab() {
 // ── My Account tab ───────────────────────────────────────────────────────────
 
 function AccountTab() {
-  const { user, setAuth } = useAuthStore()
+  const { user } = useAuthStore()
   const [pwCurrent, setPwCurrent] = useState('')
   const [pwNew, setPwNew] = useState('')
   const [pwConfirm, setPwConfirm] = useState('')
@@ -696,7 +695,7 @@ function PlatformTab() {
   const [saving, setSaving] = useState(false)
 
   React.useEffect(() => {
-    if (cfg && !form) setForm(cfg)
+    if (cfg) setForm(current => current ?? cfg)
   }, [cfg])
 
   if (isLoading || !form) return (
@@ -994,8 +993,8 @@ function SsoTab() {
   }
 
   React.useEffect(() => {
-    if (remote && !form) {
-      setForm({
+    if (remote) {
+      setForm(current => current ?? {
         ...remote,
         saml_sp_entity_id:   remote.saml_sp_entity_id   || window.location.origin,
         saml_sp_acs_url:     remote.saml_sp_acs_url     || `${window.location.origin}/api/auth/saml/acs`,
@@ -1049,8 +1048,6 @@ function SsoTab() {
       setSaving(false)
     }
   }
-
-  const acsUrl = form.saml_sp_acs_url || `${window.location.origin}/api/auth/saml/acs`
 
   return (
     <div className="space-y-5 max-w-2xl">

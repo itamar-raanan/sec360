@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis,
-  Tooltip, ResponsiveContainer, AreaChart, Area,
+  Tooltip, ResponsiveContainer,
 } from 'recharts'
 import StatCard from '../components/shared/StatCard'
 import RiskBadge from '../components/shared/RiskBadge'

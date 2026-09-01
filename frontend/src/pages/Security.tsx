@@ -11,7 +11,6 @@ import {
   AlertCircle,
   CheckCircle2,
   X,
-  Crown,
   UserCheck,
   UserX,
   Search,
@@ -61,21 +60,6 @@ function fmtDate(iso: string) {
 
 function fmtDateShort(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
-function RoleBadge({ role }: { role: string }) {
-  const styles: Record<string, React.CSSProperties> = {
-    admin:   { background: 'rgba(16,185,129,0.12)', color: '#34d399',  borderColor: 'rgba(16,185,129,0.2)' },
-    analyst: { background: 'rgba(96,165,250,0.10)', color: '#93c5fd',  borderColor: 'rgba(96,165,250,0.2)' },
-    viewer:  { background: 'rgba(113,113,122,0.12)', color: 'var(--text-2)', borderColor: 'rgba(113,113,122,0.2)' },
-  }
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border"
-      style={styles[role] ?? styles.viewer}>
-      {role === 'admin' && <Crown size={10} />}
-      {role}
-    </span>
-  )
 }
 
 function Alert({ type, msg }: { type: 'error' | 'success'; msg: string }) {

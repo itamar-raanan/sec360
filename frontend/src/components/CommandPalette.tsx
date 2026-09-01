@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Search, LayoutDashboard, Monitor, Users, CheckCircle,
   Activity, FileText, Plug, Settings, X, ArrowRight,
-  Lock, User,
+  Lock,
 } from 'lucide-react'
 import apiClient from '../api/client'
 import { usePanelStore } from '../store/panels'
@@ -61,17 +61,18 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const debouncedQuery = useDebounce(query, 200)
 
-  const navCommands: NavCommand[] = [
+  const navCommands = React.useMemo<NavCommand[]>(() => [
     { kind: 'nav', id: 'dashboard',    label: 'Overview',      description: 'Security dashboard & metrics',   icon: LayoutDashboard, action: () => navigate('/dashboard'),    keywords: ['home', 'overview'] },
     { kind: 'nav', id: 'endpoints',    label: 'Endpoints',     description: 'Managed devices and compliance', icon: Monitor,         action: () => navigate('/endpoints'),    keywords: ['devices', 'machines', 'hosts'] },
     { kind: 'nav', id: 'users',        label: 'Users',         description: 'User risk and activity',         icon: Users,           action: () => navigate('/users'),         keywords: ['people', 'accounts', 'identities'] },
     { kind: 'nav', id: 'compliance',   label: 'Compliance',    description: 'Device compliance status',       icon: CheckCircle,     action: () => navigate('/compliance'),    keywords: ['status', 'policy'] },
     { kind: 'nav', id: 'activity',     label: 'Activity',      description: 'Security event feed',            icon: Activity,        action: () => navigate('/activity'),      keywords: ['events', 'logs', 'timeline'] },
+    { kind: 'nav', id: 'investigation', label: 'Investigation', description: 'Investigate users and endpoints', icon: Search,          action: () => navigate('/investigation'), keywords: ['search', 'triage', 'forensics'] },
     { kind: 'nav', id: 'reports',      label: 'Reports',       description: 'Generate and export reports',    icon: FileText,        action: () => navigate('/reports'),       keywords: ['export', 'pdf', 'csv'] },
     { kind: 'nav', id: 'security',     label: 'Security',      description: 'Users, roles & audit log',       icon: Lock,            action: () => navigate('/security'),      keywords: ['audit', 'users', 'access'] },
     { kind: 'nav', id: 'integrations', label: 'Integrations',  description: 'Connected platforms and APIs',   icon: Plug,            action: () => navigate('/integrations'),  keywords: ['sentinelone', 'jumpcloud', 'google'] },
     { kind: 'nav', id: 'settings',     label: 'Settings',      description: 'Platform configuration',        icon: Settings,        action: () => navigate('/settings'),      keywords: ['config', 'platform', 'sso', 'mfa'] },
-  ]
+  ], [navigate])
 
   // Live entity search — only fires when query has ≥2 chars
   const searchEnabled = debouncedQuery.trim().length >= 2

@@ -419,13 +419,6 @@ function getCatalogEntry(type: string): CatalogEntry | null {
   return INTEGRATION_CATALOG[type] || null
 }
 
-function getCustomLabel(type: string): string {
-  const parts = type.replace(/^custom_(api|db)_?/, '').replace(/-/g, ' ')
-  return parts
-    ? parts.charAt(0).toUpperCase() + parts.slice(1)
-    : type.startsWith('custom_api') ? 'Custom API' : 'Custom DB'
-}
-
 // ─── DynamicForm ─────────────────────────────────────────────────────────────
 
 function DynamicForm({
@@ -590,7 +583,6 @@ function IntegrationCard({
   onClick: () => void
 }) {
   const catalog = getCatalogEntry(config.integration_type)
-  const isCustom = config.integration_type.startsWith('custom_')
   const isCustomApi = config.integration_type.startsWith('custom_api')
 
   const Icon = catalog?.icon ?? (isCustomApi ? Activity : Database)
@@ -679,13 +671,16 @@ function IntegrationPanel({
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [view, setView] = useState<'status' | 'config'>('status')
 
+  const configType = config?.integration_type
+  const initialView = config?.credentials_configured ? 'status' : 'config'
+
   useEffect(() => {
-    if (config) {
+    if (configType) {
       setFormValues({})
       setTestResult(null)
-      setView(config.credentials_configured ? 'status' : 'config')
+      setView(initialView)
     }
-  }, [config?.integration_type])
+  }, [configType, initialView])
 
   const catalog = config ? getCatalogEntry(config.integration_type) : null
   const isCustom = config?.integration_type.startsWith('custom_') ?? false

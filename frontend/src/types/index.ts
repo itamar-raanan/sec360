@@ -119,9 +119,9 @@ export interface ComplianceSummaryStats {
   non_compliant: number
   compliant_pct: number
   no_edr: number
-  outdated_agent: number
-  offline: number
-  no_encryption: number
+  edr_outdated: number
+  no_dlp: number
+  dlp_outdated: number
 }
 
 export interface ActivityEvent {

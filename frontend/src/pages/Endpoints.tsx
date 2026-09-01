@@ -227,7 +227,8 @@ export default function Endpoints() {
     e.stopPropagation()
     setSelectedIds(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
   }
@@ -289,19 +290,26 @@ export default function Endpoints() {
       const hasDlp = agents.some(a => a.product_name === 'symantec')
       const hasGp  = agents.some(a => a.product_name === 'globalprotect')
       const hasWss = agents.some(a => a.product_name === 'symantec_wss')
-      hasS1  ? agent.has_s1++  : agent.no_s1++
-      hasDlp ? agent.has_dlp++ : agent.no_dlp++
-      hasGp  ? agent.has_gp++  : agent.no_gp++
-      hasWss ? agent.has_wss++ : agent.no_wss++
+      if (hasS1) agent.has_s1++
+      else agent.no_s1++
+      if (hasDlp) agent.has_dlp++
+      else agent.no_dlp++
+      if (hasGp) agent.has_gp++
+      else agent.no_gp++
+      if (hasWss) agent.has_wss++
+      else agent.no_wss++
       if (agents.some(a => a.status === 'inactive')) agent.disabled_agent++
       if (!hasGp && !hasWss) agent.no_vpn++
       // agent status
       const s1Agent  = agents.find(a => a.product_name === 'sentinelone')
       const dlpAgent = agents.find(a => a.product_name === 'symantec')
-      if (s1Agent)  s1Agent.status  === 'active' ? agentStatus.s1_active++  : agentStatus.s1_inactive++
-      if (dlpAgent) dlpAgent.status === 'active' ? agentStatus.dlp_active++ : agentStatus.dlp_inactive++
+      if (s1Agent?.status === 'active') agentStatus.s1_active++
+      else if (s1Agent) agentStatus.s1_inactive++
+      if (dlpAgent?.status === 'active') agentStatus.dlp_active++
+      else if (dlpAgent) agentStatus.dlp_inactive++
       // owner
-      ep.owner_user_id ? owner.assigned++ : owner.unassigned++
+      if (ep.owner_user_id) owner.assigned++
+      else owner.unassigned++
     }
 
     return { risk, compliance, os, agent, agentStatus, owner }

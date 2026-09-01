@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   FileText, Download, Send, Plus, Trash2, Play, Clock, ToggleLeft, ToggleRight,
-  ChevronDown, AlertCircle, CheckCircle2, X, Filter, Calendar, Printer,
+  ChevronDown, AlertCircle, X, Filter, Calendar, Printer,
 } from 'lucide-react'
 import apiClient from '../api/client'
 

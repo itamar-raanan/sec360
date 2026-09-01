@@ -30,6 +30,7 @@ const NAV_ITEMS = [
   { to: '/users',        icon: Users,           label: 'Users',        minRole: 'viewer' },
   { to: '/compliance',   icon: CheckCircle,     label: 'Compliance',   minRole: 'viewer' },
   { to: '/activity',     icon: Activity,        label: 'Activity',     minRole: 'viewer' },
+  { to: '/investigation', icon: Search,          label: 'Investigation', minRole: 'viewer' },
   { to: '/ai-chat',      icon: MessageSquare,   label: 'AI Assistant', minRole: 'viewer' },
   { to: '/ai-insights',  icon: Brain,           label: 'AI Insights',  minRole: 'analyst' },
   { to: '/reports',      icon: FileText,        label: 'Reports',      minRole: 'analyst' },

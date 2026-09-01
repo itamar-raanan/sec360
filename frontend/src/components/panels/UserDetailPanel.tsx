@@ -2,7 +2,7 @@ import React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import {
-  User, Monitor, CheckCircle, XCircle,
+  Monitor, CheckCircle, XCircle,
   AlertTriangle, Clock, Wifi, Building2, UserCheck, Briefcase, Phone,
 } from 'lucide-react'
 import apiClient from '../../api/client'
@@ -80,7 +80,7 @@ function ComplianceCheck({ label, ok }: { label: string; ok: boolean }) {
   )
 }
 
-export function UserDetailPanel({ userId, onClose }: { userId: string; onClose?: () => void }) {
+export function UserDetailPanel({ userId }: { userId: string }) {
   const { user: authUser } = useAuthStore()
   const { data: identity, isLoading, error } = useQuery<UserIdentity>({
     queryKey: ['user-identity', userId],

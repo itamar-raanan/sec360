@@ -14,6 +14,18 @@ from app.models.user import AuthUser
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
+
+@pytest.fixture(autouse=True)
+def reset_in_memory_rate_limiter():
+    """Keep brute-force state isolated between tests."""
+    from app.core import rate_limit
+
+    with rate_limit._failed_lock:
+        rate_limit._failed.clear()
+    yield
+    with rate_limit._failed_lock:
+        rate_limit._failed.clear()
+
 @pytest_asyncio.fixture(scope="function")
 async def db_engine():
     engine = create_async_engine(TEST_DB_URL, echo=False)
@@ -41,7 +53,7 @@ async def client(db_session):
 
     app.dependency_overrides[get_db] = override_get_db
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="https://test") as ac:
         yield ac
 
     app.dependency_overrides.clear()

@@ -155,7 +155,8 @@ export default function Users() {
       if (u.suspended) status.suspended++
       else if (u.employment_status === 'inactive') status.inactive++
       else status.active++
-      u.mfa_enabled ? mfa.enabled++ : mfa.disabled++
+      if (u.mfa_enabled) mfa.enabled++
+      else mfa.disabled++
       if ((u.endpoint_count ?? 0) === 0) endpoint.no_endpoint++
     }
 

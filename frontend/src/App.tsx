@@ -14,6 +14,7 @@ import Reports from './pages/Reports'
 import SsoMfa from './pages/SsoMfa'
 import AIInsights from './pages/AIInsights'
 import AIChat from './pages/AIChat'
+import Investigation from './pages/Investigation'
 import { useAuthStore } from './store/auth'
 
 function AdminOnly({ children }: { children: React.ReactNode }) {
@@ -42,7 +43,7 @@ export default function App() {
     }
     window.addEventListener('auth:unauthorized', onUnauthorized)
     return () => window.removeEventListener('auth:unauthorized', onUnauthorized)
-  }, [])
+  }, [navigate, restoreSession])
 
   return (
     <Routes>
@@ -59,6 +60,7 @@ export default function App() {
         <Route path="/users" element={<Users />} />
         <Route path="/compliance" element={<Compliance />} />
         <Route path="/activity" element={<Activity />} />
+        <Route path="/investigation" element={<Investigation />} />
         <Route path="/ai-insights" element={<AnalystOnly><AIInsights /></AnalystOnly>} />
         <Route path="/ai-chat" element={<AIChat />} />
         <Route path="/reports" element={<AnalystOnly><Reports /></AnalystOnly>} />

@@ -4,10 +4,9 @@ import { useSearchParams } from 'react-router-dom'
 import { PieChart, Pie, Cell, Tooltip } from 'recharts'
 import {
   ShieldCheck, ShieldAlert, ShieldOff, RefreshCw,
-  Monitor, User, ChevronRight, X, Search, Lock, LockOpen,
-  Package, PackageX, Cpu, HardDrive, MousePointer,
+  Monitor, User, ChevronRight, X, Search, LockOpen,
+  PackageX, Cpu, HardDrive, MousePointer,
 } from 'lucide-react'
-import { formatDistanceToNow } from 'date-fns'
 import apiClient from '../api/client'
 import { usePanelStore } from '../store/panels'
 
@@ -58,11 +57,6 @@ const ISSUE_META: Record<string, { label: string; color: string; icon: React.Ele
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function relTime(ts: string | null | undefined) {
-  if (!ts) return '—'
-  try { return formatDistanceToNow(new Date(ts), { addSuffix: true }) } catch { return '—' }
-}
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = {
@@ -120,95 +114,9 @@ function KpiCard({
   )
 }
 
-// ─── Detail drawer ────────────────────────────────────────────────────────────
-
-function EndpointDetailDrawer({
-  ep, onClose,
-}: { ep: ComplianceEndpoint; onClose: () => void }) {
-  const checks: { label: string; ok: boolean; icon: React.ElementType }[] = [
-    { label: 'EDR Installed',    ok: ep.edr_installed,    icon: ep.edr_installed    ? ShieldCheck : ShieldOff },
-    { label: 'EDR Up-to-date',   ok: ep.edr_version_ok,   icon: ep.edr_version_ok   ? Package     : PackageX },
-    { label: 'DLP Installed',    ok: ep.dlp_installed,    icon: ep.dlp_installed    ? Lock        : LockOpen },
-    { label: 'DLP Up-to-date',   ok: ep.dlp_version_ok,   icon: ep.dlp_version_ok   ? Cpu         : Cpu },
-    ...(ep.disk_encrypted !== null && ep.disk_encrypted !== undefined
-      ? [{ label: 'Disk Encrypted', ok: ep.disk_encrypted,          icon: HardDrive    }]
-      : []),
-    ...(ep.device_control_enabled !== null && ep.device_control_enabled !== undefined
-      ? [{ label: 'Device Control', ok: ep.device_control_enabled,  icon: MousePointer }]
-      : []),
-  ]
-
-  return (
-    <div className="w-80 flex-shrink-0 border-l border-white/[0.06] flex flex-col overflow-hidden bg-zinc-950">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06]">
-        <span className="text-sm font-semibold text-white truncate">{ep.hostname}</span>
-        <button onClick={onClose} className="text-zinc-500 hover:text-white ml-2 flex-shrink-0">
-          <X size={15} />
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Status */}
-        <div className="flex items-center gap-2">
-          <StatusPill status={ep.status} />
-          <span className="text-xs text-zinc-500">{ep.failure_count} issue{ep.failure_count !== 1 ? 's' : ''}</span>
-        </div>
-
-        {/* Owner */}
-        {ep.owner_email && (
-          <div className="bg-zinc-900 rounded-lg p-3 space-y-1">
-            <div className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Owner</div>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-emerald-600/30 flex items-center justify-center text-emerald-400 text-xs font-bold flex-shrink-0">
-                {ep.owner_email[0].toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                {ep.owner_name && <div className="text-sm text-white truncate">{ep.owner_name}</div>}
-                <div className="text-xs text-zinc-400 truncate">{ep.owner_email}</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* System info */}
-        <div className="bg-zinc-900 rounded-lg p-3 space-y-2">
-          <div className="text-xs text-zinc-500 uppercase tracking-wider mb-2">System</div>
-          <div className="flex justify-between text-xs">
-            <span className="text-zinc-500">OS</span>
-            <span className="text-zinc-300 text-right max-w-[160px] truncate">{ep.os_version || '—'}</span>
-          </div>
-          <div className="flex justify-between text-xs">
-            <span className="text-zinc-500">Evaluated</span>
-            <span className="text-zinc-300">{relTime(ep.last_evaluated)}</span>
-          </div>
-        </div>
-
-        {/* Compliance checks */}
-        <div className="bg-zinc-900 rounded-lg p-3">
-          <div className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Compliance checks</div>
-          <div className="space-y-2.5">
-            {checks.map(({ label, ok, icon: Icon }) => (
-              <div key={label} className="flex items-center gap-2.5">
-                <Icon size={14} className={ok ? 'text-emerald-300' : 'text-red-400'} />
-                <span className={`text-xs flex-1 ${ok ? 'text-zinc-300' : 'text-red-300'}`}>{label}</span>
-                <span className={`text-xs font-medium ${ok ? 'text-emerald-300' : 'text-red-400'}`}>
-                  {ok ? 'Pass' : 'Fail'}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── Right panel — endpoint list ──────────────────────────────────────────────
 
-function EndpointList({
-  filter, total,
-}: { filter: ActiveFilter | null; total: number }) {
+function EndpointList({ filter }: { filter: ActiveFilter | null }) {
   const [search, setSearch] = useState('')
   const { openPanel } = usePanelStore()
 
@@ -566,7 +474,7 @@ export default function Compliance() {
 
       {/* ── Right panel (endpoint list) ───────────────────────────────── */}
       <div className="flex-1 flex overflow-hidden">
-        <EndpointList filter={activeFilter} total={s.total} />
+        <EndpointList filter={activeFilter} />
       </div>
     </div>
   )

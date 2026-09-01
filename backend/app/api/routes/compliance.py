@@ -165,9 +165,9 @@ async def get_compliance_summary(
             func.sum(case((ComplianceStatus.status == "partial",       1), else_=0)).label("partial"),
             func.sum(case((ComplianceStatus.status == "non_compliant", 1), else_=0)).label("non_compliant"),
             func.sum(case((ComplianceStatus.edr_installed == False,    1), else_=0)).label("no_edr"),       # noqa: E712
-            func.sum(case((ComplianceStatus.agent_up_to_date == False, 1), else_=0)).label("outdated_agent"),  # noqa: E712
-            func.sum(case((ComplianceStatus.last_seen_recent == False, 1), else_=0)).label("offline"),      # noqa: E712
-            func.sum(case((ComplianceStatus.disk_encrypted == False,   1), else_=0)).label("no_encryption"),  # noqa: E712
+            func.sum(case(((ComplianceStatus.edr_installed == True) & (ComplianceStatus.edr_version_ok == False), 1), else_=0)).label("edr_outdated"),  # noqa: E712
+            func.sum(case((ComplianceStatus.dlp_installed == False, 1), else_=0)).label("no_dlp"),  # noqa: E712
+            func.sum(case(((ComplianceStatus.dlp_installed == True) & (ComplianceStatus.dlp_version_ok == False), 1), else_=0)).label("dlp_outdated"),  # noqa: E712
         )
     )).one()
 
@@ -180,9 +180,9 @@ async def get_compliance_summary(
         non_compliant=row.non_compliant or 0,
         compliant_pct=round(compliant / total * 100, 1) if total > 0 else 0.0,
         no_edr=row.no_edr or 0,
-        outdated_agent=row.outdated_agent or 0,
-        offline=row.offline or 0,
-        no_encryption=row.no_encryption or 0,
+        edr_outdated=row.edr_outdated or 0,
+        no_dlp=row.no_dlp or 0,
+        dlp_outdated=row.dlp_outdated or 0,
     )
 
 

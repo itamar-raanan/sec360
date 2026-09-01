@@ -4,7 +4,7 @@ import { formatDistanceToNow } from 'date-fns'
 import {
   Monitor, CheckCircle, XCircle, AlertTriangle,
   User, Mail, Clock, Cpu, Wifi, Building2,
-  Shield, ShieldOff, Hash, HardDrive, MousePointer, Tag,
+  Shield, ShieldOff, Hash, Tag,
   Sliders, X, Check, LayoutList, Server, Lock,
 } from 'lucide-react'
 import apiClient from '../../api/client'
@@ -160,7 +160,7 @@ function RiskOverrideSection({ endpointId, current, note }: {
   )
 }
 
-function AgentBlock({ label, detail, simple = false, showStateGroup = false, externalIp }: { label: string; detail: AgentDetail; simple?: boolean; showStateGroup?: boolean; externalIp?: string | null }) {
+function AgentBlock({ label, detail, simple = false, showStateGroup = false }: { label: string; detail: AgentDetail; simple?: boolean; showStateGroup?: boolean }) {
   const isActive    = detail.installed && detail.status === 'active'
   const isInstalled = detail.installed
 
@@ -295,7 +295,7 @@ function AgentBlock({ label, detail, simple = false, showStateGroup = false, ext
   )
 }
 
-export function EndpointDetailPanel({ endpointId, onClose }: { endpointId: string; onClose?: () => void }) {
+export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
   const { user } = useAuthStore()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
 
@@ -454,7 +454,7 @@ export function EndpointDetailPanel({ endpointId, onClose }: { endpointId: strin
         {/* ── AGENTS TAB ── */}
         {activeTab === 'agents' && (
           <div className="space-y-3">
-            <AgentBlock label="SentinelOne EDR"    detail={ep.sentinelone} externalIp={ep.external_ip} />
+            <AgentBlock label="SentinelOne EDR"    detail={ep.sentinelone} />
             <AgentBlock label="Symantec DLP"       detail={ep.symantec_dlp} showStateGroup />
             <AgentBlock label="GlobalProtect VPN"  detail={ep.globalprotect} simple />
             <AgentBlock label="Symantec WSS Agent" detail={ep.symantec_wss} simple />

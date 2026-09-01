@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Float, Boolean, DateTime, Enum as SAEnum
+from sqlalchemy import String, Float, Boolean, DateTime, Enum as SAEnum, JSON
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
@@ -24,7 +24,9 @@ class User(Base):
     risk_score: Mapped[float] = mapped_column(Float, default=0.0)
     job_title: Mapped[str | None] = mapped_column(String(255))
     phone: Mapped[str | None] = mapped_column(String(50))
-    sources: Mapped[dict | None] = mapped_column(JSONB)
+    sources: Mapped[dict | None] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

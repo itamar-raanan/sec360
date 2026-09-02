@@ -190,7 +190,7 @@ function UsersTab() {
 
       {/* Invite user panel */}
       {showCreate && (
-        <div className="rounded-xl p-5 space-y-3" style={{ background: 'rgba(9,9,18,0.6)', border: '1px solid var(--border-lit)' }}>
+        <div className="rounded-xl p-5 space-y-3" style={{ background: 'var(--surface-inset-strong)', border: '1px solid var(--border-lit)' }}>
           <div className="flex items-center justify-between mb-1">
             <div>
               <span className="text-sm font-medium text-white">Invite new user</span>
@@ -247,7 +247,7 @@ function UsersTab() {
       )}
 
       {/* Users table */}
-      <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(9,9,18,0.4)', border: '1px solid var(--border)' }}>
+      <div className="rounded-xl overflow-hidden" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
         {isLoading ? (
           <div className="p-4 space-y-2">
             {[...Array(4)].map((_, i) => (
@@ -387,7 +387,7 @@ function UsersTab() {
           { role: 'Analyst', color: '#60a5fa', desc: 'Read/write on data pages, no Settings or Integrations' },
           { role: 'Viewer', color: 'var(--text-3)', desc: 'Read-only access to all data pages' },
         ].map(({ role, color, desc }) => (
-          <div key={role} className="rounded-lg p-3" style={{ background: 'rgba(9,9,18,0.4)', border: '1px solid var(--border)' }}>
+          <div key={role} className="rounded-lg p-3" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
             <div className="text-xs font-semibold mb-1" style={{ color }}>{role}</div>
             <div className="text-xs text-zinc-500">{desc}</div>
           </div>
@@ -492,7 +492,7 @@ function AccountTab() {
   return (
     <div className="space-y-6 max-w-lg">
       {/* Profile info */}
-      <div className="rounded-xl p-5" style={{ background: 'rgba(9,9,18,0.4)', border: '1px solid var(--border)' }}>
+      <div className="rounded-xl p-5" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 bg-emerald-600/20 rounded-full flex items-center justify-center text-emerald-400 font-bold">
             {user?.email?.[0]?.toUpperCase()}
@@ -505,7 +505,7 @@ function AccountTab() {
       </div>
 
       {/* Change password */}
-      <div className="rounded-xl p-5" style={{ background: 'rgba(9,9,18,0.4)', border: '1px solid var(--border)' }}>
+      <div className="rounded-xl p-5" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
         <h3 className="text-sm font-semibold text-white mb-4">Change password</h3>
         {pwMsg && <div className="mb-3"><Alert type={pwMsg.type} msg={pwMsg.msg} /></div>}
         <form onSubmit={changePw} className="space-y-3">
@@ -559,7 +559,7 @@ function AccountTab() {
       </div>
 
       {/* Two-factor authentication */}
-      <div className="rounded-xl p-5" style={{ background: 'rgba(9,9,18,0.4)', border: '1px solid var(--border)' }}>
+      <div className="rounded-xl p-5" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
         <div className="flex items-center justify-between mb-4">
           <div>
             <h3 className="text-sm font-semibold text-white">Two-factor authentication</h3>
@@ -701,7 +701,7 @@ function PlatformTab() {
   if (isLoading || !form) return (
     <div className="space-y-5 max-w-2xl py-2">
       {[180, 280, 240, 320, 200].map((w, i) => (
-        <div key={i} className="rounded-xl overflow-hidden" style={{ background: 'rgba(9,9,18,0.4)', border: '1px solid var(--border)' }}>
+        <div key={i} className="rounded-xl overflow-hidden" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
           <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
             <div className="shimmer h-3 rounded w-32" />
           </div>
@@ -850,8 +850,8 @@ function PlatformTab() {
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(9,9,18,0.4)', border: '1px solid var(--border)' }}>
-      <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)', background: 'rgba(9,9,18,0.6)' }}>
+    <div className="rounded-xl overflow-hidden" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
+      <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-inset-strong)' }}>
         <div className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">{title}</div>
         {hint && <div className="text-xs text-zinc-500 mt-0.5">{hint}</div>}
       </div>
@@ -1008,7 +1008,7 @@ function SsoTab() {
   if (isLoading || !form) return (
     <div className="space-y-5 max-w-2xl py-2">
       {[...Array(4)].map((_, i) => (
-        <div key={i} className="rounded-xl overflow-hidden" style={{ background: 'rgba(9,9,18,0.4)', border: '1px solid var(--border)' }}>
+        <div key={i} className="rounded-xl overflow-hidden" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
           <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)' }}>
             <div className="shimmer h-3 rounded w-28" />
           </div>
@@ -1129,7 +1129,7 @@ function SsoTab() {
       </Section>
 
       {/* IdP metadata upload */}
-      <div className="rounded-xl p-4 space-y-3" style={{ background: 'rgba(9,9,18,0.4)', border: '1px solid var(--border)' }}>
+      <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
         <div>
           <div className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Import IdP metadata</div>
           <p className="text-xs text-zinc-500 mt-1">
@@ -1298,7 +1298,7 @@ function AuditTab() {
         </div>
       </div>
 
-      <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(9,9,18,0.4)', border: '1px solid var(--border)' }}>
+      <div className="rounded-xl overflow-hidden" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
         {isLoading ? (
           <div className="p-4 space-y-2">
             {[...Array(8)].map((_, i) => (

@@ -5,6 +5,7 @@ import {
   Search, LayoutDashboard, Monitor, Users, CheckCircle,
   Activity, FileText, Plug, Settings, X, ArrowRight,
   Lock,
+  Database,
 } from 'lucide-react'
 import apiClient from '../api/client'
 import { usePanelStore } from '../store/panels'
@@ -68,6 +69,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { kind: 'nav', id: 'compliance',   label: 'Compliance',    description: 'Device compliance status',       icon: CheckCircle,     action: () => navigate('/compliance'),    keywords: ['status', 'policy'] },
     { kind: 'nav', id: 'activity',     label: 'Activity',      description: 'Security event feed',            icon: Activity,        action: () => navigate('/activity'),      keywords: ['events', 'logs', 'timeline'] },
     { kind: 'nav', id: 'investigation', label: 'Investigation', description: 'Investigate users and endpoints', icon: Search,          action: () => navigate('/investigation'), keywords: ['search', 'triage', 'forensics'] },
+    { kind: 'nav', id: 'dlp-policy-search', label: 'DLP User Policy Search', description: 'Find user exclusions across DLP policies', icon: Database, action: () => navigate('/dlp-user-policy-search'), keywords: ['symantec', 'exclusion', 'sender', 'recipient'] },
     { kind: 'nav', id: 'reports',      label: 'Reports',       description: 'Generate and export reports',    icon: FileText,        action: () => navigate('/reports'),       keywords: ['export', 'pdf', 'csv'] },
     { kind: 'nav', id: 'security',     label: 'Security',      description: 'Users, roles & audit log',       icon: Lock,            action: () => navigate('/security'),      keywords: ['audit', 'users', 'access'] },
     { kind: 'nav', id: 'integrations', label: 'Integrations',  description: 'Connected platforms and APIs',   icon: Plug,            action: () => navigate('/integrations'),  keywords: ['sentinelone', 'jumpcloud', 'google'] },

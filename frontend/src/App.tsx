@@ -15,6 +15,7 @@ import SsoMfa from './pages/SsoMfa'
 import AIInsights from './pages/AIInsights'
 import AIChat from './pages/AIChat'
 import Investigation from './pages/Investigation'
+import DlpUserPolicySearch from './pages/DlpUserPolicySearch'
 import { useAuthStore } from './store/auth'
 
 function AdminOnly({ children }: { children: React.ReactNode }) {
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="/compliance" element={<Compliance />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/investigation" element={<Investigation />} />
+        <Route path="/dlp-user-policy-search" element={<AnalystOnly><DlpUserPolicySearch /></AnalystOnly>} />
         <Route path="/ai-insights" element={<AnalystOnly><AIInsights /></AnalystOnly>} />
         <Route path="/ai-chat" element={<AIChat />} />
         <Route path="/reports" element={<AnalystOnly><Reports /></AnalystOnly>} />

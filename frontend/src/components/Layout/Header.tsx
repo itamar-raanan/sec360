@@ -8,6 +8,7 @@ const PAGE_TITLES: Record<string, { title: string; desc: string }> = {
   '/users':        { title: 'Users',         desc: 'User risk and activity' },
   '/compliance':   { title: 'Compliance',    desc: 'Device compliance status' },
   '/activity':     { title: 'Activity',      desc: 'Security event feed' },
+  '/dlp-user-policy-search': { title: 'DLP User Policy Search', desc: 'User exclusions across Symantec DLP policies' },
   '/reports':      { title: 'Reports',       desc: 'Generated reports and exports' },
   '/integrations': { title: 'Integrations',  desc: 'Connected platforms and APIs' },
   '/settings':     { title: 'Settings',      desc: 'Platform configuration' },

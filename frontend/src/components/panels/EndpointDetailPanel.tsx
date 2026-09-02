@@ -102,7 +102,7 @@ function RiskOverrideSection({ endpointId, current, note }: {
 
   return (
     <div className="rounded-lg border border-white/[0.08] overflow-hidden"
-      style={{ background: current != null ? 'rgba(245,158,11,0.05)' : 'rgba(9,9,18,0.4)' }}>
+      style={{ background: current != null ? 'rgba(245,158,11,0.05)' : 'var(--surface-inset)' }}>
       <button
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between px-3.5 py-2.5 text-left"

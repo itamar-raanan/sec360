@@ -182,7 +182,7 @@ function UsersTab() {
           { label: '2FA enabled',    value: `${mfaCount} / ${users.length}`, color: '#34d399' },
         ].map(({ label, value, color }) => (
           <div key={label} className="rounded-xl px-4 py-3.5"
-            style={{ background: 'rgba(9,9,18,0.4)', border: '1px solid var(--border)' }}>
+            style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
             <div className="text-xs text-zinc-500 mb-1">{label}</div>
             <div className="text-xl font-bold" style={{ color }}>{value}</div>
           </div>
@@ -210,7 +210,7 @@ function UsersTab() {
       {/* Invite panel */}
       {showCreate && (
         <div className="rounded-xl p-5 space-y-3"
-          style={{ background: 'rgba(9,9,18,0.6)', border: '1px solid var(--border-lit)' }}>
+          style={{ background: 'var(--surface-inset-strong)', border: '1px solid var(--border-lit)' }}>
           <div className="flex items-center justify-between mb-1">
             <div>
               <span className="text-sm font-medium text-white">Invite new user</span>
@@ -265,7 +265,7 @@ function UsersTab() {
 
       {/* Table */}
       <div className="rounded-xl overflow-hidden"
-        style={{ background: 'rgba(9,9,18,0.4)', border: '1px solid var(--border)' }}>
+        style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
         {isLoading ? (
           <div className="p-4 space-y-2">
             {[...Array(5)].map((_, i) => (
@@ -407,7 +407,7 @@ function UsersTab() {
           { role: 'Viewer',  color: 'var(--text-3)', desc: 'Read-only access to all data pages' },
         ].map(({ role, color, desc }) => (
           <div key={role} className="rounded-lg p-3"
-            style={{ background: 'rgba(9,9,18,0.4)', border: '1px solid var(--border)' }}>
+            style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
             <div className="text-xs font-semibold mb-1" style={{ color }}>{role}</div>
             <div className="text-xs text-zinc-500">{desc}</div>
           </div>
@@ -515,7 +515,7 @@ function AuditTab() {
 
       {/* Table */}
       <div className="rounded-xl overflow-hidden"
-        style={{ background: 'rgba(9,9,18,0.4)', border: '1px solid var(--border)' }}>
+        style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
         {isLoading ? (
           <div className="p-4 space-y-2">
             {[...Array(8)].map((_, i) => (

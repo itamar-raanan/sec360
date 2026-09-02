@@ -522,7 +522,7 @@ export default function Endpoints() {
         {/* Sort bar */}
         <div
           className="flex-shrink-0 flex items-center justify-between px-5 py-2"
-          style={{ borderBottom: '1px solid var(--hover-1)', background: 'rgba(0,0,0,0.2)' }}
+          style={{ borderBottom: '1px solid var(--border)', background: 'var(--table-header)' }}
         >
           <div className="flex items-center gap-4">
             <SortBtn label="Name"        field="name"        current={sortField} dir={sortDir} onClick={handleSort} />

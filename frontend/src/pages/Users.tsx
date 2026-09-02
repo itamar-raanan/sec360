@@ -315,7 +315,7 @@ export default function Users() {
         {/* Sort bar */}
         <div
           className="flex-shrink-0 flex items-center gap-4 px-5 py-2"
-          style={{ borderBottom: '1px solid var(--hover-1)', background: 'rgba(0,0,0,0.2)' }}
+          style={{ borderBottom: '1px solid var(--border)', background: 'var(--table-header)' }}
         >
           <SortBtn label="Name"        field="name"        current={sortField} dir={sortDir} onClick={handleSort} />
           <SortBtn label="Last Active" field="last_active" current={sortField} dir={sortDir} onClick={handleSort} />

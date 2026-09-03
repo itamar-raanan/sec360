@@ -74,6 +74,10 @@ class EndpointResponse(EndpointBase):
     risk_score_note: Optional[str] = None
     tags: Optional[str] = None
     source: Optional[str] = None
+    lifecycle_state: str = "active"
+    lifecycle_reason: Optional[str] = None
+    lifecycle_changed_at: Optional[datetime] = None
+    lifecycle_changed_by: Optional[str] = None
     owner_user_id: Optional[uuid.UUID] = None
     owner: Optional[OwnerSummary] = None
     agents: list[AgentSummary] = []

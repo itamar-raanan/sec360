@@ -66,6 +66,10 @@ export interface Endpoint {
   last_reboot: string | null
   location: string | null
   source: string | null
+  lifecycle_state: 'active' | 'stale' | 'ignored' | 'decommissioned'
+  lifecycle_reason: string | null
+  lifecycle_changed_at: string | null
+  lifecycle_changed_by: string | null
   last_seen: string | null
   risk_score: number
   risk_score_override: number | null

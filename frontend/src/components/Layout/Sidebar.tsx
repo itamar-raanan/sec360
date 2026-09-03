@@ -19,6 +19,7 @@ import {
   Brain,
   MessageSquare,
   Database,
+  Fingerprint,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../../store/auth'
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { to: '/compliance',   icon: CheckCircle,     label: 'Compliance',   minRole: 'viewer' },
   { to: '/activity',     icon: Activity,        label: 'Activity',     minRole: 'viewer' },
   { to: '/investigation', icon: Search,          label: 'Investigation', minRole: 'viewer' },
+  { to: '/data-quality',  icon: Fingerprint,     label: 'Data Quality',  minRole: 'viewer' },
   { to: '/dlp-user-policy-search', icon: Database, label: 'DLP Policy Search', minRole: 'analyst' },
   { to: '/ai-chat',      icon: MessageSquare,   label: 'AI Assistant', minRole: 'viewer' },
   { to: '/ai-insights',  icon: Brain,           label: 'AI Insights',  minRole: 'analyst' },

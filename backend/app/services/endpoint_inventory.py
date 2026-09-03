@@ -23,5 +23,6 @@ def current_endpoint_clause(*, now: datetime | None = None):
     )
     return (
         Endpoint.is_active.is_(True)
+        & (Endpoint.lifecycle_state == "active")
         & or_(Endpoint.last_seen >= cutoff, recent_agent)
     )

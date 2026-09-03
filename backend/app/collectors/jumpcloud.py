@@ -500,7 +500,11 @@ class JumpCloudCollector:
             else:
                 # JumpCloud takes ownership and updates key fields
                 endpoint.source = "jumpcloud"
-                endpoint.is_active = True   # re-activate if it was previously pruned
+                # A fresh inventory observation may revive an automatically
+                # stale record, but never overrides an analyst disposition.
+                if endpoint.lifecycle_state in ("active", "stale"):
+                    endpoint.is_active = True
+                    endpoint.lifecycle_state = "active"
                 endpoint.hostname = hostname   # use the clean JC hostname as canonical
                 if serial:
                     endpoint.serial_number = serial
@@ -531,6 +535,8 @@ class JumpCloudCollector:
         for ep in jc_endpoints:
             if ep.id not in touched_ids:
                 ep.is_active = False
+                if ep.lifecycle_state == "active":
+                    ep.lifecycle_state = "stale"
                 pruned += 1
         if pruned:
             logger.info("JumpCloud: marked %d removed systems as inactive", pruned)

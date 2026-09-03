@@ -6,6 +6,7 @@ import {
   Activity, FileText, Plug, Settings, X, ArrowRight,
   Lock, ShieldOff, Wifi, UserX, Radar,
   Database,
+  Fingerprint,
 } from 'lucide-react'
 import apiClient from '../api/client'
 import { usePanelStore } from '../store/panels'
@@ -69,6 +70,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { kind: 'nav', id: 'compliance',   label: 'Compliance',    description: 'Device compliance status',       icon: CheckCircle,     action: () => navigate('/compliance'),    keywords: ['status', 'policy'] },
     { kind: 'nav', id: 'activity',     label: 'Activity',      description: 'Security event feed',            icon: Activity,        action: () => navigate('/activity'),      keywords: ['events', 'logs', 'timeline'] },
     { kind: 'nav', id: 'investigation', label: 'Investigation', description: 'Investigate users and endpoints', icon: Search,          action: () => navigate('/investigation'), keywords: ['search', 'triage', 'forensics'] },
+    { kind: 'nav', id: 'data-quality', label: 'Data Quality', description: 'Review identity confidence and lifecycle', icon: Fingerprint, action: () => navigate('/data-quality'), keywords: ['duplicates', 'correlation', 'stale', 'inventory'] },
     { kind: 'nav', id: 'dlp-policy-search', label: 'DLP User Policy Search', description: 'Find user exclusions across DLP policies', icon: Database, action: () => navigate('/dlp-user-policy-search'), keywords: ['symantec', 'exclusion', 'sender', 'recipient'] },
     { kind: 'nav', id: 'reports',      label: 'Reports',       description: 'Generate and export reports',    icon: FileText,        action: () => navigate('/reports'),       keywords: ['export', 'pdf', 'csv'] },
     { kind: 'nav', id: 'security',     label: 'Security',      description: 'Users, roles & audit log',       icon: Lock,            action: () => navigate('/security'),      keywords: ['audit', 'users', 'access'] },
@@ -82,6 +84,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { kind: 'nav', id: 'missing-edr', label: 'Endpoints missing EDR', description: 'Find devices without SentinelOne coverage', icon: ShieldOff, action: () => navigate('/compliance?issue=no_edr'), keywords: ['sentinelone', 'agent', 'coverage'] },
     { kind: 'nav', id: 'missing-wss', label: 'Endpoints missing WSS', description: 'Find devices outside web security enforcement', icon: Wifi, action: () => navigate('/compliance?issue=no_network_security'), keywords: ['symantec', 'web', 'proxy', 'coverage'] },
     { kind: 'nav', id: 'unassigned-endpoints', label: 'Unassigned endpoints', description: 'Find devices without a correlated owner', icon: UserX, action: () => navigate('/endpoints?owner=unassigned'), keywords: ['owner', 'correlation', 'orphan'] },
+    { kind: 'nav', id: 'quality-review', label: 'Review endpoint data quality', description: 'Explain matches, lifecycle and duplicate candidates', icon: Fingerprint, action: () => navigate('/data-quality'), keywords: ['confidence', 'duplicates', 'inventory'] },
     { kind: 'nav', id: 'suspicious-activity', label: 'Suspicious activity', description: 'Open the filtered security event timeline', icon: Activity, action: () => navigate('/activity?is_suspicious=true'), keywords: ['events', 'alerts', 'anomalies'] },
   ], [navigate])
 

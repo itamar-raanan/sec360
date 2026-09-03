@@ -50,6 +50,13 @@ async def init_db():
             "ALTER TABLE auth_users         ADD COLUMN IF NOT EXISTS invited_by        VARCHAR(255)",
             "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS source           VARCHAR(50)  DEFAULT 'jumpcloud'",
             "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS serial_number    VARCHAR(100)",
+            # Endpoint lifecycle / data-quality review
+            "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS lifecycle_state      VARCHAR(32) NOT NULL DEFAULT 'active'",
+            "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS lifecycle_reason     TEXT",
+            "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS lifecycle_changed_at TIMESTAMPTZ",
+            "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS lifecycle_changed_by VARCHAR(255)",
+            "UPDATE endpoints SET lifecycle_state = 'stale' WHERE is_active = FALSE AND lifecycle_state = 'active'",
+            "CREATE INDEX IF NOT EXISTS ix_endpoints_lifecycle_state ON endpoints (lifecycle_state)",
             "ALTER TABLE users              ADD COLUMN IF NOT EXISTS source           VARCHAR(50)  DEFAULT 'jumpcloud'",
             "ALTER TABLE auth_users         ADD COLUMN IF NOT EXISTS mfa_enabled      BOOLEAN      DEFAULT FALSE",
             # Compliance — new per-product checks

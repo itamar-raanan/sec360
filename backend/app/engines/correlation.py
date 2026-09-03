@@ -304,7 +304,9 @@ async def deduplicate_endpoints(db: AsyncSession) -> int:
     # Run multiple passes until no further merges happen
     for _pass in range(5):
         result = await db.execute(
-            select(Endpoint).options(
+            select(Endpoint).where(
+                Endpoint.lifecycle_state.notin_(("ignored", "decommissioned"))
+            ).options(
                 selectinload(Endpoint.agents),
                 selectinload(Endpoint.compliance_status),
             )
@@ -512,7 +514,11 @@ async def match_user_to_endpoint(db: AsyncSession) -> int:
         if first and len(first) >= 3:
             by_firstname.setdefault(first, []).append(u)
 
-    endpoints_result = await db.execute(select(Endpoint))
+    endpoints_result = await db.execute(
+        select(Endpoint).where(
+            Endpoint.lifecycle_state.notin_(("ignored", "decommissioned"))
+        )
+    )
     endpoints = endpoints_result.scalars().all()
 
     matched = 0

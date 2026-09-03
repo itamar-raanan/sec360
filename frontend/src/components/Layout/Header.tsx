@@ -14,6 +14,7 @@ const PAGE_TITLES: Record<string, { title: string; desc: string }> = {
   '/compliance':   { title: 'Compliance',    desc: 'Control coverage and exceptions' },
   '/activity':     { title: 'Activity',      desc: 'Security event timeline' },
   '/investigation': { title: 'Investigation', desc: 'Cross-source entity analysis' },
+  '/data-quality':  { title: 'Data Quality',   desc: 'Endpoint identity confidence and lifecycle' },
   '/ai-chat':      { title: 'AI Assistant',  desc: 'Query your security posture' },
   '/ai-insights':  { title: 'AI Insights',   desc: 'Prioritized anomalous conditions' },
   '/dlp-user-policy-search': { title: 'DLP User Policy Search', desc: 'User exclusions across Symantec DLP policies' },

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Float, DateTime, ForeignKey, Boolean
+from sqlalchemy import String, Float, DateTime, ForeignKey, Boolean, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
@@ -25,6 +25,12 @@ class Endpoint(Base):
     risk_score_override: Mapped[float | None] = mapped_column(Float, nullable=True, default=None)
     risk_score_note: Mapped[str | None] = mapped_column(String(500), nullable=True, default=None)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Inventory lifecycle is explicit so analysts can distinguish an
+    # automatically stale device from an intentional exclusion.
+    lifecycle_state: Mapped[str] = mapped_column(String(32), default="active", index=True)
+    lifecycle_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lifecycle_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lifecycle_changed_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )

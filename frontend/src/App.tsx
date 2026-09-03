@@ -18,6 +18,7 @@ const AIInsights = lazy(() => import('./pages/AIInsights'))
 const AIChat = lazy(() => import('./pages/AIChat'))
 const Investigation = lazy(() => import('./pages/Investigation'))
 const DlpUserPolicySearch = lazy(() => import('./pages/DlpUserPolicySearch'))
+const DataQuality = lazy(() => import('./pages/DataQuality'))
 
 function RouteLoader() {
   return (
@@ -75,6 +76,7 @@ export default function App() {
         <Route path="/compliance" element={<Compliance />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/investigation" element={<Investigation />} />
+        <Route path="/data-quality" element={<DataQuality />} />
         <Route path="/dlp-user-policy-search" element={<AnalystOnly><DlpUserPolicySearch /></AnalystOnly>} />
         <Route path="/ai-insights" element={<AnalystOnly><AIInsights /></AnalystOnly>} />
         <Route path="/ai-chat" element={<AIChat />} />

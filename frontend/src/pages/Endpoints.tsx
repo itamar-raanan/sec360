@@ -5,6 +5,7 @@ import { formatDistanceToNow } from 'date-fns'
 import {
   Monitor, ChevronRight, ArrowUp, ArrowDown, ChevronsUpDown,
   UserCheck, Download, X, CheckSquare, Square, Users,
+  Rows3, AlignJustify, AlertTriangle,
 } from 'lucide-react'
 import apiClient from '../api/client'
 import RiskBadge from '../components/shared/RiskBadge'
@@ -130,7 +131,7 @@ function AssignOwnerModal({ count, onAssign, onClose, error, isPending }: {
         <div className="px-5 py-4 space-y-3">
           {error && (
             <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 text-red-400 text-xs px-3 py-2.5 rounded-lg">
-              <span className="mt-px">⚠</span>
+              <AlertTriangle size={13} className="mt-px flex-shrink-0" />
               <span>{error}</span>
             </div>
           )}
@@ -203,6 +204,14 @@ export default function Endpoints() {
   const [sortField, setSortField] = useState<SortField>('name')
   const [sortDir, setSortDir]     = useState<SortDir>('asc')
   const [page, setPage] = useState(1)
+  const [density, setDensity] = useState<'compact' | 'comfortable'>(
+    () => localStorage.getItem('endpoint-density') === 'compact' ? 'compact' : 'comfortable'
+  )
+
+  function updateDensity(next: 'compact' | 'comfortable') {
+    setDensity(next)
+    localStorage.setItem('endpoint-density', next)
+  }
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -496,6 +505,26 @@ export default function Endpoints() {
               : <Square size={16} />}
           </button>
           <h1 className="text-xl font-semibold text-white">Endpoints</h1>
+          <div className="ml-auto flex items-center rounded-[8px] p-0.5" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }} aria-label="Table density">
+            <button
+              onClick={() => updateDensity('compact')}
+              className="flex h-6 w-7 items-center justify-center rounded-[6px]"
+              style={{ background: density === 'compact' ? 'var(--surface-3)' : 'transparent', color: density === 'compact' ? 'var(--text-1)' : 'var(--text-4)' }}
+              title="Compact rows"
+              aria-pressed={density === 'compact'}
+            >
+              <AlignJustify size={12} />
+            </button>
+            <button
+              onClick={() => updateDensity('comfortable')}
+              className="flex h-6 w-7 items-center justify-center rounded-[6px]"
+              style={{ background: density === 'comfortable' ? 'var(--surface-3)' : 'transparent', color: density === 'comfortable' ? 'var(--text-1)' : 'var(--text-4)' }}
+              title="Comfortable rows"
+              aria-pressed={density === 'comfortable'}
+            >
+              <Rows3 size={12} />
+            </button>
+          </div>
         </div>
 
         {/* Filter bar */}
@@ -552,7 +581,13 @@ export default function Endpoints() {
                   <div
                     key={ep.id}
                     onClick={() => openPanel('endpoint', ep.id, ep.hostname)}
-                    className={`flex items-center gap-3 px-5 py-3.5 cursor-pointer ${isInactive ? 'opacity-60' : ''}`}
+                    onKeyDown={event => {
+                      if (event.key === 'Enter') openPanel('endpoint', ep.id, ep.hostname)
+                    }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open endpoint ${ep.hostname}`}
+                    className={`flex items-center gap-3 px-5 cursor-pointer ${density === 'compact' ? 'py-2' : 'py-3.5'} ${isInactive ? 'opacity-60' : ''}`}
                     style={{
                       transition: 'background-color 80ms ease',
                       background: isSelected ? 'rgba(16,185,129,0.06)' : 'transparent',
@@ -587,7 +622,7 @@ export default function Endpoints() {
                           <span className="text-xs text-zinc-600 truncate hidden sm:block">{ep.os_version}</span>
                         )}
                       </div>
-                      <div className="flex gap-1 mt-1 flex-wrap">
+                      <div className={`flex gap-1 flex-wrap ${density === 'compact' ? 'mt-0.5' : 'mt-1'}`}>
                         <span className={`text-xs px-1.5 py-0.5 rounded border ${hasS1 ? 'border-purple-500/30 text-purple-300 bg-purple-500/10' : 'border-red-500/20 text-red-400/60'}`}>
                           S1{hasS1 ? '' : ' ✗'}
                         </span>

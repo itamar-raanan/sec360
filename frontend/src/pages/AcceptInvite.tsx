@@ -83,7 +83,7 @@ export default function AcceptInvite() {
   const stepIndex = step === 'set-password' ? 0 : step === 'setup-2fa' ? 1 : -1
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--surface-0)' }}>
+    <div className="min-h-[100dvh] flex items-center justify-center p-4" style={{ background: 'var(--surface-0)' }}>
       <div className="grain-overlay" aria-hidden />
       <div className="w-full max-w-[420px]">
 

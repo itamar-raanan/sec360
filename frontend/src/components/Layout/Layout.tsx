@@ -56,7 +56,7 @@ export default function Layout() {
       <div className="grain-overlay" aria-hidden />
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
       <FloatingPanels />
-      <div className="flex h-screen overflow-hidden" style={{ background: 'var(--surface-0)' }}>
+      <div className="flex h-[100dvh] overflow-hidden" style={{ background: 'var(--surface-0)' }}>
         <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} onOpenCmd={() => setCmdOpen(true)} />
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <Header onOpenCmd={() => setCmdOpen(true)} />

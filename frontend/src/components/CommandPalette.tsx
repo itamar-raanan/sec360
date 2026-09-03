@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   Search, LayoutDashboard, Monitor, Users, CheckCircle,
   Activity, FileText, Plug, Settings, X, ArrowRight,
-  Lock,
+  Lock, ShieldOff, Wifi, UserX, Radar,
   Database,
 } from 'lucide-react'
 import apiClient from '../api/client'
@@ -76,6 +76,15 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { kind: 'nav', id: 'settings',     label: 'Settings',      description: 'Platform configuration',        icon: Settings,        action: () => navigate('/settings'),      keywords: ['config', 'platform', 'sso', 'mfa'] },
   ], [navigate])
 
+  const quickCommands = React.useMemo<NavCommand[]>(() => [
+    { kind: 'nav', id: 'critical-endpoints', label: 'Critical-risk endpoints', description: 'Open endpoints at the critical risk threshold', icon: Radar, action: () => navigate('/endpoints?risk=critical'), keywords: ['critical', 'risk', 'urgent', 'investigate'] },
+    { kind: 'nav', id: 'non-compliant-endpoints', label: 'Non-compliant endpoints', description: 'Review devices outside the security baseline', icon: ShieldOff, action: () => navigate('/compliance?status=non_compliant'), keywords: ['failed', 'noncompliant', 'remediate'] },
+    { kind: 'nav', id: 'missing-edr', label: 'Endpoints missing EDR', description: 'Find devices without SentinelOne coverage', icon: ShieldOff, action: () => navigate('/compliance?issue=no_edr'), keywords: ['sentinelone', 'agent', 'coverage'] },
+    { kind: 'nav', id: 'missing-wss', label: 'Endpoints missing WSS', description: 'Find devices outside web security enforcement', icon: Wifi, action: () => navigate('/compliance?issue=no_network_security'), keywords: ['symantec', 'web', 'proxy', 'coverage'] },
+    { kind: 'nav', id: 'unassigned-endpoints', label: 'Unassigned endpoints', description: 'Find devices without a correlated owner', icon: UserX, action: () => navigate('/endpoints?owner=unassigned'), keywords: ['owner', 'correlation', 'orphan'] },
+    { kind: 'nav', id: 'suspicious-activity', label: 'Suspicious activity', description: 'Open the filtered security event timeline', icon: Activity, action: () => navigate('/activity?is_suspicious=true'), keywords: ['events', 'alerts', 'anomalies'] },
+  ], [navigate])
+
   // Live entity search — only fires when query has ≥2 chars
   const searchEnabled = debouncedQuery.trim().length >= 2
   const { data: searchData, isFetching } = useQuery({
@@ -95,7 +104,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     if (!q) return navCommands
 
     // Navigation matches
-    const navMatches = navCommands.filter(c =>
+    const navMatches = [...navCommands, ...quickCommands].filter(c =>
       c.label.toLowerCase().includes(q) ||
       c.description.toLowerCase().includes(q) ||
       c.keywords?.some(k => k.includes(q))
@@ -120,7 +129,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     }))
 
     return [...navMatches, ...epResults, ...userResults]
-  }, [query, searchData, navCommands])
+  }, [query, searchData, navCommands, quickCommands])
 
   useEffect(() => {
     if (open) {
@@ -273,7 +282,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
             ref={inputRef}
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search pages, endpoints, users…"
+            placeholder="Search entities or run a command…"
             className="flex-1 bg-transparent text-white text-[14px] placeholder-zinc-600 focus:outline-none"
           />
           {isSearching && (

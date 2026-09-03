@@ -19,6 +19,7 @@ from app.models.endpoint import Endpoint
 from app.models.compliance import ComplianceStatus
 from app.models.activity import ActivityEvent
 from app.models.report import ScheduledReport
+from app.services.endpoint_inventory import current_endpoint_clause
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -85,6 +86,7 @@ async def _compliance_data(db: AsyncSession, filters: dict) -> tuple[list[str], 
             ComplianceStatus.last_evaluated,
         )
         .join(ComplianceStatus, Endpoint.id == ComplianceStatus.endpoint_id)
+        .where(current_endpoint_clause())
         .order_by(ComplianceStatus.status, Endpoint.hostname)
     )
     if status_filter:

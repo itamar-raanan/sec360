@@ -9,6 +9,7 @@ from app.models.user import AuthUser
 from app.models.compliance import ComplianceStatus
 from app.models.endpoint import Endpoint
 from app.schemas.compliance import ComplianceStatusResponse, ComplianceSummaryStats
+from app.services.endpoint_inventory import current_endpoint_clause
 
 router = APIRouter(prefix="/compliance", tags=["compliance"])
 
@@ -44,6 +45,8 @@ async def get_compliance_dashboard(
             func.sum(case((ComplianceStatus.disk_encrypted == False,          1), else_=0)).label("not_encrypted"),   # noqa: E712
             func.sum(case((ComplianceStatus.device_control_enabled == False,  1), else_=0)).label("no_device_control"),  # noqa: E712
         )
+        .join(Endpoint, ComplianceStatus.endpoint_id == Endpoint.id)
+        .where(current_endpoint_clause())
     )
     row = summary_q.one()
     total = row.total or 0
@@ -75,6 +78,7 @@ async def get_compliance_dashboard(
             func.sum(case((ComplianceStatus.status == "non_compliant", 1), else_=0)).label("non_compliant"),
         )
         .join(Endpoint, ComplianceStatus.endpoint_id == Endpoint.id)
+        .where(current_endpoint_clause())
         .group_by(os_case)
         .order_by(func.count().desc())
     )
@@ -97,7 +101,10 @@ async def get_compliance_dashboard(
         select(ComplianceStatus, fail_count_expr)
         .join(Endpoint, ComplianceStatus.endpoint_id == Endpoint.id)
         .options(joinedload(ComplianceStatus.endpoint).joinedload(Endpoint.owner))
-        .where(ComplianceStatus.status.in_(["non_compliant", "partial"]))
+        .where(
+            current_endpoint_clause(),
+            ComplianceStatus.status.in_(["non_compliant", "partial"]),
+        )
         .order_by(fail_count_expr.desc())
         .limit(25)
     )
@@ -169,6 +176,8 @@ async def get_compliance_summary(
             func.sum(case((ComplianceStatus.dlp_installed == False, 1), else_=0)).label("no_dlp"),  # noqa: E712
             func.sum(case(((ComplianceStatus.dlp_installed == True) & (ComplianceStatus.dlp_version_ok == False), 1), else_=0)).label("dlp_outdated"),  # noqa: E712
         )
+        .join(Endpoint, ComplianceStatus.endpoint_id == Endpoint.id)
+        .where(current_endpoint_clause())
     )).one()
 
     total = row.total or 0
@@ -195,7 +204,11 @@ async def list_compliance(
     db: AsyncSession = Depends(get_db),
     _: AuthUser = Depends(require_role("viewer")),
 ):
-    query = select(ComplianceStatus)
+    query = (
+        select(ComplianceStatus)
+        .join(Endpoint, ComplianceStatus.endpoint_id == Endpoint.id)
+        .where(current_endpoint_clause())
+    )
     if compliance_status:
         query = query.where(ComplianceStatus.status == compliance_status)
 
@@ -228,6 +241,7 @@ async def list_compliance_endpoints(
         select(ComplianceStatus)
         .join(Endpoint, ComplianceStatus.endpoint_id == Endpoint.id)
         .options(joinedload(ComplianceStatus.endpoint).joinedload(Endpoint.owner))
+        .where(current_endpoint_clause())
     )
 
     if comp_status:
@@ -333,7 +347,12 @@ async def get_endpoint_compliance(
     _: AuthUser = Depends(require_role("viewer")),
 ):
     result = await db.execute(
-        select(ComplianceStatus).where(ComplianceStatus.endpoint_id == endpoint_id)
+        select(ComplianceStatus)
+        .join(Endpoint, ComplianceStatus.endpoint_id == Endpoint.id)
+        .where(
+            ComplianceStatus.endpoint_id == endpoint_id,
+            current_endpoint_clause(),
+        )
     )
     cs = result.scalar_one_or_none()
     if not cs:

@@ -1,5 +1,4 @@
 from typing import Optional
-from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, Query, Response, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, exists
@@ -10,12 +9,10 @@ from app.models.user import AuthUser
 from app.models.endpoint import Endpoint
 from app.models.agent import SecurityAgent
 from app.schemas.endpoint import EndpointResponse, EndpointDetail, AgentSummary, AgentDetail
+from app.services.endpoint_inventory import current_endpoint_clause
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/endpoints", tags=["endpoints"])
-
-ACTIVITY_WINDOW_DAYS = 60   # endpoints inactive longer than this are hidden by default
-
 
 @router.get("", response_model=list[EndpointResponse])
 async def list_endpoints(
@@ -100,17 +97,7 @@ async def list_endpoints(
     # Activity filter: show only endpoints seen within the last 60 days
     # (via JumpCloud last_seen OR any agent last_seen)
     if active_only:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=ACTIVITY_WINDOW_DAYS)
-        agent_active = exists().where(
-            SecurityAgent.endpoint_id == Endpoint.id,
-            SecurityAgent.last_seen >= cutoff,
-        )
-        query = query.where(
-            or_(
-                Endpoint.last_seen >= cutoff,
-                agent_active,
-            )
-        )
+        query = query.where(current_endpoint_clause())
 
     count_q = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_q)).scalar_one()

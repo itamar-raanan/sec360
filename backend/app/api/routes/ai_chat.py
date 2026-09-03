@@ -36,6 +36,7 @@ from app.models.user import AuthUser, User
 from app.models.endpoint import Endpoint
 from app.models.compliance import ComplianceStatus
 from app.models.activity import ActivityEvent
+from app.services.endpoint_inventory import current_endpoint_clause
 
 logger = logging.getLogger(__name__)
 
@@ -1051,16 +1052,23 @@ async def _fetch_user_profile(search: str, db: AsyncSession) -> dict | None:
 async def _fetch_compliance_summary(db: AsyncSession) -> dict:
     status_r = await db.execute(
         select(ComplianceStatus.status, func.count(ComplianceStatus.id).label("cnt"))
+        .join(Endpoint, ComplianceStatus.endpoint_id == Endpoint.id)
+        .where(current_endpoint_clause())
         .group_by(ComplianceStatus.status)
     )
     sc = {row.status: row.cnt for row in status_r}
 
     async def _cnt(cond) -> int:
-        r = await db.execute(select(func.count(ComplianceStatus.id)).where(cond))
+        r = await db.execute(
+            select(func.count(ComplianceStatus.id))
+            .join(Endpoint, ComplianceStatus.endpoint_id == Endpoint.id)
+            .where(current_endpoint_clause(), cond)
+        )
         return r.scalar_one()
 
     total_r = await db.execute(
-        select(func.count(Endpoint.id)).where(Endpoint.is_active == True))  # noqa: E712
+        select(func.count(Endpoint.id)).where(current_endpoint_clause())
+    )
 
     return {
         "total":         total_r.scalar_one(),

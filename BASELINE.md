@@ -1,10 +1,10 @@
 # Engineering Baseline
 
-Validated on 2026-09-01 using the production Docker runtimes (Python 3.12 and Node 20).
+Validated on 2026-09-03 using the production Docker runtimes (Python 3.12 and Node 20).
 
 ## Passing checks
 
-- Backend: `26 passed` with `pytest -q`.
+- Backend: `31 passed` with `pytest -q`.
 - Frontend: TypeScript and Vite production build pass.
 - Frontend: ESLint passes with zero warnings.
 - Frontend dependencies: `npm audit` reports zero vulnerabilities.
@@ -34,6 +34,6 @@ Validated on 2026-09-01 using the production Docker runtimes (Python 3.12 and No
 ## Remaining technical debt
 
 - The initial Alembic migration is a placeholder. Fresh schemas currently depend on `Base.metadata.create_all()` plus runtime SQL patches; this should be replaced by a complete migration chain before formal production rollout.
-- The frontend main bundle is approximately 1.04 MB minified (276 KB gzip). Route-level code splitting should be added as the UI grows.
+- Route-level code splitting is enabled. The initial application bundle is approximately 318 KB minified (96 KB gzip), with page workspaces loaded on demand.
 - Backend tests emit deprecation warnings from Passlib's `crypt` integration and python-jose's use of naive UTC datetimes.
 - There are no frontend unit or end-to-end tests yet; the current frontend baseline covers static linting, TypeScript, production bundling, and runtime smoke tests.

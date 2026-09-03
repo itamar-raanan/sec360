@@ -80,7 +80,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex" style={{ background: 'var(--surface-0)' }}>
+    <div className="min-h-[100dvh] flex" style={{ background: 'var(--surface-0)' }}>
       <AuthLeftPanel />
 
       {/* Right — form */}

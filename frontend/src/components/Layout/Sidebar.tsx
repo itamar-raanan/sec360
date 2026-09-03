@@ -73,7 +73,7 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
 
   return (
     <aside
-      className="flex-shrink-0 flex flex-col h-screen sticky top-0 overflow-hidden"
+      className="flex-shrink-0 flex flex-col h-[100dvh] sticky top-0 overflow-hidden"
       style={{
         width: collapsed ? 60 : 220,
         transition: 'width 220ms cubic-bezier(0.23,1,0.32,1)',
@@ -92,7 +92,7 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
       >
         <div
           className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ background: 'var(--accent)', boxShadow: '0 0 12px rgba(16,185,129,0.3)' }}
+          style={{ background: 'var(--accent)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.18)' }}
         >
           <ShieldCheck size={15} className="text-white" strokeWidth={2.5} />
         </div>

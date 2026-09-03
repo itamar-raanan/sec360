@@ -2,11 +2,11 @@
 
 ## Theme
 
-Dark. Background: `oklch(8% 0.01 280)` (~`#0a0a0f`). The interface is calibrated for dim environments. Light mode is not offered.
+Dark by default, with a fully supported light theme. The dark interface is calibrated for dim operations environments; the light theme uses cool neutral surfaces and higher-contrast semantic colors.
 
 ## Color
 
-Strategy: **Restrained** — tinted neutrals with violet as the single accent.
+Strategy: **Restrained** — cool tinted neutrals with emerald as the single interaction accent. Risk and health colors remain semantic and must not be used decoratively.
 
 | Role | Token / Value | Notes |
 |---|---|---|
@@ -14,8 +14,8 @@ Strategy: **Restrained** — tinted neutrals with violet as the single accent.
 | Card surface | `gray-900` | Panels, cards |
 | Elevated | `gray-800` | Inputs, hover states, table headers |
 | Border | `gray-800` / `white/[0.06]` | Subtle; sidebar uses lower-opacity white |
-| Accent | `violet-600` / `#7c3aed` | Primary actions, active nav, brand mark |
-| Accent muted | `violet-500/20`, `violet-400` | Badges, indicators |
+| Accent | `emerald-600` / `#087a5b` | Primary actions, active nav, brand mark |
+| Accent muted | `emerald-500/12`, `emerald-400` | Selected filters and interaction feedback |
 | Risk: low | `green-400` + `green-500/15` bg | |
 | Risk: medium | `yellow-400` + `yellow-500/15` bg | |
 | Risk: high | `orange-400` + `orange-500/15` bg | |
@@ -28,7 +28,7 @@ Strategy: **Restrained** — tinted neutrals with violet as the single accent.
 | Text tertiary | `gray-400`–`gray-500` | Labels, metadata |
 | Text disabled | `gray-600` | |
 
-**Anti-pattern**: blue (`blue-600`, `blue-400`) is used inconsistently in the codebase for pagination active state and focus rings. It should be replaced with violet to match the accent system.
+**Anti-pattern**: do not use emerald as decoration. It means action, healthy state, or active selection. Product colors may appear only in compact badges or icons.
 
 ## Typography
 
@@ -64,9 +64,9 @@ Tailwind scale. Key values in use:
 
 **StatusBadge**: Same pill pattern. States: compliant/partial/non-compliant/active/inactive/offboarded.
 
-**SearchBar**: `bg-gray-800 border border-gray-700 rounded-lg`. Focus: `border-violet-500 ring-1 ring-violet-500`.
+**SearchBar**: inset semantic surface with the emerald focus ring.
 
-**Buttons (primary)**: `bg-violet-600 hover:bg-violet-500 text-white rounded-lg`. Add `pressable` class.
+**Buttons (primary)**: semantic `ui-primary-button` using the emerald accent, an inner highlight, and restrained pressed feedback.
 
 **Buttons (secondary/ghost)**: `bg-gray-800 border border-gray-700 hover:bg-gray-700 text-gray-300 rounded-lg`. Add `pressable` class.
 

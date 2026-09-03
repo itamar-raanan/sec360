@@ -1,22 +1,34 @@
-import React, { useEffect } from 'react'
+import React, { Suspense, lazy, useEffect } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import Layout from './components/Layout/Layout'
-import Login from './pages/Login'
-import AcceptInvite from './pages/AcceptInvite'
-import Dashboard from './pages/Dashboard'
-import Endpoints from './pages/Endpoints'
-import Users from './pages/Users'
-import Compliance from './pages/Compliance'
-import Activity from './pages/Activity'
-import Integrations from './pages/Integrations'
-import Settings from './pages/Settings'
-import Reports from './pages/Reports'
-import SsoMfa from './pages/SsoMfa'
-import AIInsights from './pages/AIInsights'
-import AIChat from './pages/AIChat'
-import Investigation from './pages/Investigation'
-import DlpUserPolicySearch from './pages/DlpUserPolicySearch'
 import { useAuthStore } from './store/auth'
+
+const Login = lazy(() => import('./pages/Login'))
+const AcceptInvite = lazy(() => import('./pages/AcceptInvite'))
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Endpoints = lazy(() => import('./pages/Endpoints'))
+const Users = lazy(() => import('./pages/Users'))
+const Compliance = lazy(() => import('./pages/Compliance'))
+const Activity = lazy(() => import('./pages/Activity'))
+const Integrations = lazy(() => import('./pages/Integrations'))
+const Settings = lazy(() => import('./pages/Settings'))
+const Reports = lazy(() => import('./pages/Reports'))
+const SsoMfa = lazy(() => import('./pages/SsoMfa'))
+const AIInsights = lazy(() => import('./pages/AIInsights'))
+const AIChat = lazy(() => import('./pages/AIChat'))
+const Investigation = lazy(() => import('./pages/Investigation'))
+const DlpUserPolicySearch = lazy(() => import('./pages/DlpUserPolicySearch'))
+
+function RouteLoader() {
+  return (
+    <div className="flex min-h-[100dvh] items-center justify-center" style={{ background: 'var(--surface-0)' }}>
+      <div className="w-full max-w-sm px-8" aria-label="Loading page">
+        <div className="shimmer mx-auto h-2 w-20 rounded-full" />
+        <div className="shimmer mx-auto mt-4 h-3 w-40 rounded-full opacity-70" />
+      </div>
+    </div>
+  )
+}
 
 function AdminOnly({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore()
@@ -47,6 +59,7 @@ export default function App() {
   }, [navigate, restoreSession])
 
   return (
+    <Suspense fallback={<RouteLoader />}>
     <Routes>
       {/* Public routes */}
       <Route path="/login" element={<Login />} />
@@ -72,5 +85,6 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
+    </Suspense>
   )
 }

@@ -267,7 +267,7 @@ export default function Endpoints() {
     const risk:       Record<string, number> = { low: 0, medium: 0, high: 0, critical: 0 }
     const compliance: Record<string, number> = { compliant: 0, partial: 0, non_compliant: 0 }
     const os:         Record<string, number> = { windows: 0, macos: 0, linux: 0, other: 0 }
-    const agent:       Record<string, number> = { has_s1: 0, no_s1: 0, has_dlp: 0, no_dlp: 0, has_gp: 0, no_gp: 0, has_wss: 0, no_wss: 0, disabled_agent: 0, no_vpn: 0 }
+    const agent:       Record<string, number> = { has_s1: 0, no_s1: 0, has_dlp: 0, no_dlp: 0, has_wss: 0, no_wss: 0, disabled_agent: 0 }
     const agentStatus: Record<string, number> = { s1_active: 0, s1_inactive: 0, dlp_active: 0, dlp_inactive: 0 }
     const owner:      Record<string, number> = { assigned: 0, unassigned: 0 }
 
@@ -288,18 +288,14 @@ export default function Endpoints() {
       const agents = ep.agents ?? []
       const hasS1  = agents.some(a => a.product_name === 'sentinelone')
       const hasDlp = agents.some(a => a.product_name === 'symantec')
-      const hasGp  = agents.some(a => a.product_name === 'globalprotect')
       const hasWss = agents.some(a => a.product_name === 'symantec_wss')
       if (hasS1) agent.has_s1++
       else agent.no_s1++
       if (hasDlp) agent.has_dlp++
       else agent.no_dlp++
-      if (hasGp) agent.has_gp++
-      else agent.no_gp++
       if (hasWss) agent.has_wss++
       else agent.no_wss++
       if (agents.some(a => a.status === 'inactive')) agent.disabled_agent++
-      if (!hasGp && !hasWss) agent.no_vpn++
       // agent status
       const s1Agent  = agents.find(a => a.product_name === 'sentinelone')
       const dlpAgent = agents.find(a => a.product_name === 'symantec')
@@ -347,15 +343,12 @@ export default function Endpoints() {
         const agents = ep.agents ?? []
         const hasS1  = agents.some(a => a.product_name === 'sentinelone')
         const hasDlp = agents.some(a => a.product_name === 'symantec')
-        const hasGp  = agents.some(a => a.product_name === 'globalprotect')
         const hasWss = agents.some(a => a.product_name === 'symantec_wss')
         const hasDisabledAgent = agents.some(a => a.status === 'inactive')
         const agentMap: Record<string, boolean> = {
           has_s1: hasS1, no_s1: !hasS1,
           has_dlp: hasDlp, no_dlp: !hasDlp,
-          has_gp: hasGp, no_gp: !hasGp,
           has_wss: hasWss, no_wss: !hasWss,
-          no_vpn: !hasGp && !hasWss,
           disabled_agent: hasDisabledAgent,
         }
         return filters.agent.some(v => agentMap[v])
@@ -446,14 +439,11 @@ export default function Endpoints() {
       onToggle: v => toggleFilter('agent', v),
       onClear: () => setFilters(f => ({ ...f, agent: [] })),
       options: [
-        { value: 'no_vpn',         label: 'No VPN',         count: facetCounts.agent.no_vpn         ?? 0 },
         { value: 'disabled_agent', label: 'Agent Disabled', count: facetCounts.agent.disabled_agent ?? 0 },
         { value: 'has_s1',  label: 'Has S1',      count: facetCounts.agent.has_s1  ?? 0 },
         { value: 'no_s1',   label: 'Missing S1',  count: facetCounts.agent.no_s1   ?? 0 },
         { value: 'has_dlp', label: 'Has DLP',      count: facetCounts.agent.has_dlp ?? 0 },
         { value: 'no_dlp',  label: 'Missing DLP', count: facetCounts.agent.no_dlp  ?? 0 },
-        { value: 'has_gp',  label: 'Has GP',       count: facetCounts.agent.has_gp  ?? 0 },
-        { value: 'no_gp',   label: 'Missing GP',  count: facetCounts.agent.no_gp   ?? 0 },
         { value: 'has_wss', label: 'Has WSS',      count: facetCounts.agent.has_wss ?? 0 },
         { value: 'no_wss',  label: 'Missing WSS', count: facetCounts.agent.no_wss  ?? 0 },
       ],
@@ -549,7 +539,6 @@ export default function Endpoints() {
                 const agents     = ep.agents || []
                 const hasS1      = agents.some(a => a.product_name === 'sentinelone')
                 const hasSym     = agents.some(a => a.product_name === 'symantec')
-                const hasGP      = agents.some(a => a.product_name === 'globalprotect')
                 const hasWSS     = agents.some(a => a.product_name === 'symantec_wss')
                 const s1Agent    = agents.find(a => a.product_name === 'sentinelone')
                 const s1LastSeen = s1Agent?.last_seen ?? null
@@ -604,9 +593,6 @@ export default function Endpoints() {
                         </span>
                         <span className={`text-xs px-1.5 py-0.5 rounded border ${hasSym ? 'border-yellow-500/30 text-yellow-300 bg-yellow-500/10' : 'border-red-500/20 text-red-400/60'}`}>
                           DLP{hasSym ? '' : ' ✗'}
-                        </span>
-                        <span className={`text-xs px-1.5 py-0.5 rounded border ${hasGP ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10' : 'border-red-500/20 text-red-400/60'}`}>
-                          GP{hasGP ? '' : ' ✗'}
                         </span>
                         <span className={`text-xs px-1.5 py-0.5 rounded border ${hasWSS ? 'border-orange-500/30 text-orange-300 bg-orange-500/10' : 'border-red-500/20 text-red-400/60'}`}>
                           WSS{hasWSS ? '' : ' ✗'}

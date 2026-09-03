@@ -111,6 +111,40 @@ async def init_db():
             # D-1/R-4: external event ID — prevents duplicate inserts across concurrent collection runs
             "ALTER TABLE activity_events ADD COLUMN IF NOT EXISTS external_id VARCHAR(255)",
             "CREATE UNIQUE INDEX IF NOT EXISTS uix_activity_events_external_id ON activity_events (external_id) WHERE external_id IS NOT NULL",
+            # GlobalProtect retirement — remove stale records and schema fields.
+            """
+            DO $$
+            BEGIN
+                IF to_regclass('public.ai_insights') IS NOT NULL THEN
+                    DELETE FROM ai_insights WHERE insight_type = 'endpoints_missing_vpn';
+                END IF;
+            END $$
+            """,
+            "DELETE FROM security_agents WHERE product_name::text = 'globalprotect'",
+            "ALTER TABLE compliance_statuses DROP COLUMN IF EXISTS gp_version_ok",
+            "ALTER TABLE compliance_statuses DROP COLUMN IF EXISTS gp_installed",
+            "ALTER TABLE system_settings DROP COLUMN IF EXISTS min_gp_version",
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM pg_type t
+                    JOIN pg_enum e ON e.enumtypid = t.oid
+                    WHERE t.typname = 'agent_product_enum'
+                      AND e.enumlabel = 'globalprotect'
+                ) THEN
+                    ALTER TYPE agent_product_enum RENAME TO agent_product_enum_with_globalprotect;
+                    CREATE TYPE agent_product_enum AS ENUM (
+                        'sentinelone', 'symantec', 'prisma', 'symantec_wss', 'other'
+                    );
+                    ALTER TABLE security_agents
+                        ALTER COLUMN product_name TYPE agent_product_enum
+                        USING product_name::text::agent_product_enum;
+                    DROP TYPE agent_product_enum_with_globalprotect;
+                END IF;
+            END $$
+            """,
         ]
         for sql in patches:
             await conn.execute(text(sql))

@@ -28,7 +28,6 @@ export interface ComplianceDashboardData {
   issues: {
     no_edr: number; edr_outdated: number
     no_dlp: number; dlp_outdated: number
-    no_gp: number;  gp_outdated: number
     no_wss: number; wss_outdated: number
     not_encrypted: number; no_device_control: number
     no_disk_encryption?: number; no_network_security?: number

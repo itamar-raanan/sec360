@@ -23,7 +23,6 @@ async def list_endpoints(
     search: Optional[str] = Query(None),
     has_s1: Optional[bool] = Query(None),          # true = has SentinelOne, false = missing
     has_dlp: Optional[bool] = Query(None),         # true = has Symantec DLP, false = missing
-    has_gp: Optional[bool] = Query(None),          # true = has GlobalProtect, false = missing
     has_wss: Optional[bool] = Query(None),         # true = has Symantec WSS, false = missing
     unassigned: Optional[bool] = Query(None),      # true = no owner linked
     active_only: bool = Query(True),               # false = include stale endpoints
@@ -74,13 +73,6 @@ async def list_endpoints(
             SecurityAgent.product_name == "symantec",
         )
         query = query.where(dlp_exists if has_dlp else ~dlp_exists)
-
-    if has_gp is not None:
-        gp_exists = exists().where(
-            SecurityAgent.endpoint_id == Endpoint.id,
-            SecurityAgent.product_name == "globalprotect",
-        )
-        query = query.where(gp_exists if has_gp else ~gp_exists)
 
     if has_wss is not None:
         wss_exists = exists().where(
@@ -148,8 +140,6 @@ async def get_endpoint(
             detail.sentinelone = agent_detail
         elif agent.product_name == "symantec":
             detail.symantec_dlp = agent_detail
-        elif agent.product_name == "globalprotect":
-            detail.globalprotect = agent_detail
         elif agent.product_name == "symantec_wss":
             detail.symantec_wss = agent_detail
 

@@ -326,51 +326,7 @@ async def detect_endpoints_missing_dlp(db: AsyncSession) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Compliance detector 6: Endpoints missing VPN (GlobalProtect)
-# ---------------------------------------------------------------------------
-
-
-async def detect_endpoints_missing_vpn(db: AsyncSession) -> list[dict]:
-    """
-    Endpoints where gp_installed=False.
-    """
-    from app.models.endpoint import Endpoint
-    from app.models.compliance import ComplianceStatus
-
-    result = await db.execute(
-        select(Endpoint.id, Endpoint.hostname, Endpoint.last_seen)
-        .join(ComplianceStatus, ComplianceStatus.endpoint_id == Endpoint.id)
-        .where(ComplianceStatus.gp_installed == False)  # noqa: E712
-        .order_by(Endpoint.last_seen.desc().nullslast())
-    )
-    rows = result.fetchall()
-
-    if not rows:
-        return []
-
-    n = len(rows)
-    affected = [
-        {
-            "id": str(r.id),
-            "hostname": r.hostname,
-            "last_seen": r.last_seen.isoformat() if r.last_seen else None,
-        }
-        for r in rows
-    ]
-    return [
-        {
-            "insight_type": "endpoints_missing_vpn",
-            "severity": "warning",
-            "title": f"{n} endpoints without VPN agent (GlobalProtect)"[:80],
-            "user_id": None,
-            "evidence": {"count": n, "affected": affected},
-            "event_ids": [],
-        }
-    ]
-
-
-# ---------------------------------------------------------------------------
-# Compliance detector 7: Inactive security agents (by product)
+# Compliance detector 6: Inactive security agents (by product)
 # ---------------------------------------------------------------------------
 
 
@@ -449,7 +405,6 @@ async def detect_non_compliant_endpoints(db: AsyncSession) -> list[dict]:
             Endpoint.last_seen,
             ComplianceStatus.edr_installed,
             ComplianceStatus.dlp_installed,
-            ComplianceStatus.gp_installed,
             ComplianceStatus.wss_installed,
             ComplianceStatus.disk_encrypted,
             ComplianceStatus.device_control_enabled,
@@ -467,7 +422,6 @@ async def detect_non_compliant_endpoints(db: AsyncSession) -> list[dict]:
     _bool_field_label = {
         "edr_installed": "EDR",
         "dlp_installed": "DLP",
-        "gp_installed": "VPN (GP)",
         "wss_installed": "WSS",
         "disk_encrypted": "Disk Encryption",
         "device_control_enabled": "Device Control",
@@ -521,7 +475,6 @@ async def detect_partial_compliance_endpoints(db: AsyncSession) -> list[dict]:
             Endpoint.last_seen,
             ComplianceStatus.edr_installed,
             ComplianceStatus.dlp_installed,
-            ComplianceStatus.gp_installed,
             ComplianceStatus.wss_installed,
             ComplianceStatus.disk_encrypted,
             ComplianceStatus.device_control_enabled,
@@ -540,7 +493,6 @@ async def detect_partial_compliance_endpoints(db: AsyncSession) -> list[dict]:
     _bool_field_label = {
         "edr_installed": "EDR",
         "dlp_installed": "DLP",
-        "gp_installed": "VPN (GP)",
         "wss_installed": "WSS",
         "disk_encrypted": "Disk Encryption",
         "device_control_enabled": "Device Control",
@@ -1138,7 +1090,6 @@ async def run_all_detections(
         detect_endpoints_missing_edr,
         detect_endpoints_missing_encryption,
         detect_endpoints_missing_dlp,
-        detect_endpoints_missing_vpn,
         detect_inactive_agents,
         detect_non_compliant_endpoints,
         detect_partial_compliance_endpoints,

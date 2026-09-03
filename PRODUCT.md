@@ -12,7 +12,7 @@ Primary persona: a security analyst who checks the dashboard at the start of eac
 
 ## Product Purpose
 
-SEC360 is an enterprise security posture management platform. It aggregates data from SentinelOne, Symantec DLP, GlobalProtect, JumpCloud, Google Workspace, and HiBob to give security teams a unified view of endpoint compliance status, user risk scores, suspicious activity, and security agent health.
+SEC360 is an enterprise security posture management platform. It aggregates data from SentinelOne, Symantec DLP, Symantec WSS, JumpCloud, Google Workspace, and HiBob to give security teams a unified view of endpoint compliance status, user risk scores, suspicious activity, and security agent health.
 
 Success looks like: an analyst can open the dashboard, immediately understand the security posture, drill into problems, and take action — without switching between five separate vendor consoles.
 

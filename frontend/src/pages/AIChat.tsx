@@ -313,7 +313,7 @@ const SUGGESTIONS = [
   'Show me all endpoints with outdated S1 agent',
   'Show users without MFA enabled',
   'Login activity from Israel in the last 30 days',
-  'Which endpoints have no VPN installed?',
+  'Which endpoints have no WSS installed?',
   'Show non-compliant endpoints',
   'Users with high risk score',
   'Suspicious activity events this month',

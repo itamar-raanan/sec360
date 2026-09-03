@@ -53,7 +53,7 @@ const ISSUE_META: Record<string, { label: string; color: string; icon: React.Ele
   dlp_outdated:        { label: 'DLP Outdated',        color: '#f59e0b', icon: Cpu,          desc: 'Symantec DLP version below minimum' },
   not_encrypted:       { label: 'Not Encrypted',       color: '#06b6d4', icon: HardDrive,    desc: 'Disk encryption not enabled (reported by S1)' },
   no_device_control:   { label: 'Device Control Off',  color: '#84cc16', icon: MousePointer, desc: 'S1 Device Control policy not enabled' },
-  no_network_security: { label: 'No Network Security', color: '#eab308', icon: ShieldAlert,  desc: 'Neither GlobalProtect nor Symantec WSS installed' },
+  no_network_security: { label: 'No WSS',              color: '#eab308', icon: ShieldAlert,  desc: 'Symantec WSS agent not installed' },
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

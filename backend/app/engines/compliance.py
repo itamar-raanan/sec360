@@ -1,7 +1,9 @@
 import logging
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
+
+from app.services.endpoint_inventory import current_endpoint_clause
 
 logger = logging.getLogger(__name__)
 
@@ -27,14 +29,19 @@ def _version_ok(installed: str | None, minimum: str | None) -> bool:
         return True   # unparseable → don't penalise
 
 
-async def evaluate_endpoint(endpoint_id: str, db: AsyncSession):
+async def evaluate_endpoint(endpoint_id, db: AsyncSession):
     """Evaluate compliance for a single endpoint (EDR + DLP checks only)."""
     from app.models.endpoint import Endpoint
     from app.models.agent import SecurityAgent
     from app.models.compliance import ComplianceStatus
     from app.models.system_settings import SystemSettings
 
-    result = await db.execute(select(Endpoint).where(Endpoint.id == endpoint_id))
+    result = await db.execute(
+        select(Endpoint).where(
+            Endpoint.id == endpoint_id,
+            current_endpoint_clause(),
+        )
+    )
     endpoint = result.scalar_one_or_none()
     if not endpoint:
         return None
@@ -166,11 +173,25 @@ async def evaluate_endpoint(endpoint_id: str, db: AsyncSession):
 
 
 async def run_full_compliance(db: AsyncSession) -> dict:
-    """Evaluate compliance for all endpoints."""
+    """Evaluate current endpoints and remove derived rows for stale inventory."""
     from app.models.endpoint import Endpoint
+    from app.models.compliance import ComplianceStatus
 
-    result = await db.execute(select(Endpoint.id))
-    endpoint_ids = [str(row[0]) for row in result.fetchall()]
+    active_endpoint_ids = select(Endpoint.id).where(current_endpoint_clause())
+    stale_count = await db.scalar(
+        select(func.count()).select_from(ComplianceStatus).where(
+            ComplianceStatus.endpoint_id.not_in(active_endpoint_ids)
+        )
+    )
+    if stale_count:
+        await db.execute(
+            delete(ComplianceStatus).where(
+                ComplianceStatus.endpoint_id.not_in(active_endpoint_ids)
+            )
+        )
+
+    result = await db.execute(active_endpoint_ids)
+    endpoint_ids = [row[0] for row in result.fetchall()]
 
     evaluated = 0
     for eid in endpoint_ids:
@@ -180,5 +201,14 @@ async def run_full_compliance(db: AsyncSession) -> dict:
         except Exception as e:
             logger.error(f"Compliance: Failed to evaluate endpoint {eid}: {e}")
 
-    logger.info(f"Compliance: Evaluated {evaluated}/{len(endpoint_ids)} endpoints")
-    return {"evaluated": evaluated, "total": len(endpoint_ids)}
+    logger.info(
+        "Compliance: evaluated %d/%d current endpoints; removed %d stale records",
+        evaluated,
+        len(endpoint_ids),
+        stale_count or 0,
+    )
+    return {
+        "evaluated": evaluated,
+        "total": len(endpoint_ids),
+        "stale_records_removed": stale_count or 0,
+    }

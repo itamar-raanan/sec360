@@ -18,7 +18,7 @@ expected_dict keys (all optional — only checked if present):
   unassigned     bool  → ep_filters["unassigned"]
   edr_missing    bool  → ep_filters["edr_missing"]
   edr_outdated   bool  → ep_filters["edr_outdated"]
-  vpn_missing    bool  → ep_filters["vpn_missing"]
+  wss_missing    bool  → ep_filters["wss_missing"]
   dlp_missing    bool  → ep_filters["dlp_missing"]
   disk_not_encrypted bool → ep_filters["disk_not_encrypted"]
   compliance_status  str  → ep_filters["compliance_status"]
@@ -139,20 +139,20 @@ INTENT_TESTS = [
     ("EDR agent out of date endpoints",             {"endpoints": True, "edr_outdated": True}),
 
     # =========================================================================
-    # VPN MISSING
+    # WSS MISSING
     # =========================================================================
-    ("show endpoints without VPN",                  {"endpoints": True, "vpn_missing": True}),
-    ("list devices missing VPN",                    {"endpoints": True, "vpn_missing": True}),
-    ("machines without GlobalProtect",              {"endpoints": True, "vpn_missing": True}),
-    ("endpoints with no VPN installed",             {"endpoints": True, "vpn_missing": True}),
-    ("find devices missing globalprotect",          {"endpoints": True, "vpn_missing": True}),
-    ("no VPN endpoints",                            {"endpoints": True, "vpn_missing": True}),
-    ("which endpoints don't have VPN",              {"endpoints": True, "vpn_missing": True}),
-    ("show laptops without VPN",                    {"endpoints": True, "vpn_missing": True}),
-    ("computers with missing VPN",                  {"endpoints": True, "vpn_missing": True}),
-    ("endpoints lacking vpn",                       {"endpoints": True, "vpn_missing": True}),
-    ("list machines without gp",                    {"endpoints": True, "vpn_missing": True}),
-    ("VPN not installed on these endpoints",        {"endpoints": True, "vpn_missing": True}),
+    ("show endpoints without WSS",                  {"endpoints": True, "wss_missing": True}),
+    ("list devices missing WSS",                    {"endpoints": True, "wss_missing": True}),
+    ("machines without Symantec WSS",               {"endpoints": True, "wss_missing": True}),
+    ("endpoints with no WSS installed",             {"endpoints": True, "wss_missing": True}),
+    ("find devices missing cloud swg",              {"endpoints": True, "wss_missing": True}),
+    ("no WSS endpoints",                            {"endpoints": True, "wss_missing": True}),
+    ("which endpoints don't have WSS",              {"endpoints": True, "wss_missing": True}),
+    ("show laptops without WSS",                    {"endpoints": True, "wss_missing": True}),
+    ("computers with missing WSS",                  {"endpoints": True, "wss_missing": True}),
+    ("endpoints lacking wss",                       {"endpoints": True, "wss_missing": True}),
+    ("list machines without cloud swg",             {"endpoints": True, "wss_missing": True}),
+    ("WSS not installed on these endpoints",        {"endpoints": True, "wss_missing": True}),
 
     # =========================================================================
     # DLP MISSING
@@ -405,7 +405,7 @@ INTENT_TESTS = [
     ("show high risk Windows endpoints",            {"endpoints": True, "os": "windows", "risk_level_ep": "high"}),
     ("list critical macOS devices",                 {"endpoints": True, "os": "macos", "risk_level_ep": "critical"}),
     ("Linux machines with high risk",               {"endpoints": True, "os": "linux", "risk_level_ep": "high"}),
-    ("Windows endpoints without VPN",               {"endpoints": True, "os": "windows", "vpn_missing": True}),
+    ("Windows endpoints without WSS",               {"endpoints": True, "os": "windows", "wss_missing": True}),
     ("macOS devices missing EDR",                   {"endpoints": True, "os": "macos", "edr_missing": True}),
     ("Linux endpoints without disk encryption",     {"endpoints": True, "os": "linux", "disk_not_encrypted": True}),
 
@@ -767,7 +767,7 @@ INTENT_TESTS = [
     ("no disk encryption",                          {"endpoints": True, "disk_not_encrypted": True}),
 
     # Multiple filters
-    ("show high risk Windows devices without VPN",  {"endpoints": True, "os": "windows", "risk_level_ep": "high", "vpn_missing": True}),
+    ("show high risk Windows devices without WSS",  {"endpoints": True, "os": "windows", "risk_level_ep": "high", "wss_missing": True}),
     ("macOS endpoints missing EDR and DLP",         {"endpoints": True, "os": "macos", "edr_missing": True, "dlp_missing": True}),
 
     # Activity fallback
@@ -839,7 +839,7 @@ INTENT_TESTS = [
     ("list all login events",                       {"activity": True, "is_list": True}),
     ("find devices with high risk",                 {"endpoints": True, "risk_level_ep": "high"}),
     ("show users at critical risk",                 {"users": True, "risk_level_u": "critical"}),
-    ("which machines have missing VPN",             {"endpoints": True, "vpn_missing": True}),
+    ("which machines have missing WSS",             {"endpoints": True, "wss_missing": True}),
     ("show all endpoints with EDR issues",          {"endpoints": True}),
     ("display compliance status for devices",       {"endpoints": True}),
     ("show me high risk Windows machines",          {"endpoints": True, "os": "windows", "risk_level_ep": "high"}),
@@ -1303,18 +1303,18 @@ INTENT_TESTS_EXTENDED = [
     ("machines with edr that is out of date",       {"endpoints": True, "edr_outdated": True}),
 
     # =========================================================================
-    # MORE VPN MISSING
+    # MORE WSS MISSING
     # =========================================================================
-    ("find machines without vpn",                   {"endpoints": True, "vpn_missing": True}),
-    ("show computers with no vpn client",           {"endpoints": True, "vpn_missing": True}),
-    ("list devices that don't have vpn",            {"endpoints": True, "vpn_missing": True}),
-    ("endpoints where vpn is not installed",        {"endpoints": True, "vpn_missing": True}),
-    ("get computers missing globalprotect",         {"endpoints": True, "vpn_missing": True}),
-    ("show pcs without vpn software",               {"endpoints": True, "vpn_missing": True}),
-    ("find workstations with no vpn",               {"endpoints": True, "vpn_missing": True}),
-    ("which laptops are missing vpn",               {"endpoints": True, "vpn_missing": True}),
-    ("show endpoints where vpn is missing",         {"endpoints": True, "vpn_missing": True}),
-    ("list machines that lack vpn",                 {"endpoints": True, "vpn_missing": True}),
+    ("find machines without wss",                   {"endpoints": True, "wss_missing": True}),
+    ("show computers with no wss client",           {"endpoints": True, "wss_missing": True}),
+    ("list devices that don't have wss",            {"endpoints": True, "wss_missing": True}),
+    ("endpoints where wss is not installed",        {"endpoints": True, "wss_missing": True}),
+    ("get computers missing cloud swg",             {"endpoints": True, "wss_missing": True}),
+    ("show pcs without wss software",               {"endpoints": True, "wss_missing": True}),
+    ("find workstations with no wss",               {"endpoints": True, "wss_missing": True}),
+    ("which laptops are missing wss",               {"endpoints": True, "wss_missing": True}),
+    ("show endpoints where wss is missing",         {"endpoints": True, "wss_missing": True}),
+    ("list machines that lack wss",                 {"endpoints": True, "wss_missing": True}),
 
     # =========================================================================
     # MORE DLP MISSING
@@ -1792,7 +1792,7 @@ INTENT_TESTS_EXTENDED = [
     ("list Windows machines without DLP",           {"endpoints": True, "os": "windows", "dlp_missing": True}),
     ("find macOS devices without disk encryption",  {"endpoints": True, "os": "macos", "disk_not_encrypted": True}),
     ("show Linux endpoints without EDR",            {"endpoints": True, "os": "linux", "edr_missing": True}),
-    ("list Windows laptops without VPN",            {"endpoints": True, "os": "windows", "vpn_missing": True}),
+    ("list Windows laptops without WSS",            {"endpoints": True, "os": "windows", "wss_missing": True}),
     ("find high risk Linux endpoints",              {"endpoints": True, "os": "linux", "risk_level_ep": "high"}),
     ("show non-compliant macOS devices",            {"endpoints": True, "os": "macos", "compliance_status": "non_compliant"}),
     ("list critical Windows machines",              {"endpoints": True, "os": "windows", "risk_level_ep": "critical"}),
@@ -1893,7 +1893,7 @@ INTENT_TESTS_EXTENDED = [
     ("show Windows computers with no edr",          {"endpoints": True, "os": "windows", "edr_missing": True}),
     ("find high risk Windows devices",              {"endpoints": True, "os": "windows", "risk_level_ep": "high"}),
     ("list Linux servers with outdated s1",         {"endpoints": True, "os": "linux", "edr_outdated": True}),
-    ("show macOS laptops without vpn",              {"endpoints": True, "os": "macos", "vpn_missing": True}),
+    ("show macOS laptops without wss",              {"endpoints": True, "os": "macos", "wss_missing": True}),
     ("list unencrypted Windows pcs",                {"endpoints": True, "os": "windows", "disk_not_encrypted": True}),
     ("find non-compliant Linux servers",            {"endpoints": True, "os": "linux", "compliance_status": "non_compliant"}),
     ("show partially compliant macOS devices",      {"endpoints": True, "os": "macos", "compliance_status": "partial"}),
@@ -2188,14 +2188,14 @@ INTENT_TESTS_EXTRA = [
     ("show computers with an outdated edr agent",   {"endpoints": True, "edr_outdated": True}),
 
     # =========================================================================
-    # MORE VPN MISSING VARIATIONS
+    # MORE WSS MISSING VARIATIONS
     # =========================================================================
-    ("list machines where vpn is not present",      {"endpoints": True, "vpn_missing": True}),
-    ("show devices that are lacking vpn",           {"endpoints": True, "vpn_missing": True}),
-    ("find endpoints where vpn is absent",          {"endpoints": True, "vpn_missing": True}),
-    ("show computers without any vpn client",       {"endpoints": True, "vpn_missing": True}),
-    ("list pcs that don't have globalprotect",      {"endpoints": True, "vpn_missing": True}),
-    ("which laptops are missing a vpn",             {"endpoints": True, "vpn_missing": True}),
+    ("list machines where wss is not present",      {"endpoints": True, "wss_missing": True}),
+    ("show devices that are lacking wss",           {"endpoints": True, "wss_missing": True}),
+    ("find endpoints where wss is absent",          {"endpoints": True, "wss_missing": True}),
+    ("show computers without any wss client",       {"endpoints": True, "wss_missing": True}),
+    ("list pcs that don't have cloud swg",          {"endpoints": True, "wss_missing": True}),
+    ("which laptops are missing wss",               {"endpoints": True, "wss_missing": True}),
 
     # =========================================================================
     # MORE DISK ENCRYPTION VARIATIONS
@@ -2426,9 +2426,9 @@ INTENT_TESTS_EXTRA = [
     # ADDITIONAL COMBINED FILTERS
     # =========================================================================
     ("show critical Windows machines missing EDR",  {"endpoints": True, "os": "windows", "risk_level_ep": "critical", "edr_missing": True}),
-    ("list high risk Linux servers without VPN",    {"endpoints": True, "os": "linux", "risk_level_ep": "high", "vpn_missing": True}),
+    ("list high risk Linux servers without WSS",    {"endpoints": True, "os": "linux", "risk_level_ep": "high", "wss_missing": True}),
     ("find macOS devices with outdated EDR",        {"endpoints": True, "os": "macos", "edr_outdated": True}),
-    ("show Windows endpoints with no DLP and no VPN", {"endpoints": True, "os": "windows", "dlp_missing": True, "vpn_missing": True}),
+    ("show Windows endpoints with no DLP and no WSS", {"endpoints": True, "os": "windows", "dlp_missing": True, "wss_missing": True}),
     ("list unassigned Linux endpoints",             {"endpoints": True, "os": "linux", "unassigned": True}),
     ("show non-compliant Windows laptops",          {"endpoints": True, "os": "windows", "compliance_status": "non_compliant"}),
     ("find partially compliant macOS machines",     {"endpoints": True, "os": "macos", "compliance_status": "partial"}),
@@ -2675,7 +2675,7 @@ INTENT_TESTS_FINAL = [
     ("list all inactive employees",                 {"users": True, "employment_status": "inactive", "is_list": True}),
     # More endpoint combos
     ("show all unencrypted laptops",                {"endpoints": True, "disk_not_encrypted": True, "is_list": True}),
-    ("list all devices missing VPN",                {"endpoints": True, "vpn_missing": True, "is_list": True}),
+    ("list all devices missing WSS",                {"endpoints": True, "wss_missing": True, "is_list": True}),
     ("show all devices missing DLP",                {"endpoints": True, "dlp_missing": True, "is_list": True}),
     ("find all endpoints missing EDR",              {"endpoints": True, "edr_missing": True, "is_list": True}),
     ("list all outdated EDR endpoints",             {"endpoints": True, "edr_outdated": True, "is_list": True}),
@@ -2785,7 +2785,7 @@ def _check_intent(q: str, exp: dict) -> list[str]:
         got = ep_f.get("owner_name", "")
         if got != exp["owner_name"]:
             fails.append(f"  owner_name: expected={exp['owner_name']!r}, got={got!r}")
-    for key in ("unassigned", "edr_missing", "edr_outdated", "vpn_missing",
+    for key in ("unassigned", "edr_missing", "edr_outdated", "wss_missing",
                 "dlp_missing", "disk_not_encrypted", "agent_inactive"):
         if key in exp:
             if bool(ep_f.get(key)) != exp[key]:

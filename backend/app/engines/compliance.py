@@ -55,7 +55,6 @@ async def evaluate_endpoint(endpoint_id, db: AsyncSession):
     cfg = (await db.execute(select(SystemSettings).where(SystemSettings.id == 1))).scalar_one_or_none()
     min_s1_ver  = (cfg.min_s1_version  or "").strip() if cfg else ""
     min_dlp_ver = (cfg.min_dlp_version or "").strip() if cfg else ""
-    min_gp_ver  = (cfg.min_gp_version  or "").strip() if cfg else ""
     min_wss_ver = (cfg.min_wss_version or "").strip() if cfg else ""
 
     # ── SentinelOne EDR ──────────────────────────────────────────────────────
@@ -71,13 +70,6 @@ async def evaluate_endpoint(endpoint_id, db: AsyncSession):
     dlp_version_ok = _version_ok(dlp_agent.version if dlp_agent else None, min_dlp_ver)
     if not dlp_installed:
         dlp_version_ok = False
-
-    # ── GlobalProtect VPN (detected via S1 app inventory) ───────────────────
-    gp_agent = next((a for a in agents if a.product_name == "globalprotect"), None)
-    gp_installed  = gp_agent is not None
-    gp_version_ok = _version_ok(gp_agent.version if gp_agent else None, min_gp_ver)
-    if not gp_installed:
-        gp_version_ok = False
 
     # ── Symantec WSS Agent (detected via S1 app inventory) ──────────────────
     wss_agent = next((a for a in agents if a.product_name == "symantec_wss"), None)
@@ -97,25 +89,11 @@ async def evaluate_endpoint(endpoint_id, db: AsyncSession):
         checks.append(edr_version_ok)
     if min_dlp_ver:
         checks.append(dlp_version_ok)
-    # Network security: GP or WSS — having either one is sufficient.
-    # A version minimum on either product makes that product's version count
-    # only when it is the one that is installed.
-    gp_required  = bool(min_gp_ver)
-    wss_required = bool(min_wss_ver)
-    if gp_required or wss_required:
-        # At least one must be installed
-        either_installed = gp_installed or wss_installed
-        checks.append(either_installed)
-        # Version ok: the installed product's version must meet its minimum
-        if either_installed:
-            if gp_installed and gp_required:
-                checks.append(gp_version_ok)
-            if wss_installed and wss_required:
-                checks.append(wss_version_ok)
-    elif gp_installed or wss_installed:
-        # No minimums configured but treat presence as a soft check
-        # (don't penalise, don't reward — leave checks list unchanged)
-        pass
+    # WSS becomes mandatory when a minimum version is configured.
+    if min_wss_ver:
+        checks.append(wss_installed)
+        if wss_installed:
+            checks.append(wss_version_ok)
     # Include encryption/device_control only when S1 has reported a value
     if disk_encrypted is not None:
         checks.append(disk_encrypted)
@@ -143,8 +121,6 @@ async def evaluate_endpoint(endpoint_id, db: AsyncSession):
         cs.edr_version_ok         = edr_version_ok
         cs.dlp_installed          = dlp_installed
         cs.dlp_version_ok         = dlp_version_ok
-        cs.gp_installed           = gp_installed
-        cs.gp_version_ok          = gp_version_ok
         cs.wss_installed          = wss_installed
         cs.wss_version_ok         = wss_version_ok
         cs.disk_encrypted         = disk_encrypted
@@ -158,8 +134,6 @@ async def evaluate_endpoint(endpoint_id, db: AsyncSession):
             edr_version_ok        = edr_version_ok,
             dlp_installed         = dlp_installed,
             dlp_version_ok        = dlp_version_ok,
-            gp_installed          = gp_installed,
-            gp_version_ok         = gp_version_ok,
             wss_installed         = wss_installed,
             wss_version_ok        = wss_version_ok,
             disk_encrypted        = disk_encrypted,

@@ -45,8 +45,6 @@ class ComplianceSummary(BaseModel):
     edr_version_ok: bool
     dlp_installed: bool
     dlp_version_ok: bool
-    gp_installed: bool = False
-    gp_version_ok: bool = False
     wss_installed: bool = False
     wss_version_ok: bool = False
     disk_encrypted: Optional[bool] = None
@@ -102,5 +100,4 @@ class EndpointDetail(EndpointResponse):
     # Per-product breakdown for the detail panel
     sentinelone: AgentDetail = AgentDetail(installed=False)
     symantec_dlp: AgentDetail = AgentDetail(installed=False)
-    globalprotect: AgentDetail = AgentDetail(installed=False)
     symantec_wss: AgentDetail = AgentDetail(installed=False)

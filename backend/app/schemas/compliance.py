@@ -8,8 +8,6 @@ class ComplianceStatusBase(BaseModel):
     edr_version_ok: bool = False
     dlp_installed:  bool = False
     dlp_version_ok: bool = False
-    gp_installed:   bool = False
-    gp_version_ok:  bool = False
     wss_installed:  bool = False
     wss_version_ok: bool = False
 

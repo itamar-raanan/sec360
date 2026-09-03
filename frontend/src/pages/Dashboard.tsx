@@ -111,11 +111,9 @@ export default function Dashboard() {
   // Coverage numbers
   const edrInstalled = totalEndpoints - (complianceDash?.issues.no_edr       ?? 0)
   const dlpInstalled = totalEndpoints - (complianceDash?.issues.no_dlp       ?? 0)
-  const gpInstalled  = totalEndpoints - (complianceDash?.issues.no_gp        ?? 0)
   const wssInstalled = totalEndpoints - (complianceDash?.issues.no_wss       ?? 0)
   const edrVersionOk = edrInstalled   - (complianceDash?.issues.edr_outdated ?? 0)
   const dlpVersionOk = dlpInstalled   - (complianceDash?.issues.dlp_outdated ?? 0)
-  const gpVersionOk  = gpInstalled    - (complianceDash?.issues.gp_outdated  ?? 0)
   const wssVersionOk = wssInstalled   - (complianceDash?.issues.wss_outdated ?? 0)
 
   return (
@@ -285,11 +283,6 @@ export default function Dashboard() {
                 <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--text-4)" }}>DLP · Symantec</p>
                 <CoverageBar label="Installed"  value={dlpInstalled} total={totalEndpoints} color="#10b981" onClick={() => navigate('/endpoints?agent=has_dlp')} />
                 <CoverageBar label="Up to date" value={dlpVersionOk} total={dlpInstalled}   color="#059669" onClick={() => navigate('/endpoints?agent=has_dlp')} />
-              </div>
-              <div className="pt-4 space-y-3" style={{ borderTop: "1px solid var(--border)" }}>
-                <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--text-4)" }}>VPN · GlobalProtect</p>
-                <CoverageBar label="Installed"  value={gpInstalled}  total={totalEndpoints} color="#10b981" onClick={() => navigate('/endpoints?agent=has_gp')} />
-                <CoverageBar label="Up to date" value={gpVersionOk}  total={gpInstalled}    color="#059669" onClick={() => navigate('/endpoints?agent=has_gp')} />
               </div>
               <div className="pt-4 space-y-3" style={{ borderTop: "1px solid var(--border)" }}>
                 <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--text-4)" }}>Proxy · Symantec WSS</p>

@@ -1,7 +1,7 @@
 export type EmploymentStatus = 'active' | 'inactive' | 'on_leave'
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical'
 export type ComplianceStatusValue = 'compliant' | 'partial' | 'non_compliant'
-export type AgentProduct = 'sentinelone' | 'symantec' | 'prisma' | 'globalprotect' | 'symantec_wss' | 'other'
+export type AgentProduct = 'sentinelone' | 'symantec' | 'prisma' | 'symantec_wss' | 'other'
 export type AgentStatus = 'active' | 'inactive' | 'unknown'
 export type EventType = 'login' | 'app_usage' | 'network' | 'vpn' | 'logout' | 'file_access' | 'oauth_grant' | 'saml' | 'user_account' | 'access_eval' | 'cloud_access'
 export type AuthRole = 'admin' | 'analyst' | 'viewer'
@@ -91,8 +91,6 @@ export interface ComplianceStatus {
   edr_version_ok: boolean
   dlp_installed: boolean
   dlp_version_ok: boolean
-  gp_installed: boolean
-  gp_version_ok: boolean
   wss_installed: boolean
   wss_version_ok: boolean
   disk_encrypted: boolean | null
@@ -177,8 +175,6 @@ export interface ComplianceSummaryShort {
   edr_version_ok: boolean
   dlp_installed: boolean
   dlp_version_ok: boolean
-  gp_installed: boolean
-  gp_version_ok: boolean
   wss_installed: boolean
   wss_version_ok: boolean
   disk_encrypted: boolean | null

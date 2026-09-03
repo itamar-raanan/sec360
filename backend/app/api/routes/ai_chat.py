@@ -9,7 +9,7 @@ Conversational intelligence:
   - Follow-up detection:  recognises "those", "them", "which of these", etc.
   - Intent merging:       layers new filters on top of the previous query's intent
   - Entity pivots:        "who owns them?" switches from endpoints→users; "their devices?" reverses
-  - Filter inheritance:   short filter phrases (e.g. "without VPN?") inherit entity from context
+  - Filter inheritance:   short filter phrases (e.g. "without WSS?") inherit entity from context
   - Smart LLM context:    history summary injected so the model knows what was last shown
 
 No external API keys required.
@@ -427,14 +427,14 @@ def _detect_intent(msg: str) -> dict:
         intent["endpoints"] = True
         intent["ep_filters"]["edr_missing"] = True
 
-    # Missing VPN
+    # Missing Symantec WSS
     if re.search(
-        r"(no|missing|without|not installed|lacking|lack\b|don.?t have|doesn.?t have).{0,8}(vpn|globalprotect|gp\b|wss)"
-        r"|(vpn|globalprotect).{0,8}(not installed|missing|absent|not present)",
+        r"(no|missing|without|not installed|lacking|lack\b|don.?t have|doesn.?t have).{0,18}((symantec\s+)?wss|cloud swg)"
+        r"|((symantec\s+)?wss|cloud swg).{0,8}(not installed|missing|absent|not present)",
         m,
     ):
         intent["endpoints"] = True
-        intent["ep_filters"]["vpn_missing"] = True
+        intent["ep_filters"]["wss_missing"] = True
 
     # Missing DLP
     if re.search(r"(no|missing|without|lacking|lack\b|don.?t have).{0,20}dlp|dlp.{0,8}(not installed|missing|absent)", m):
@@ -811,7 +811,7 @@ async def _fetch_endpoints(params: dict, db: AsyncSession, limit: int = 200) -> 
         q = q.where(Endpoint.owner_user_id == None)  # noqa: E711
 
     needs_cs = any(params.get(k) for k in ["compliance_status", "edr_outdated", "edr_missing",
-                                             "dlp_missing", "disk_not_encrypted"])
+                                             "dlp_missing", "wss_missing", "disk_not_encrypted"])
     if needs_cs:
         q = q.join(ComplianceStatus, ComplianceStatus.endpoint_id == Endpoint.id)
         if params.get("compliance_status"):
@@ -823,15 +823,14 @@ async def _fetch_endpoints(params: dict, db: AsyncSession, limit: int = 200) -> 
             q = q.where(ComplianceStatus.edr_installed.isnot(True))
         if params.get("dlp_missing"):
             q = q.where(ComplianceStatus.dlp_installed.isnot(True))
+        if params.get("wss_missing"):
+            q = q.where(ComplianceStatus.wss_installed.isnot(True))
         if params.get("disk_not_encrypted"):
             q = q.where(ComplianceStatus.disk_encrypted.isnot(True))
 
     result = await db.execute(q.limit(limit))
     endpoints = list(result.scalars().unique().all())
 
-    if params.get("vpn_missing"):
-        endpoints = [ep for ep in endpoints
-                     if not any(a.product_name in ("globalprotect", "symantec_wss") for a in ep.agents)]
     if params.get("agent_inactive"):
         endpoints = [ep for ep in endpoints if any(a.status == "inactive" for a in ep.agents)]
 
@@ -839,7 +838,6 @@ async def _fetch_endpoints(params: dict, db: AsyncSession, limit: int = 200) -> 
     for ep in endpoints:
         s1  = next((a for a in ep.agents if a.product_name == "sentinelone"),   None)
         dlp = next((a for a in ep.agents if a.product_name == "symantec"),      None)
-        gp  = next((a for a in ep.agents if a.product_name == "globalprotect"), None)
         wss = next((a for a in ep.agents if a.product_name == "symantec_wss"),  None)
         cs  = ep.compliance_status
         rows.append({
@@ -852,7 +850,7 @@ async def _fetch_endpoints(params: dict, db: AsyncSession, limit: int = 200) -> 
                            else ("outdated" if (s1 and cs and not cs.edr_version_ok)
                            else ("inactive" if s1 else "missing")),
             "dlp":         "ok" if (dlp and dlp.status == "active") else ("inactive" if dlp else "missing"),
-            "vpn":         "GP" if gp else ("WSS" if wss else "none"),
+            "wss":         "ok" if (wss and wss.status == "active") else ("inactive" if wss else "missing"),
             "encrypted":   "yes" if (cs and cs.disk_encrypted) else "no",
             "last_seen":   ep.last_seen.strftime("%Y-%m-%d") if ep.last_seen else "—",
         })
@@ -998,7 +996,6 @@ async def _fetch_user_profile(search: str, db: AsyncSession) -> dict | None:
     ep_rows = []
     for ep in endpoints:
         s1  = next((a for a in ep.agents if a.product_name == "sentinelone"),   None)
-        gp  = next((a for a in ep.agents if a.product_name == "globalprotect"), None)
         wss = next((a for a in ep.agents if a.product_name == "symantec_wss"),  None)
         cs  = ep.compliance_status
         s1_status = (
@@ -1011,7 +1008,7 @@ async def _fetch_user_profile(search: str, db: AsyncSession) -> dict | None:
             "os":         _short_os(ep.os_version),
             "risk":       int(ep.risk_score or 0),
             "s1":         s1_status,
-            "vpn":        "GP" if gp else ("WSS" if wss else "none"),
+            "wss":        "ok" if (wss and wss.status == "active") else ("inactive" if wss else "missing"),
             "encrypted":  "yes" if (cs and cs.disk_encrypted) else "no",
             "compliance": cs.status if cs else "unknown",
             "last_seen":  ep.last_seen.strftime("%Y-%m-%d") if ep.last_seen else "—",
@@ -1079,8 +1076,7 @@ async def _fetch_compliance_summary(db: AsyncSession) -> dict:
         "edr_outdated":  await _cnt(and_(ComplianceStatus.edr_installed == True,  # noqa: E712
                                          ComplianceStatus.edr_version_ok.isnot(True))),
         "no_dlp":        await _cnt(ComplianceStatus.dlp_installed.isnot(True)),
-        "no_vpn":        await _cnt(and_(ComplianceStatus.gp_installed.isnot(True),
-                                         ComplianceStatus.wss_installed.isnot(True))),
+        "no_wss":        await _cnt(ComplianceStatus.wss_installed.isnot(True)),
         "no_encrypt":    await _cnt(ComplianceStatus.disk_encrypted.isnot(True)),
         "no_devctrl":    await _cnt(ComplianceStatus.device_control_enabled.isnot(True)),
     }
@@ -1110,7 +1106,7 @@ def _ep_filter_desc(ep_f: dict) -> str:
     if ep_f.get("unassigned"):     parts.append("unassigned endpoints")
     if ep_f.get("edr_missing"):    parts.append("endpoints missing EDR")
     if ep_f.get("edr_outdated"):   parts.append("endpoints with outdated S1")
-    if ep_f.get("vpn_missing"):    parts.append("endpoints without VPN")
+    if ep_f.get("wss_missing"):    parts.append("endpoints without WSS")
     if ep_f.get("dlp_missing"):    parts.append("endpoints without DLP")
     if ep_f.get("disk_not_encrypted"): parts.append("unencrypted endpoints")
     if ep_f.get("risk_level"):     parts.append(f"{ep_f['risk_level']}-risk endpoints")
@@ -1156,7 +1152,7 @@ async def _direct_response(intent: dict, db: AsyncSession, sort_key: str | None 
             f"| 🟡 Partial | {d['partial']} |\n"
             f"| ❌ Non-compliant | {d['non_compliant']} |\n\n"
             f"**Gaps:** No EDR: {d['no_edr']} · Outdated EDR: {d['edr_outdated']} · "
-            f"No DLP: {d['no_dlp']} · No VPN: {d['no_vpn']} · "
+            f"No DLP: {d['no_dlp']} · No WSS: {d['no_wss']} · "
             f"No disk encryption: {d['no_encrypt']} · No device control: {d['no_devctrl']}"
         )
 
@@ -1186,11 +1182,11 @@ async def _direct_response(intent: dict, db: AsyncSession, sort_key: str | None 
         ep_desc_parts.append("endpoints")
         if ep_f.get("edr_outdated"):         ep_desc_parts.append("with outdated S1")
         if ep_f.get("edr_missing"):          ep_desc_parts.append("missing EDR")
-        if ep_f.get("vpn_missing"):          ep_desc_parts.append("without VPN")
+        if ep_f.get("wss_missing"):          ep_desc_parts.append("without WSS")
         if ep_f.get("dlp_missing"):          ep_desc_parts.append("without DLP")
         if ep_f.get("disk_not_encrypted"):   ep_desc_parts.append("without disk encryption")
         if ep_f.get("agent_inactive"):       ep_desc_parts.append("with inactive agents")
-        # Build header — capitalise first word but preserve acronyms (VPN, EDR, DLP, S1)
+        # Build header — capitalise first word but preserve acronyms (WSS, EDR, DLP, S1)
         ep_label = " ".join(ep_desc_parts)
         ep_first = ep_label[:1].upper() + ep_label[1:]  # only first char
         header = f"**{ep_first}** — {r['count']} found"
@@ -1202,8 +1198,8 @@ async def _direct_response(intent: dict, db: AsyncSession, sort_key: str | None 
             cols = ["hostname", "owner", "os", "s1"]
         elif ep_f.get("edr_missing"):
             cols = ["hostname", "owner", "os", "compliance"]
-        elif ep_f.get("vpn_missing"):
-            cols = ["hostname", "owner", "os", "vpn"]
+        elif ep_f.get("wss_missing"):
+            cols = ["hostname", "owner", "os", "wss"]
         elif ep_f.get("dlp_missing"):
             cols = ["hostname", "owner", "os", "dlp"]
         elif ep_f.get("disk_not_encrypted"):
@@ -1211,11 +1207,11 @@ async def _direct_response(intent: dict, db: AsyncSession, sort_key: str | None 
         elif ep_f.get("agent_inactive"):
             cols = ["hostname", "owner", "os", "s1", "dlp"]
         elif ep_f.get("compliance_status"):
-            cols = ["hostname", "owner", "os", "s1", "dlp", "vpn", "encrypted"]
+            cols = ["hostname", "owner", "os", "s1", "dlp", "wss", "encrypted"]
         elif ep_f.get("risk_level"):
             cols = ["hostname", "owner", "os", "risk", "compliance"]
         else:
-            cols = ["hostname", "owner", "os", "risk", "compliance", "s1", "vpn"]
+            cols = ["hostname", "owner", "os", "risk", "compliance", "s1", "wss"]
 
         ep_rows = _sort_rows(r["rows"], sort_key)
         parts.append(f"{header}\n\n{_md_table(ep_rows, cols)}")
@@ -1298,7 +1294,7 @@ async def _direct_response(intent: dict, db: AsyncSession, sort_key: str | None 
             # Devices section
             if profile["ep_rows"]:
                 ep_md = _md_table(profile["ep_rows"],
-                                  ["hostname", "os", "risk", "s1", "vpn", "encrypted", "compliance"])
+                                  ["hostname", "os", "risk", "s1", "wss", "encrypted", "compliance"])
                 devices_section = f"**Devices** — {len(profile['ep_rows'])} found\n\n{ep_md}"
             else:
                 devices_section = "**Devices** — none assigned"
@@ -1400,7 +1396,7 @@ async def _build_llm_context(intent: dict, db: AsyncSession) -> str:
             f"COMPLIANCE (total={d['total']}): compliant={d['compliant']} "
             f"partial={d['partial']} non_compliant={d['non_compliant']} | "
             f"no_edr={d['no_edr']} edr_outdated={d['edr_outdated']} no_dlp={d['no_dlp']} "
-            f"no_vpn={d['no_vpn']} no_encryption={d['no_encrypt']} no_devctrl={d['no_devctrl']}"
+            f"no_wss={d['no_wss']} no_encryption={d['no_encrypt']} no_devctrl={d['no_devctrl']}"
         )
 
     if intent["risk"]:
@@ -1418,10 +1414,10 @@ async def _build_llm_context(intent: dict, db: AsyncSession) -> str:
             cols = ["hostname", "os", "compliance"]
         elif ep_f.get("edr_outdated"):
             cols = ["hostname", "owner", "s1"]
-        elif ep_f.get("vpn_missing"):
-            cols = ["hostname", "owner", "vpn"]
+        elif ep_f.get("wss_missing"):
+            cols = ["hostname", "owner", "wss"]
         elif ep_f.get("compliance_status"):
-            cols = ["hostname", "owner", "s1", "dlp", "vpn"]
+            cols = ["hostname", "owner", "s1", "dlp", "wss"]
         else:
             cols = ["hostname", "owner", "compliance", "risk"]
         rows_str = " | ".join(",".join(str(row.get(c,"—")) for c in cols) for row in r["rows"][:8])
@@ -1478,7 +1474,7 @@ def _handle_conversational(msg: str) -> str | None:
         return (
             "Hi! I'm your Security Assistant. I can help you query your security posture.\n\n"
             "Try asking:\n"
-            "- *List endpoints without VPN*\n"
+            "- *List endpoints without WSS*\n"
             "- *Show users without MFA*\n"
             "- *Suspicious login events this week*\n"
             "- *Non-compliant endpoints*"
@@ -1488,7 +1484,7 @@ def _handle_conversational(msg: str) -> str | None:
     if _HELP_RE.search(m):
         return (
             "Here's what I can help you with:\n\n"
-            "**Endpoints** — list by OS, risk, VPN / EDR / DLP status, compliance, encryption\n"
+            "**Endpoints** — list by OS, risk, WSS / EDR / DLP status, compliance, encryption\n"
             "**Users** — filter by MFA, risk score, department, activity status\n"
             "**Login activity** — suspicious events, by country, time range\n"
             "**Compliance** — summary, non-compliant devices, gap analysis\n"

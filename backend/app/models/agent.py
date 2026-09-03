@@ -16,7 +16,7 @@ class SecurityAgent(Base):
         ForeignKey("endpoints.id", ondelete="CASCADE")
     )
     product_name: Mapped[str] = mapped_column(
-        SAEnum("sentinelone", "symantec", "prisma", "globalprotect", "symantec_wss", "other", name="agent_product_enum")
+        SAEnum("sentinelone", "symantec", "prisma", "symantec_wss", "other", name="agent_product_enum")
     )
     status: Mapped[str] = mapped_column(
         SAEnum("active", "inactive", "unknown", name="agent_status_enum"), default="unknown"

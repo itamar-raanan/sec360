@@ -30,7 +30,6 @@ interface AgentDetail {
 interface EndpointDetail extends Endpoint {
   sentinelone: AgentDetail
   symantec_dlp: AgentDetail
-  globalprotect: AgentDetail
   symantec_wss: AgentDetail
 }
 
@@ -456,7 +455,6 @@ export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
           <div className="space-y-3">
             <AgentBlock label="SentinelOne EDR"    detail={ep.sentinelone} />
             <AgentBlock label="Symantec DLP"       detail={ep.symantec_dlp} showStateGroup />
-            <AgentBlock label="GlobalProtect VPN"  detail={ep.globalprotect} simple />
             <AgentBlock label="Symantec WSS Agent" detail={ep.symantec_wss} simple />
           </div>
         )}
@@ -478,8 +476,7 @@ export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
                       { label: 'EDR Up to Date', ok: cs.edr_version_ok },
                       { label: 'DLP Installed',  ok: cs.dlp_installed },
                       { label: 'DLP Up to Date', ok: cs.dlp_version_ok },
-                      { label: 'VPN',            ok: cs.gp_installed || cs.wss_installed },
-                      ...(cs.gp_installed ? [{ label: 'GP Up to Date',  ok: cs.gp_version_ok }] : []),
+                      { label: 'WSS Installed',  ok: cs.wss_installed },
                       ...(cs.wss_installed ? [{ label: 'WSS Up to Date', ok: cs.wss_version_ok }] : []),
                       ...(cs.disk_encrypted !== null && cs.disk_encrypted !== undefined
                         ? [{ label: 'Disk Encrypted', ok: cs.disk_encrypted }] : []),

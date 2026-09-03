@@ -54,7 +54,6 @@ interface SystemSettings {
   platform_name: string
   min_s1_version: string
   min_dlp_version: string
-  min_gp_version: string
   min_wss_version: string
 }
 
@@ -772,15 +771,6 @@ function PlatformTab() {
             value={form.min_dlp_version}
             onChange={e => set('min_dlp_version', e.target.value)}
             placeholder="e.g. 15.7.0"
-            className="bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm w-44 font-mono focus:outline-none focus:border-emerald-500"
-          />
-        </Field>
-        <Field label="GlobalProtect minimum version" hint="e.g. 6.2.0 — also marks GP as required">
-          <input
-            type="text"
-            value={form.min_gp_version}
-            onChange={e => set('min_gp_version', e.target.value)}
-            placeholder="e.g. 6.2.0"
             className="bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm w-44 font-mono focus:outline-none focus:border-emerald-500"
           />
         </Field>

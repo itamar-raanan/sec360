@@ -121,12 +121,6 @@ _BATCH_INSIGHT_TEMPLATES: dict[str, str] = {
         "without detection or blocking. Deploy the DLP agent to all managed endpoints "
         "and verify policy enforcement is active."
     ),
-    "endpoints_missing_vpn": (
-        "{count} endpoints do not have the corporate VPN agent installed. "
-        "Remote workers without VPN may be transmitting sensitive data over untrusted networks, "
-        "bypassing network security controls. Deploy the VPN agent to all managed endpoints "
-        "and enforce connection policies for off-site access."
-    ),
     "inactive_agents": (
         "{count} {product} security agents are reporting as inactive or offline. "
         "An offline agent provides no protection — the endpoint is effectively unmonitored. "
@@ -136,7 +130,7 @@ _BATCH_INSIGHT_TEMPLATES: dict[str, str] = {
     "non_compliant_endpoints": (
         "{count} endpoints are fully non-compliant with the required security baseline. "
         "These devices are missing multiple critical security controls including EDR, DLP, "
-        "encryption, and/or VPN coverage. Consider quarantining these endpoints from corporate "
+        "encryption, and/or web security coverage. Consider quarantining these endpoints from corporate "
         "resources until they are remediated and compliant."
     ),
     "partial_compliance_endpoints": (

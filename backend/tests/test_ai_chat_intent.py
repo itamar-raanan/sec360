@@ -14,7 +14,7 @@ expected_dict keys (all optional — only checked if present):
   unassigned     bool               → ep_filters["unassigned"]
   edr_missing    bool
   edr_outdated   bool
-  vpn_missing    bool
+  wss_missing    bool
   dlp_missing    bool
   disk_not_encrypted bool
   compliance_status  str            → ep_filters["compliance_status"]
@@ -89,13 +89,13 @@ TESTS = [
     ("show me endpoints where S1 is out of date",   {"endpoints": True, "edr_outdated": True,
                                                      "is_list": True}),
 
-    # ─── VPN MISSING ─────────────────────────────────────────────────────────
-    ("endpoints without VPN",                       {"endpoints": True, "vpn_missing": True}),
-    ("devices missing GlobalProtect",               {"endpoints": True, "vpn_missing": True}),
-    ("list machines with no VPN",                   {"endpoints": True, "vpn_missing": True,
+    # ─── WSS MISSING ─────────────────────────────────────────────────────────
+    ("endpoints without WSS",                       {"endpoints": True, "wss_missing": True}),
+    ("devices missing Cloud SWG",                   {"endpoints": True, "wss_missing": True}),
+    ("list machines with no WSS",                   {"endpoints": True, "wss_missing": True,
                                                      "is_list": True}),
-    ("no VPN installed on endpoints",               {"endpoints": True, "vpn_missing": True}),
-    ("hosts without GlobalProtect agent",           {"endpoints": True, "vpn_missing": True}),
+    ("no WSS installed on endpoints",               {"endpoints": True, "wss_missing": True}),
+    ("hosts without Symantec WSS agent",            {"endpoints": True, "wss_missing": True}),
 
     # ─── DLP MISSING ─────────────────────────────────────────────────────────
     ("endpoints without DLP",                       {"endpoints": True, "dlp_missing": True}),
@@ -364,9 +364,9 @@ TESTS = [
     ("endpoints without user",                      {"endpoints": True}),
     ("which users have suspended accounts",         {"users": True, "suspended": True,
                                                      "is_list": True}),
-    # VPN variants
-    ("machines without GlobalProtect",              {"endpoints": True, "vpn_missing": True}),
-    ("no VPN on these devices",                     {"endpoints": True, "vpn_missing": True}),
+    # WSS variants
+    ("machines without Symantec WSS",               {"endpoints": True, "wss_missing": True}),
+    ("no WSS on these devices",                     {"endpoints": True, "wss_missing": True}),
     # Multiple filters combined
     ("high risk Windows endpoints",                 {"endpoints": True, "risk_level_ep": "high",
                                                      "os": "windows"}),
@@ -462,8 +462,8 @@ def check(query: str, expected: dict) -> tuple[bool, list[str]]:
         failures.append(f"edr_missing: expected {expected['edr_missing']}, got {ef.get('edr_missing')}")
     if "edr_outdated"     in expected and bool(ef.get("edr_outdated"))     != bool(expected["edr_outdated"]):
         failures.append(f"edr_outdated: expected {expected['edr_outdated']}, got {ef.get('edr_outdated')}")
-    if "vpn_missing"      in expected and bool(ef.get("vpn_missing"))      != bool(expected["vpn_missing"]):
-        failures.append(f"vpn_missing: expected {expected['vpn_missing']}, got {ef.get('vpn_missing')}")
+    if "wss_missing"      in expected and bool(ef.get("wss_missing"))      != bool(expected["wss_missing"]):
+        failures.append(f"wss_missing: expected {expected['wss_missing']}, got {ef.get('wss_missing')}")
     if "dlp_missing"      in expected and bool(ef.get("dlp_missing"))      != bool(expected["dlp_missing"]):
         failures.append(f"dlp_missing: expected {expected['dlp_missing']}, got {ef.get('dlp_missing')}")
     if "disk_not_encrypted" in expected and bool(ef.get("disk_not_encrypted")) != bool(expected["disk_not_encrypted"]):

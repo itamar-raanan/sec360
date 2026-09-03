@@ -90,7 +90,6 @@ class SystemSettingsIn(BaseModel):
     platform_name: Optional[str] = None
     min_s1_version: Optional[str] = None
     min_dlp_version: Optional[str] = None
-    min_gp_version: Optional[str] = None
     min_wss_version: Optional[str] = None
 
 

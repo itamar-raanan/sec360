@@ -301,8 +301,7 @@ class SentinelOneCollector(BaseCollector):
 
         return count, agent_id_map
 
-    # App-name patterns for the two products we track (lowercase match)
-    _GP_KEYWORDS  = ("globalprotect",)
+    # App-name patterns for Symantec WSS (lowercase match)
     _WSS_KEYWORDS = ("wss agent", "blue coat wss", "symantec web security service", "symantec wss")
 
     # S1 API returns apps per-agent with no agentId in the payload.
@@ -310,7 +309,7 @@ class SentinelOneCollector(BaseCollector):
     _APP_CONCURRENCY = 10
 
     async def _fetch_apps_for_agent(self, client: httpx.AsyncClient, s1_agent_id: str) -> list[dict]:
-        """Return app records that match GP/WSS keywords for a single S1 agent."""
+        """Return Symantec WSS app records for a single S1 agent."""
         try:
             resp = await client.get(
                 f"{self.base_url}/web/api/v2.1/agents/applications",
@@ -322,9 +321,7 @@ class SentinelOneCollector(BaseCollector):
             matched = []
             for app in apps:
                 name_lower = (app.get("name") or "").lower()
-                if any(kw in name_lower for kw in self._GP_KEYWORDS):
-                    matched.append({"product": "globalprotect", "version": app.get("version")})
-                elif any(kw in name_lower for kw in self._WSS_KEYWORDS):
+                if any(kw in name_lower for kw in self._WSS_KEYWORDS):
                     matched.append({"product": "symantec_wss", "version": app.get("version")})
             return matched
         except Exception as e:
@@ -332,7 +329,7 @@ class SentinelOneCollector(BaseCollector):
             return []
 
     async def _collect_app_agents(self, id_to_endpoint: dict[str, str]) -> None:
-        """Fetch GP/WSS apps for all S1 agents concurrently and upsert SecurityAgent rows."""
+        """Fetch WSS apps for all S1 agents concurrently and upsert SecurityAgent rows."""
         import asyncio
         from sqlalchemy import select
         from app.models.agent import SecurityAgent
@@ -386,7 +383,7 @@ class SentinelOneCollector(BaseCollector):
                 agent.last_seen = now
 
         await self.db.flush()
-        logger.info("S1: upserted %d GP/WSS app agent records", len(found))
+        logger.info("S1: upserted %d WSS app agent records", len(found))
 
     # Legacy support for old scheduler pattern
     async def fetch_data(self) -> list[dict[str, Any]]:

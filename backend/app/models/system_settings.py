@@ -36,7 +36,6 @@ class SystemSettings(Base):
     # Minimum agent versions for compliance (empty string = don't check)
     min_s1_version: Mapped[str] = mapped_column(String(50), default="")
     min_dlp_version: Mapped[str] = mapped_column(String(50), default="")
-    min_gp_version: Mapped[str] = mapped_column(String(50), default="")
     min_wss_version: Mapped[str] = mapped_column(String(50), default="")
 
     # Google SAML SSO

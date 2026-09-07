@@ -5,6 +5,7 @@ import {
   ChevronDown, AlertCircle, X, Filter, Calendar, Printer,
 } from 'lucide-react'
 import apiClient from '../api/client'
+import { useConfirm } from '../components/shared/ConfirmDialog'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -235,6 +236,7 @@ function ScheduleModal({
 
 export default function Reports() {
   const qc = useQueryClient()
+  const confirmAction = useConfirm()
 
   // Ad-hoc report state
   const [reportType, setReportType] = useState<ReportType>('compliance')
@@ -354,14 +356,14 @@ export default function Reports() {
   })[color] ?? ''
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="reports-page ui-page-container space-y-5">
       <div>
-        <h1 className="text-xl font-bold text-white">Reports</h1>
+        <h1 className="text-[18px] font-semibold tracking-[-0.025em] text-white">Reports</h1>
         <p className="text-sm text-zinc-500 mt-1">Generate, export, and schedule security reports.</p>
       </div>
 
       {/* ── Ad-hoc report ── */}
-      <div className="bg-zinc-950 border border-white/[0.06] rounded-2xl p-6">
+      <div className="card p-4 sm:p-6">
         <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
           <FileText size={15} className="text-emerald-400" /> Generate report
         </h2>
@@ -387,7 +389,7 @@ export default function Reports() {
         </div>
 
         {/* Actions */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button onClick={handleGenerate} disabled={previewLoading}
             className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-900 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 rounded-lg pressable">
             {previewLoading ? 'Generating…' : <><ChevronDown size={14} /> Generate preview</>}
@@ -447,8 +449,8 @@ export default function Reports() {
       </div>
 
       {/* ── Scheduled reports ── */}
-      <div className="bg-zinc-950 border border-white/[0.06] rounded-2xl p-6">
-        <div className="flex items-center justify-between mb-5">
+      <div className="card p-4 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
           <div>
             <h2 className="text-sm font-semibold text-white flex items-center gap-2">
               <Clock size={15} className="text-emerald-400" /> Scheduled reports
@@ -469,7 +471,7 @@ export default function Reports() {
         ) : (
           <div className="space-y-3">
             {scheduled.map(r => (
-              <div key={r.id} className="flex items-center gap-4 bg-zinc-900/40 border border-white/[0.08] rounded-xl px-4 py-3">
+              <div key={r.id} className="report-schedule-row flex items-center gap-4 bg-zinc-900/40 border border-white/[0.08] rounded-lg px-4 py-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5">
                     <span className="text-white text-sm font-medium truncate">{r.name}</span>
@@ -503,7 +505,7 @@ export default function Reports() {
                       ? <ToggleRight size={16} className="text-emerald-300 hover:text-green-300" />
                       : <ToggleLeft size={16} className="text-zinc-500 hover:text-zinc-400" />}
                   </button>
-                  <button onClick={() => { if (confirm(`Delete "${r.name}"?`)) deleteSchedule.mutate(r.id) }}
+                  <button onClick={async () => { if (await confirmAction({ title: 'Delete scheduled report?', message: `“${r.name}” will no longer run or send to its recipients.`, confirmLabel: 'Delete schedule' })) deleteSchedule.mutate(r.id) }}
                     className="p-1.5 text-zinc-500 hover:text-red-400 transition-colors rounded" title="Delete">
                     <Trash2 size={14} />
                   </button>

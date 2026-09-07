@@ -16,7 +16,7 @@ export default function EmptyState({ icon: Icon, title, description, action, siz
       style={{ padding: size === 'sm' ? '20px 16px' : '40px 16px' }}
     >
       <div
-        className={`flex items-center justify-center flex-shrink-0 ${size === 'sm' ? 'w-9 h-9 rounded-xl' : 'w-12 h-12 rounded-2xl'}`}
+        className={`flex items-center justify-center flex-shrink-0 rounded-xl ${size === 'sm' ? 'w-9 h-9' : 'w-12 h-12'}`}
         style={{ background: 'var(--surface-3)', border: '1px solid var(--border)' }}
       >
         <Icon size={size === 'sm' ? 15 : 20} className="text-zinc-500" strokeWidth={1.5} />
@@ -32,8 +32,7 @@ export default function EmptyState({ icon: Icon, title, description, action, siz
       {action && (
         <button
           onClick={action.onClick}
-          className="text-xs font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-80"
-          style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-ring)' }}
+          className="ui-secondary-button"
         >
           {action.label}
         </button>

@@ -60,19 +60,19 @@ export default function DataTable<T>({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="overflow-x-auto rounded-xl" style={{ border: '1px solid var(--border)' }}>
+      <div className="data-table-shell overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.015)' }}>
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-4 py-3 text-left ${col.width || ''} ${col.sortable ? 'cursor-pointer select-none' : ''}`}
+                  className={`px-4 py-3 text-left ${col.width || ''}`}
                   style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-4)', textTransform: 'uppercase', letterSpacing: '0.08em' }}
-                  onClick={col.sortable ? () => handleSort(col.key) : undefined}
+                  aria-sort={sortKey === col.key ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
                 >
-                  <div className="flex items-center gap-1">
-                    {col.header}
+                  {col.sortable ? <button className="table-sort-button" onClick={() => handleSort(col.key)}>
+                    <span>{col.header}</span>
                     {col.sortable && (
                       <span style={{ color: 'var(--text-4)' }}>
                         {sortKey === col.key ? (
@@ -82,7 +82,7 @@ export default function DataTable<T>({
                         )}
                       </span>
                     )}
-                  </div>
+                  </button> : <span>{col.header}</span>}
                 </th>
               ))}
             </tr>
@@ -125,14 +125,11 @@ export default function DataTable<T>({
               sortedData.map((row, i) => (
                 <tr
                   key={keyExtractor(row)}
-                  className={`fade-up ${onRowClick ? 'cursor-pointer' : ''}`}
+                  className={`data-table-row fade-up ${onRowClick ? 'cursor-pointer' : ''}`}
                   style={{
                     borderBottom: '1px solid var(--border)',
                     animationDelay: `${i * 20}ms`,
-                    transition: 'background-color 120ms ease',
                   }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--hover-2)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                 >
                   {columns.map((col) => (
@@ -148,7 +145,7 @@ export default function DataTable<T>({
       </div>
 
       {pagination && totalPages > 1 && (
-        <div className="flex items-center justify-between px-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
           <span className="text-xs tabular-nums" style={{ color: 'var(--text-4)' }}>
             {Math.min((pagination.page - 1) * pagination.pageSize + 1, pagination.total)}–{Math.min(pagination.page * pagination.pageSize, pagination.total)} of {pagination.total}
           </span>
@@ -156,8 +153,7 @@ export default function DataTable<T>({
             <button
               disabled={pagination.page <= 1}
               onClick={() => pagination.onPageChange(pagination.page - 1)}
-              className="px-3 py-1.5 text-xs rounded-lg pressable disabled:opacity-30 disabled:cursor-not-allowed"
-              style={{ background: 'var(--surface-3)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+              className="ui-secondary-button pressable disabled:opacity-30"
             >
               Prev
             </button>
@@ -168,7 +164,7 @@ export default function DataTable<T>({
                 <button
                   key={p}
                   onClick={() => pagination.onPageChange(p)}
-                  className="px-3 py-1.5 text-xs rounded-lg pressable tabular-nums"
+                  className="pagination-button pressable tabular-nums"
                   style={active
                     ? { background: 'var(--accent)', border: '1px solid transparent', color: '#fff', fontWeight: 600 }
                     : { background: 'var(--surface-3)', border: '1px solid var(--border)', color: 'var(--text-3)' }
@@ -181,8 +177,7 @@ export default function DataTable<T>({
             <button
               disabled={pagination.page >= totalPages}
               onClick={() => pagination.onPageChange(pagination.page + 1)}
-              className="px-3 py-1.5 text-xs rounded-lg pressable disabled:opacity-30 disabled:cursor-not-allowed"
-              style={{ background: 'var(--surface-3)', border: '1px solid var(--border)', color: 'var(--text-2)' }}
+              className="ui-secondary-button pressable disabled:opacity-30"
             >
               Next
             </button>

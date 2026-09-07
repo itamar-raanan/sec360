@@ -2,49 +2,18 @@ import React from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   ShieldCheck,
-  LayoutDashboard,
-  Monitor,
-  Users,
-  CheckCircle,
-  Activity,
   LogOut,
-  Plug,
-  Settings,
-  FileText,
   Search,
   PanelLeftClose,
   PanelLeftOpen,
   Sun,
   Moon,
-  Brain,
-  MessageSquare,
-  Database,
-  Fingerprint,
-  Bug,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../../store/auth'
 import { useThemeStore } from '../../store/theme'
 import { fetchInsightStats } from '../../api/ai'
-
-const NAV_ITEMS = [
-  { to: '/dashboard',    icon: LayoutDashboard, label: 'Overview',     minRole: 'viewer' },
-  { to: '/endpoints',    icon: Monitor,         label: 'Endpoints',    minRole: 'viewer' },
-  { to: '/users',        icon: Users,           label: 'Users',        minRole: 'viewer' },
-  { to: '/compliance',   icon: CheckCircle,     label: 'Compliance',   minRole: 'viewer' },
-  { to: '/activity',     icon: Activity,        label: 'Activity',     minRole: 'viewer' },
-  { to: '/investigation', icon: Search,          label: 'Investigation', minRole: 'viewer' },
-  { to: '/data-quality',  icon: Fingerprint,     label: 'Data Quality',  minRole: 'viewer' },
-  { to: '/application-vulnerabilities', icon: Bug, label: 'App Vulnerabilities', minRole: 'viewer' },
-  { to: '/dlp-user-policy-search', icon: Database, label: 'DLP Policy Search', minRole: 'analyst' },
-  { to: '/ai-chat',      icon: MessageSquare,   label: 'AI Assistant', minRole: 'viewer' },
-  { to: '/ai-insights',  icon: Brain,           label: 'AI Insights',  minRole: 'analyst' },
-  { to: '/reports',      icon: FileText,        label: 'Reports',      minRole: 'analyst' },
-  { to: '/integrations', icon: Plug,            label: 'Integrations', minRole: 'admin' },
-  { to: '/settings',     icon: Settings,        label: 'Settings',     minRole: 'admin' },
-]
-
-const ROLE_RANK: Record<string, number> = { viewer: 1, analyst: 2, admin: 3 }
+import { visibleNavigation } from './navigation'
 
 interface SidebarProps {
   collapsed?: boolean
@@ -56,7 +25,7 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
   const { user, logout } = useAuthStore()
   const { theme, toggle: toggleTheme } = useThemeStore()
   const navigate = useNavigate()
-  const userRank = ROLE_RANK[user?.role ?? 'viewer'] ?? 1
+  const userRank = user?.role === 'admin' ? 3 : user?.role === 'analyst' ? 2 : 1
 
   // Fetch insight stats to show alert dot on AI Insights nav item
   const { data: insightStats } = useQuery({
@@ -73,11 +42,11 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
     navigate('/login')
   }
 
-  const visibleItems = NAV_ITEMS.filter(item => userRank >= (ROLE_RANK[item.minRole] ?? 1))
+  const visibleItems = visibleNavigation(user?.role)
 
   return (
     <aside
-      className="flex-shrink-0 flex flex-col h-[100dvh] sticky top-0 overflow-hidden"
+      className="hidden md:flex flex-shrink-0 flex-col h-[100dvh] sticky top-0 overflow-hidden"
       style={{
         width: collapsed ? 60 : 220,
         transition: 'width 220ms cubic-bezier(0.23,1,0.32,1)',
@@ -288,7 +257,7 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
         >
           <div
             className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg, #059669, #0d9488)' }}
+            style={{ background: 'var(--accent)' }}
           >
             {user?.email?.[0]?.toUpperCase() ?? 'A'}
           </div>

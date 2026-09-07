@@ -42,6 +42,7 @@ import {
   deleteIntegration,
 } from '../api/integrations'
 import type { IntegrationConfig } from '../types'
+import { useConfirm } from '../components/shared/ConfirmDialog'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -667,6 +668,7 @@ function IntegrationPanel({
   onClose: () => void
 }) {
   const queryClient = useQueryClient()
+  const confirmAction = useConfirm()
   const [formValues, setFormValues] = useState<Record<string, string>>({})
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [view, setView] = useState<'status' | 'config'>('status')
@@ -895,8 +897,8 @@ function IntegrationPanel({
                       </button>
 
                       <button
-                        onClick={() => {
-                          if (window.confirm('Remove credentials for this integration?')) {
+                        onClick={async () => {
+                          if (await confirmAction({ title: 'Remove integration credentials?', message: 'Collection will stop until new credentials are configured.', confirmLabel: 'Remove credentials' })) {
                             removeCreditsMutation.mutate()
                           }
                         }}
@@ -909,8 +911,8 @@ function IntegrationPanel({
 
                       {isCustom && (
                         <button
-                          onClick={() => {
-                            if (window.confirm(`Delete the "${config.display_name}" integration entirely?`)) {
+                          onClick={async () => {
+                            if (await confirmAction({ title: 'Delete integration?', message: `“${config.display_name}” and its saved configuration will be removed.`, confirmLabel: 'Delete integration' })) {
                               deleteIntegrationMutation.mutate()
                             }
                           }}
@@ -1382,9 +1384,9 @@ export default function Integrations() {
   }
 
   return (
-    <div className="absolute inset-0 flex overflow-hidden">
+    <div className="settings-split-layout absolute inset-0 flex overflow-hidden">
       {/* ── Left sidebar ── */}
-      <aside className="w-[220px] flex-shrink-0 border-r border-[var(--border)] bg-[var(--surface-1)] flex flex-col overflow-y-auto">
+      <aside className="settings-split-nav w-[220px] flex-shrink-0 border-r border-[var(--border)] bg-[var(--surface-1)] flex flex-col overflow-y-auto">
         <div className="p-4 border-b border-[var(--border)]">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 bg-emerald-600/20 rounded-lg flex items-center justify-center">
@@ -1394,7 +1396,7 @@ export default function Integrations() {
           </div>
         </div>
 
-        <nav className="flex-1 p-3 space-y-0.5">
+        <nav className="settings-split-tabs flex-1 p-3 space-y-0.5">
           {CATEGORIES.map((cat) => {
             const CatIcon = cat.icon
             const count = counts[cat.id] ?? integrations.filter((c) => {
@@ -1439,7 +1441,7 @@ export default function Integrations() {
 
       {/* ── Main area ── */}
       <main className="flex-1 overflow-y-auto">
-        <div className="p-6 max-w-3xl">
+        <div className="ui-page-container !mx-0 !max-w-3xl">
           {/* Header */}
           <div className="flex items-center justify-between mb-5">
             <div>

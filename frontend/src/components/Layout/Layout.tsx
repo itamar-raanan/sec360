@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Outlet, Navigate, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
+import MobileNavigation from './MobileNavigation'
 import CommandPalette from '../CommandPalette'
 import FloatingPanels from '../FloatingPanels'
 import { useAuthStore } from '../../store/auth'
@@ -53,6 +54,7 @@ export default function Layout() {
 
   return (
     <>
+      <a href="#main-content" className="skip-link">Skip to content</a>
       <div className="grain-overlay" aria-hidden />
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
       <FloatingPanels />
@@ -60,13 +62,14 @@ export default function Layout() {
         <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} onOpenCmd={() => setCmdOpen(true)} />
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <Header onOpenCmd={() => setCmdOpen(true)} />
-          <main className="flex-1 overflow-hidden relative">
-            <div key={location.pathname} className="fade-up h-full" style={{ animationDuration: '200ms' }}>
+          <main id="main-content" className="app-main flex-1 overflow-hidden relative" tabIndex={-1}>
+            <div key={location.pathname} className="route-stage fade-up h-full" style={{ animationDuration: '200ms' }}>
               <Outlet />
             </div>
           </main>
         </div>
       </div>
+      <MobileNavigation onOpenCmd={() => setCmdOpen(true)} />
     </>
   )
 }

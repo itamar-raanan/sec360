@@ -20,6 +20,7 @@ const Investigation = lazy(() => import('./pages/Investigation'))
 const DlpUserPolicySearch = lazy(() => import('./pages/DlpUserPolicySearch'))
 const DataQuality = lazy(() => import('./pages/DataQuality'))
 const ApplicationVulnerabilities = lazy(() => import('./pages/ApplicationVulnerabilities'))
+const NotFound = lazy(() => import('./pages/NotFound'))
 
 function RouteLoader() {
   return (
@@ -87,7 +88,7 @@ export default function App() {
         <Route path="/security" element={<Navigate to="/settings" replace />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
     </Suspense>
   )

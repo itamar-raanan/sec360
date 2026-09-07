@@ -46,25 +46,12 @@ export default function AuthLeftPanel() {
       className="hidden lg:flex lg:w-[54%] relative flex-col overflow-hidden"
       style={{ background: 'var(--surface-0)', borderRight: '1px solid var(--border)' }}
     >
-      {/* Dot grid */}
-      <div className="absolute inset-0 pointer-events-none" style={{
-        backgroundImage: 'radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px)',
-        backgroundSize: '28px 28px',
-        backgroundPosition: '14px 14px',
-      }} />
-
-      {/* Corner accent */}
-      <div className="absolute inset-0 pointer-events-none" style={{
-        background: 'radial-gradient(ellipse at 15% 60%, rgba(16,185,129,0.05) 0%, transparent 55%)',
-      }} />
-
       {/* Scan beam */}
       <div
         className="absolute inset-x-0 pointer-events-none"
         style={{
           height: 2,
-          background: 'linear-gradient(90deg, transparent 0%, rgba(16,185,129,0.4) 20%, rgba(16,185,129,0.9) 50%, rgba(16,185,129,0.4) 80%, transparent 100%)',
-          boxShadow: '0 0 12px 2px rgba(16,185,129,0.5)',
+          background: 'rgba(16,185,129,0.32)',
           animation: 'scan-beam 5s linear infinite',
         }}
       />
@@ -74,7 +61,7 @@ export default function AuthLeftPanel() {
         <div className="flex items-center gap-3">
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: 'var(--accent)', boxShadow: '0 0 16px rgba(16,185,129,0.45)' }}
+            style={{ background: 'var(--accent)' }}
           >
             <ShieldCheck size={16} className="text-white" strokeWidth={2.5} />
           </div>
@@ -104,7 +91,7 @@ export default function AuthLeftPanel() {
         {/* Terminal event feed */}
         <div
           className="mt-8 rounded-xl overflow-hidden flex-1 flex flex-col"
-          style={{ background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.07)', backdropFilter: 'blur(4px)', maxHeight: 300 }}
+          style={{ background: 'var(--surface-inset-strong)', border: '1px solid var(--border)', maxHeight: 300 }}
         >
           <div
             className="flex items-center gap-2 px-3.5 py-2 flex-shrink-0"

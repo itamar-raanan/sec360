@@ -285,10 +285,10 @@ export default function Compliance() {
   ].filter(d => d.value > 0)
 
   return (
-    <div className="absolute inset-0 flex overflow-hidden">
+    <div className="compliance-layout absolute inset-0 flex overflow-hidden">
 
       {/* ── Left panel (sticky) ───────────────────────────────────────── */}
-      <div className="w-[340px] flex-shrink-0 flex flex-col overflow-hidden border-r border-white/[0.06] bg-gray-950">
+      <div className="compliance-overview w-[340px] flex-shrink-0 flex flex-col overflow-hidden border-r border-white/[0.06] bg-gray-950">
         {/* Header */}
         <div className="flex-shrink-0 px-5 pt-5 pb-3 flex items-center justify-between">
           <div>
@@ -305,7 +305,7 @@ export default function Compliance() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 pb-5 space-y-4">
+        <div className="compliance-overview-scroll flex-1 overflow-y-auto px-4 pb-5 space-y-4">
           {/* KPI cards */}
           <div className="space-y-2">
             <KpiCard
@@ -473,7 +473,7 @@ export default function Compliance() {
       </div>
 
       {/* ── Right panel (endpoint list) ───────────────────────────────── */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="compliance-results flex-1 flex overflow-hidden">
         <EndpointList filter={activeFilter} />
       </div>
     </div>

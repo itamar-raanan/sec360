@@ -279,19 +279,19 @@ export default function Users() {
   ]
 
   return (
-    <div className="absolute inset-0 flex overflow-hidden">
+    <div className="entity-list-layout absolute inset-0 flex overflow-hidden">
       <div className="flex flex-col flex-1 min-w-0">
 
         {/* Toolbar */}
         <div
-          className="flex-shrink-0 px-5 py-4 flex items-center gap-3"
+          className="entity-toolbar flex-shrink-0 px-5 py-4 flex items-center gap-3"
           style={{ borderBottom: '1px solid var(--border)' }}
         >
-          <h1 className="text-xl font-semibold text-white">Users</h1>
+          <h1 className="text-[17px] font-semibold text-white tracking-[-0.02em]">Users</h1>
           <div className="flex-1" />
           <button
             onClick={() => exportCSV(users)}
-            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg"
+            className="ui-secondary-button"
             style={{ background: 'var(--surface-2)', border: '1px solid var(--border-mid)', color: 'var(--text-3)' }}
             onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-1)')}
             onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')}
@@ -314,7 +314,7 @@ export default function Users() {
 
         {/* Sort bar */}
         <div
-          className="flex-shrink-0 flex items-center gap-4 px-5 py-2"
+          className="entity-sortbar flex-shrink-0 flex items-center gap-4 overflow-x-auto px-5 py-2"
           style={{ borderBottom: '1px solid var(--border)', background: 'var(--table-header)' }}
         >
           <SortBtn label="Name"        field="name"        current={sortField} dir={sortDir} onClick={handleSort} />

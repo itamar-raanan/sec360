@@ -482,14 +482,14 @@ export default function Endpoints() {
   ]
 
   return (
-    <div className="absolute inset-0 flex overflow-hidden">
+    <div className="entity-list-layout absolute inset-0 flex overflow-hidden">
 
       {/* List */}
       <div className="flex flex-col flex-1 min-w-0">
 
         {/* Toolbar */}
         <div
-          className="flex-shrink-0 px-5 py-4 flex items-center gap-3"
+          className="entity-toolbar flex-shrink-0 px-5 py-4 flex items-center gap-3"
           style={{ borderBottom: '1px solid var(--border)' }}
         >
           <button
@@ -504,7 +504,7 @@ export default function Endpoints() {
               ? <CheckSquare size={16} className="text-emerald-400" />
               : <Square size={16} />}
           </button>
-          <h1 className="text-xl font-semibold text-white">Endpoints</h1>
+          <h1 className="text-[17px] font-semibold text-white tracking-[-0.02em]">Endpoints</h1>
           <div className="ml-auto flex items-center rounded-[8px] p-0.5" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }} aria-label="Table density">
             <button
               onClick={() => updateDensity('compact')}
@@ -540,7 +540,7 @@ export default function Endpoints() {
 
         {/* Sort bar */}
         <div
-          className="flex-shrink-0 flex items-center justify-between px-5 py-2"
+          className="entity-sortbar flex-shrink-0 flex items-center justify-between overflow-x-auto px-5 py-2"
           style={{ borderBottom: '1px solid var(--border)', background: 'var(--table-header)' }}
         >
           <div className="flex items-center gap-4">
@@ -699,7 +699,7 @@ export default function Endpoints() {
       {/* Floating bulk action bar */}
       {selectedIds.size > 0 && (
         <div
-          className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-3 rounded-2xl z-30"
+          className="bulk-action-bar absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-3 rounded-xl z-30"
           style={{
             background: 'var(--surface-2)',
             border: '1px solid var(--border-lit)',

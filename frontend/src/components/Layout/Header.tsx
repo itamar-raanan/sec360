@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Activity, AlertTriangle, ArrowRight, Bell, CheckCircle2, Clock3, Plug, Search } from 'lucide-react'
+import { Activity, AlertTriangle, ArrowRight, Bell, CheckCircle2, Clock3, Plug, Search, ShieldCheck } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import { fetchIntegrations } from '../../api/integrations'
@@ -83,7 +83,7 @@ export default function Header({ onOpenCmd }: HeaderProps) {
 
   return (
     <header
-      className="h-14 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-10"
+      className="app-header h-14 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-10"
       style={{
         background: 'color-mix(in srgb, var(--surface-1) 88%, transparent)',
         backdropFilter: 'blur(16px)',
@@ -92,6 +92,7 @@ export default function Header({ onOpenCmd }: HeaderProps) {
       }}
     >
       <div className="flex min-w-0 items-center gap-3">
+        <span className="brand-mark md:hidden"><ShieldCheck size={14} strokeWidth={2.4} /></span>
         <h1 className="truncate text-[14px] font-semibold tracking-[-0.02em]" style={{ color: 'var(--text-1)' }}>{meta.title}</h1>
         {meta.desc && (
           <>

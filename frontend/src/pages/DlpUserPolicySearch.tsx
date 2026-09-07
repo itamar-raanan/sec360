@@ -236,7 +236,7 @@ export default function DlpUserPolicySearch() {
             <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-400">
               <Database size={14} /> Live Symantec DLP intelligence
             </div>
-            <h2 className="text-2xl font-semibold tracking-[-0.035em] sm:text-3xl" style={{ color: 'var(--text-1)' }}>DLP User Policy Search</h2>
+            <h2 className="text-[22px] font-semibold tracking-[-0.035em] sm:text-[26px]" style={{ color: 'var(--text-1)' }}>DLP User Policy Search</h2>
             <p className="mt-2 max-w-2xl text-[13px] leading-5" style={{ color: 'var(--text-3)' }}>
               Find user, sender, and recipient exclusions across nested DLP policy conditions. Results come directly from the configured Oracle database.
             </p>

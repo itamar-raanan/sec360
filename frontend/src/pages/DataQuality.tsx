@@ -169,7 +169,7 @@ export default function DataQuality() {
               <span className="status-pulse" data-status={summary?.confidence.low ? 'warning' : 'healthy'} />
               <p className="ui-eyebrow">Identity control plane</p>
             </div>
-            <h1 className="text-[clamp(1.8rem,4vw,3rem)] font-semibold leading-[0.98] tracking-[-0.055em]" style={{ color: 'var(--text-1)' }}>
+            <h1 className="text-[clamp(1.65rem,3vw,2.4rem)] font-semibold leading-[1.02] tracking-[-0.05em]" style={{ color: 'var(--text-1)' }}>
               Asset confidence,<br /><span style={{ color: 'var(--text-3)' }}>made explainable.</span>
             </h1>
             <p className="mt-4 max-w-xl text-[12px] leading-5" style={{ color: 'var(--text-3)' }}>

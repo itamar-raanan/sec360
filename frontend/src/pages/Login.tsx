@@ -85,21 +85,10 @@ export default function Login() {
 
       {/* Right — form */}
       <div className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden">
-        {/* Subtle bg grid */}
-        <div className="absolute inset-0 pointer-events-none" style={{
-          backgroundImage: 'linear-gradient(var(--hover-2) 1px, transparent 1px), linear-gradient(90deg, var(--hover-2) 1px, transparent 1px)',
-          backgroundSize: '36px 36px',
-        }} />
-        {/* Corner glow */}
-        <div className="absolute top-0 right-0 pointer-events-none" style={{
-          width: 320, height: 320,
-          background: 'radial-gradient(circle at top right, rgba(16,185,129,0.06), transparent 70%)',
-        }} />
-
         {/* Mobile logo */}
         <div className="lg:hidden flex items-center gap-2.5 mb-10 relative z-10">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ background: 'var(--accent)', boxShadow: '0 0 16px rgba(16,185,129,0.4)' }}>
+            style={{ background: 'var(--accent)' }}>
             <ShieldCheck size={16} className="text-white" strokeWidth={2.5} />
           </div>
           <span className="font-bold text-lg tracking-tight" style={{ color: 'var(--text-1)' }}>SEC360</span>
@@ -107,11 +96,11 @@ export default function Login() {
 
         {/* Form card */}
         <div
-          className="w-full max-w-[480px] relative z-10 rounded-2xl p-10"
+          className="auth-card w-full max-w-[440px] relative z-10 rounded-xl p-8 sm:p-10"
           style={{
             background: 'var(--surface-1)',
             border: '1px solid var(--border-mid)',
-            boxShadow: '0 0 0 1px rgba(16,185,129,0.04), 0 24px 64px rgba(0,0,0,0.3)',
+            boxShadow: 'var(--shadow-float)',
           }}
         >
           {step === 'credentials' ? (
@@ -187,7 +176,7 @@ export default function Login() {
                   type="submit"
                   disabled={loading}
                   className="w-full flex items-center justify-center gap-2 text-white font-bold rounded-lg py-3.5 pressable disabled:opacity-50 disabled:cursor-not-allowed mt-2"
-                  style={{ fontSize: 15, background: 'var(--accent)', boxShadow: '0 0 24px rgba(16,185,129,0.22)', letterSpacing: '-0.01em' }}
+                  style={{ fontSize: 15, background: 'var(--accent)', letterSpacing: '-0.01em' }}
                 >
                   {loading ? (
                     <>
@@ -303,7 +292,7 @@ export default function Login() {
 
         {/* Footer */}
         <div className="mt-8 relative z-10 flex items-center gap-4" style={{ fontSize: 11, color: 'var(--text-4)' }}>
-          <span>© 2025 SEC360</span>
+          <span>© 2026 SEC360</span>
           <span>·</span>
           <div className="flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />

@@ -29,8 +29,9 @@ interface FilterBarProps {
 function Dropdown({ group, onClose }: { group: FilterGroup; onClose: () => void }) {
   return (
     <div
-      className="absolute top-full left-0 mt-1.5 z-50 rounded-xl overflow-hidden min-w-[180px]"
-      style={{ background: 'var(--surface-2)', border: '1px solid var(--border-mid)', boxShadow: '0 12px 32px rgba(0,0,0,0.5)' }}
+      className="ui-float-surface absolute top-full left-0 mt-1.5 z-50 overflow-hidden min-w-[190px]"
+      role="group"
+      aria-label={`${group.label} filters`}
     >
       {group.options.map(opt => {
         const active = group.selected.includes(opt.value)
@@ -38,7 +39,7 @@ function Dropdown({ group, onClose }: { group: FilterGroup; onClose: () => void 
           <button
             key={opt.value}
             onClick={() => group.onToggle(opt.value)}
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-[background-color] duration-100"
+            className="ui-data-row w-full flex items-center gap-2.5 px-3 py-2 text-left"
             style={{ background: active ? 'rgba(16,185,129,0.08)' : 'transparent' }}
             onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--hover-1)' }}
             onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
@@ -48,7 +49,7 @@ function Dropdown({ group, onClose }: { group: FilterGroup; onClose: () => void 
               className="w-3.5 h-3.5 rounded flex-shrink-0 flex items-center justify-center border transition-colors"
               style={{
                 background: active ? 'var(--accent)' : 'transparent',
-                borderColor: active ? 'var(--accent)' : 'rgba(255,255,255,0.2)',
+                borderColor: active ? 'var(--accent)' : 'var(--border-lit)',
               }}
             >
               {active && (
@@ -57,7 +58,7 @@ function Dropdown({ group, onClose }: { group: FilterGroup; onClose: () => void 
                 </svg>
               )}
             </span>
-            <span className="flex-1 text-xs" style={{ color: active ? '#d1fae5' : '#a1a1aa' }}>{opt.label}</span>
+            <span className="flex-1 text-xs" style={{ color: active ? 'var(--accent)' : 'var(--text-2)' }}>{opt.label}</span>
             {opt.count !== undefined && (
               <span className="text-[10px] tabular-nums flex-shrink-0" style={{ color: 'var(--text-4)' }}>{opt.count}</span>
             )}
@@ -107,32 +108,28 @@ export default function FilterBar({
   return (
     <div
       ref={barRef}
-      className="flex-shrink-0"
+      className="filter-bar flex-shrink-0"
       style={{ borderBottom: '1px solid var(--border)' }}
     >
       {/* Main bar */}
-      <div className="flex items-center gap-2 px-4 py-2.5 flex-wrap">
+      <div className="filter-bar-main flex items-center gap-2 px-4 py-2.5 flex-wrap">
         {/* Search */}
-        <div className="relative flex-shrink-0" style={{ minWidth: 200 }}>
+        <div className="ui-control filter-search relative flex-shrink-0" style={{ minWidth: 200 }}>
           <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
           <input
             type="text"
             value={search}
             onChange={e => onSearchChange(e.target.value)}
             placeholder={searchPlaceholder}
-            className="w-full rounded-lg pl-8 pr-3 py-1.5 text-xs focus:outline-none"
+            className="w-full border-0 bg-transparent pl-8 pr-3 py-1.5 text-xs focus:outline-none"
             style={{
-              background: 'var(--surface-3)',
-              border: '1px solid var(--border)',
               color: 'var(--text-1)',
-              transition: 'border-color 120ms ease',
             }}
-            onFocus={e => (e.target.style.borderColor = 'rgba(16,185,129,0.5)')}
-            onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+            aria-label={searchPlaceholder}
           />
         </div>
 
-        <div className="w-px h-5 bg-white/[0.08] flex-shrink-0 mx-1" />
+        <div className="filter-divider w-px h-5 flex-shrink-0 mx-1" style={{ background: 'var(--border)' }} />
 
         {/* Filter group buttons */}
         {groups.map(group => {
@@ -146,8 +143,9 @@ export default function FilterBar({
                 style={{
                   background: hasActive ? 'rgba(16,185,129,0.10)' : 'var(--surface-3)',
                   border: `1px solid ${hasActive ? 'rgba(16,185,129,0.35)' : 'var(--border)'}`,
-                  color: hasActive ? '#6ee7b7' : '#71717a',
+                  color: hasActive ? 'var(--accent)' : 'var(--text-3)',
                 }}
+                aria-expanded={isOpen}
               >
                 {group.label}
                 {hasActive && (
@@ -188,8 +186,8 @@ export default function FilterBar({
             <button
               key={`${chip.groupId}-${chip.value}`}
               onClick={chip.onRemove}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium transition-[background-color] duration-100 group"
-              style={{ background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.25)', color: '#6ee7b7' }}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-[background-color] duration-100 group"
+              style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-ring)', color: 'var(--accent)' }}
               onMouseEnter={e => (e.currentTarget.style.background = 'rgba(16,185,129,0.18)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'rgba(16,185,129,0.10)')}
             >

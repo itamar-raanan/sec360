@@ -36,7 +36,7 @@ export default function FacetFilterPanel({
 }: Props) {
   return (
     <div
-      className="flex flex-col flex-shrink-0 h-full overflow-hidden"
+      className="facet-panel flex flex-col flex-shrink-0 h-full overflow-hidden"
       style={{
         width: 220,
         background: 'var(--surface-2)',

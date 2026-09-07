@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
 import apiClient from '../api/client'
+import { useConfirm } from '../components/shared/ConfirmDialog'
 
 type Tab = 'users' | 'account' | 'platform' | 'sso' | 'audit'
 
@@ -108,6 +109,7 @@ function Alert({ type, msg }: { type: 'error' | 'success'; msg: string }) {
 
 function UsersTab() {
   const qc = useQueryClient()
+  const confirmAction = useConfirm()
   const [showCreate, setShowCreate] = useState(false)
   const [createEmail, setCreateEmail] = useState('')
   const [createRole, setCreateRole] = useState<'admin' | 'analyst' | 'viewer'>('analyst')
@@ -350,7 +352,7 @@ function UsersTab() {
                       )}
                       {u.mfa_enabled && (
                         <button
-                          onClick={() => { if (confirm(`Reset 2FA for ${u.email}?`)) resetMfaMutation.mutate(u.id) }}
+                          onClick={async () => { if (await confirmAction({ title: 'Reset two-factor authentication?', message: `${u.email} will need to configure 2FA again on their next sign-in.`, confirmLabel: 'Reset 2FA' })) resetMfaMutation.mutate(u.id) }}
                           className="p-1.5 rounded"
                           style={{ color: 'var(--text-4)', transition: 'color 150ms ease' }}
                           onMouseEnter={e => (e.currentTarget.style.color = '#facc15')}
@@ -361,7 +363,7 @@ function UsersTab() {
                         </button>
                       )}
                       <button
-                        onClick={() => { if (confirm(`Delete ${u.email}? This cannot be undone.`)) deleteMutation.mutate(u.id) }}
+                        onClick={async () => { if (await confirmAction({ title: 'Delete user?', message: `${u.email} will immediately lose access. This action cannot be undone.`, confirmLabel: 'Delete user' })) deleteMutation.mutate(u.id) }}
                         className="p-1.5 rounded"
                         style={{ color: 'var(--text-4)', transition: 'color 150ms ease' }}
                         onMouseEnter={e => (e.currentTarget.style.color = '#f87171')}
@@ -1360,12 +1362,12 @@ export default function Settings() {
   const visibleTabs = tabs.filter(t => !t.adminOnly || isAdmin)
 
   return (
-    <div className="absolute inset-0 flex flex-col overflow-hidden">
+    <div className="settings-page absolute inset-0 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex-shrink-0 px-6 pt-6 pb-0">
-        <h1 className="text-xl font-bold text-white mb-4">Settings</h1>
+      <div className="settings-page-header flex-shrink-0 px-6 pt-6 pb-0">
+        <h1 className="text-[18px] font-semibold tracking-[-0.025em] text-white mb-4">Settings</h1>
         {/* Tab bar */}
-        <div className="flex gap-0.5 border-b border-white/[0.06]">
+        <div className="settings-tabs flex gap-0.5 overflow-x-auto border-b border-white/[0.06]">
           {visibleTabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -1387,7 +1389,7 @@ export default function Settings() {
       </div>
 
       {/* Tab content */}
-      <div className="flex-1 overflow-y-auto px-6 py-5">
+      <div className="settings-page-content flex-1 overflow-y-auto px-6 py-5">
         {tab === 'users' && isAdmin && <UsersTab />}
         {tab === 'account' && <AccountTab />}
         {tab === 'platform' && isAdmin && <PlatformTab />}

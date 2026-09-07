@@ -28,7 +28,7 @@ export default function StatCard({
 }: StatCardProps) {
   return (
     <div
-      className={`relative overflow-hidden rounded-xl p-5 fade-up ${
+      className={`relative overflow-hidden p-4 sm:p-5 fade-up ${
         onClick ? 'cursor-pointer pressable card card-interactive' : 'card'
       } ${className ?? ''}`}
       style={style}
@@ -57,7 +57,7 @@ export default function StatCard({
       ) : (
         <div>
           <div className="flex items-baseline gap-2">
-            <span className="text-[28px] font-bold leading-none tabular-nums tracking-tight" style={{ color: 'var(--text-1)' }}>
+            <span className="text-[26px] font-semibold leading-none tabular-nums tracking-[-0.035em]" style={{ color: 'var(--text-1)' }}>
               {value}
             </span>
             {trend && (

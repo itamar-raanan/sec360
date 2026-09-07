@@ -1,6 +1,7 @@
 import logging
 from typing import Any
 from datetime import datetime, timezone
+import uuid
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,7 +51,26 @@ class SentinelOneCollector(BaseCollector):
                 resp.raise_for_status()
                 data = resp.json()
                 total = data.get("pagination", {}).get("totalItems", 0)
-                return {"success": True, "message": f"Connected successfully. {total} agents found."}
+                risks = await client.get(
+                    f"{self.base_url}/web/api/v2.1/application-management/risks",
+                    headers=self._headers(),
+                    params={"limit": 1, "skipCount": "true"},
+                )
+                if risks.status_code == 403:
+                    return {
+                        "success": False,
+                        "message": "Connected to endpoints, but the token lacks Applications: View and View Risks permissions",
+                    }
+                if risks.status_code == 404:
+                    return {
+                        "success": False,
+                        "message": "Application Vulnerability Management is not available for this SentinelOne tenant",
+                    }
+                risks.raise_for_status()
+                return {
+                    "success": True,
+                    "message": f"Connected successfully. {total} agents found; application vulnerabilities are accessible.",
+                }
         except httpx.ConnectError as e:
             return {"success": False, "message": f"Connection error: {str(e)}"}
         except httpx.TimeoutException:
@@ -66,7 +86,13 @@ class SentinelOneCollector(BaseCollector):
             count, agent_id_map = await self._upsert_agents(agents)
             if agent_id_map:
                 await self._collect_app_agents(agent_id_map)
-            return {"records_synced": count}
+            risks = await self._fetch_application_vulnerabilities()
+            vulnerability_count = await self._upsert_application_vulnerabilities(risks, agent_id_map)
+            return {
+                "records_synced": count + vulnerability_count,
+                "agents_synced": count,
+                "vulnerabilities_synced": vulnerability_count,
+            }
         except Exception as e:
             logger.error(f"SentinelOne: collect failed: {e}", exc_info=True)
             return {"records_synced": 0, "error": str(e)}
@@ -92,6 +118,159 @@ class SentinelOneCollector(BaseCollector):
                 if not cursor or len(batch) == 0:
                     break
         return agents
+
+    async def _fetch_application_vulnerabilities(self) -> list[dict[str, Any]]:
+        """Fetch the complete SentinelOne Applications > Vulnerabilities dataset."""
+        findings: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while True:
+            params: dict[str, Any] = {
+                "limit": 1000,
+                "skipCount": "true",
+                "sortBy": "application",
+                "sortOrder": "asc",
+            }
+            if cursor:
+                params["cursor"] = cursor
+            try:
+                response = await self.fetch_with_retry(
+                    f"{self.base_url}/web/api/v2.1/application-management/risks",
+                    headers=self._headers(),
+                    params=params,
+                )
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 403:
+                    raise PermissionError(
+                        "SentinelOne token requires Applications: View and View Risks permissions"
+                    ) from exc
+                raise
+            payload = response.json()
+            batch = payload.get("data") or []
+            if not isinstance(batch, list):
+                raise ValueError("Unexpected SentinelOne vulnerability response format")
+            findings.extend(item for item in batch if isinstance(item, dict))
+            next_cursor = payload.get("pagination", {}).get("nextCursor")
+            if not next_cursor or not batch or next_cursor == cursor:
+                break
+            cursor = next_cursor
+        logger.info("SentinelOne: fetched %d application vulnerability findings", len(findings))
+        return findings
+
+    @staticmethod
+    def _parse_datetime(value: Any) -> datetime | None:
+        if not value or not isinstance(value, str):
+            return None
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _parse_float(value: Any) -> float | None:
+        try:
+            return float(value) if value not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _parse_int(value: Any) -> int | None:
+        try:
+            return int(value) if value not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
+    async def _upsert_application_vulnerabilities(
+        self,
+        findings: list[dict[str, Any]],
+        agent_id_map: dict[str, str],
+    ) -> int:
+        """Upsert a successful full snapshot and remove findings no longer returned."""
+        from sqlalchemy import select
+        from app.engines.correlation import find_endpoint_by_hostname
+        from app.models.application import ApplicationVulnerability
+
+        existing = {
+            row.sentinelone_id: row
+            for row in (await self.db.execute(select(ApplicationVulnerability))).scalars().all()
+        }
+        seen: set[str] = set()
+        endpoint_name_cache: dict[str, uuid.UUID | None] = {}
+        now = datetime.now(timezone.utc)
+
+        for raw in findings:
+            sentinelone_id = str(raw.get("id") or "").strip()
+            if not sentinelone_id:
+                logger.warning("SentinelOne: skipping vulnerability finding without id")
+                continue
+            seen.add(sentinelone_id)
+            finding = existing.get(sentinelone_id)
+            if not finding:
+                finding = ApplicationVulnerability(
+                    sentinelone_id=sentinelone_id,
+                    application=str(raw.get("application") or raw.get("applicationName") or "Unknown application"),
+                    application_name=str(raw.get("applicationName") or raw.get("application") or "Unknown application"),
+                    cve_id=str(raw.get("cveId") or "Unknown CVE"),
+                    endpoint_name=str(raw.get("endpointName") or "Unknown endpoint"),
+                    raw_json=raw,
+                    synced_at=now,
+                )
+                self.db.add(finding)
+
+            s1_endpoint_id = str(raw.get("endpointId") or "").strip() or None
+            correlated_id = agent_id_map.get(s1_endpoint_id or "")
+            if correlated_id:
+                finding.endpoint_id = uuid.UUID(correlated_id)
+            elif raw.get("endpointName"):
+                endpoint_name = str(raw["endpointName"])
+                if endpoint_name not in endpoint_name_cache:
+                    endpoint = await find_endpoint_by_hostname(self.db, endpoint_name)
+                    endpoint_name_cache[endpoint_name] = endpoint.id if endpoint else None
+                finding.endpoint_id = endpoint_name_cache[endpoint_name]
+
+            finding.sentinelone_endpoint_id = s1_endpoint_id
+            finding.application = str(raw.get("application") or raw.get("applicationName") or "Unknown application")
+            finding.application_name = str(raw.get("applicationName") or raw.get("application") or "Unknown application")
+            finding.application_vendor = raw.get("applicationVendor")
+            finding.application_version = raw.get("applicationVersion")
+            finding.cve_id = str(raw.get("cveId") or "Unknown CVE")
+            finding.cvss_version = raw.get("cvssVersion")
+            finding.nvd_cvss_version = raw.get("nvdCvssVersion")
+            finding.nvd_base_score = self._parse_float(raw.get("nvdBaseScore"))
+            finding.risk_score = self._parse_float(raw.get("riskScore"))
+            finding.severity = str(raw.get("severity") or "UNKNOWN").upper()
+            finding.endpoint_name = str(raw.get("endpointName") or "Unknown endpoint")
+            finding.endpoint_type = raw.get("endpointType")
+            finding.os_type = raw.get("osType")
+            finding.days_detected = self._parse_int(raw.get("daysDetected"))
+            finding.detection_date = self._parse_datetime(raw.get("detectionDate"))
+            finding.published_date = self._parse_datetime(raw.get("publishedDate"))
+            finding.last_scan_date = self._parse_datetime(raw.get("lastScanDate"))
+            finding.last_scan_result = raw.get("lastScanResult")
+            finding.exploit_code_maturity = raw.get("exploitCodeMaturity")
+            finding.remediation_level = raw.get("remediationLevel")
+            finding.report_confidence = raw.get("reportConfidence")
+            finding.mitigation_status = raw.get("mitigationStatus")
+            finding.mitigation_status_change_time = self._parse_datetime(raw.get("mitigationStatusChangeTime"))
+            finding.mitigation_status_changed_by = raw.get("mitigationStatusChangedBy")
+            finding.mitigation_status_reason = raw.get("mitigationStatusReason")
+            finding.status = raw.get("status")
+            finding.mark_type = raw.get("markType")
+            finding.marked_by = raw.get("markedBy")
+            finding.marked_date = self._parse_datetime(raw.get("markedDate"))
+            finding.reason = raw.get("reason")
+            finding.raw_json = raw
+            finding.synced_at = now
+
+        for sentinelone_id, stale in existing.items():
+            if sentinelone_id not in seen:
+                await self.db.delete(stale)
+
+        await self.db.flush()
+        logger.info(
+            "SentinelOne: synced %d application vulnerabilities; removed %d stale findings",
+            len(seen), len(existing.keys() - seen),
+        )
+        return len(seen)
 
     async def _upsert_agents(self, agents: list) -> tuple[int, dict]:
         import uuid as _uuid

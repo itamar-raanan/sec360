@@ -19,12 +19,14 @@ interface DashboardSummary {
 interface DashboardIssues {
   no_edr: number; edr_outdated: number
   no_dlp: number; dlp_outdated: number
+  no_wss: number; wss_outdated: number; no_network_security: number
   not_encrypted: number; no_device_control: number
 }
 interface OsBreakdown { os: string; total: number; compliant: number; non_compliant: number }
 interface ComplianceDashboard {
   summary: DashboardSummary; issues: DashboardIssues
   os_breakdown: OsBreakdown[]; worst_offenders: any[]
+  active_product_tags: Array<'S1' | 'DLP' | 'WSS'>
 }
 interface ComplianceEndpoint {
   endpoint_id: string; hostname: string; os_version: string | null
@@ -54,6 +56,13 @@ const ISSUE_META: Record<string, { label: string; color: string; icon: React.Ele
   not_encrypted:       { label: 'Not Encrypted',       color: '#06b6d4', icon: HardDrive,    desc: 'Disk encryption not enabled (reported by S1)' },
   no_device_control:   { label: 'Device Control Off',  color: '#84cc16', icon: MousePointer, desc: 'S1 Device Control policy not enabled' },
   no_network_security: { label: 'No WSS',              color: '#eab308', icon: ShieldAlert,  desc: 'Symantec WSS agent not installed' },
+  wss_outdated:        { label: 'WSS Outdated',        color: '#f59e0b', icon: PackageX,     desc: 'Symantec WSS version below minimum' },
+}
+
+const ISSUE_PRODUCT: Record<string, 'S1' | 'DLP' | 'WSS'> = {
+  no_edr: 'S1', edr_outdated: 'S1', not_encrypted: 'S1', no_device_control: 'S1',
+  no_dlp: 'DLP', dlp_outdated: 'DLP',
+  no_network_security: 'WSS', wss_outdated: 'WSS',
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -275,8 +284,13 @@ export default function Compliance() {
   }
 
   const s   = data?.summary  ?? { total: 0, compliant: 0, partial: 0, non_compliant: 0, compliant_pct: 0 }
-  const iss = data?.issues   ?? { no_edr: 0, edr_outdated: 0, no_dlp: 0, dlp_outdated: 0, not_encrypted: 0, no_device_control: 0 }
+  const iss = data?.issues ?? {
+    no_edr: 0, edr_outdated: 0, no_dlp: 0, dlp_outdated: 0,
+    no_wss: 0, wss_outdated: 0, no_network_security: 0,
+    not_encrypted: 0, no_device_control: 0,
+  }
   const osd = data?.os_breakdown ?? []
+  const activeProductTags = new Set(data?.active_product_tags ?? ['S1', 'DLP', 'WSS'])
 
   const pieData = [
     { name: 'Compliant',     value: s.compliant,     color: STATUS_COLORS.compliant },
@@ -394,7 +408,7 @@ export default function Compliance() {
           <div className="rounded-xl card p-4">
             <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Issues Breakdown</div>
             <div className="space-y-1">
-              {Object.entries(ISSUE_META).map(([key, meta]) => {
+              {Object.entries(ISSUE_META).filter(([key]) => activeProductTags.has(ISSUE_PRODUCT[key])).map(([key, meta]) => {
                 const count = (iss as any)[key] as number ?? 0
                 const pct = s.total > 0 ? count / s.total * 100 : 0
                 const isActive = activeFilter?.type === 'issue' && activeFilter.value === key

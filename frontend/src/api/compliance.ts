@@ -24,6 +24,7 @@ export async function triggerEvaluation(): Promise<void> {
 }
 
 export interface ComplianceDashboardData {
+  active_product_tags: Array<'S1' | 'DLP' | 'WSS'>
   summary: { total: number; compliant: number; partial: number; non_compliant: number; compliant_pct: number }
   issues: {
     no_edr: number; edr_outdated: number

@@ -14,6 +14,7 @@ import { SkeletonRows } from '../components/shared/Skeleton'
 import FilterBar, { type FilterGroup } from '../components/shared/FilterBar'
 import { usePanelStore } from '../store/panels'
 import type { Endpoint } from '../types'
+import { useEndpointProductTags } from '../hooks/useEndpointProductTags'
 
 interface AuthUserDetail {
   id: string
@@ -27,9 +28,6 @@ const relTime = (iso: string) => formatDistanceToNow(new Date(iso), { addSuffix:
 const RISK_SCORE_RANGES: Record<string, [number, number]> = {
   low: [0, 25], medium: [26, 50], high: [51, 75], critical: [76, 100],
 }
-
-type EndpointProductTag = 'S1' | 'DLP' | 'WSS'
-const DEFAULT_ENDPOINT_PRODUCT_TAGS: EndpointProductTag[] = ['S1', 'DLP', 'WSS']
 
 function osLabel(osVersion: string | null): string {
   if (!osVersion) return 'unknown'
@@ -273,12 +271,7 @@ export default function Endpoints() {
     queryKey: ['endpoints-all'],
     queryFn: async () => (await apiClient.get('/endpoints?limit=2000&active_only=false')).data,
   })
-  const { data: productTagSettings } = useQuery<{ tags: EndpointProductTag[] }>({
-    queryKey: ['endpoint-product-tags'],
-    queryFn: async () => (await apiClient.get('/settings/endpoint-product-tags')).data,
-    staleTime: 5 * 60 * 1000,
-  })
-  const enabledProductTags = productTagSettings?.tags ?? DEFAULT_ENDPOINT_PRODUCT_TAGS
+  const { tags: enabledProductTags, enabled: productEnabled } = useEndpointProductTags()
 
   // Compute facet counts from raw (unfiltered) data
   const facetCounts = useMemo(() => {
@@ -357,34 +350,48 @@ export default function Endpoints() {
       list = list.filter(ep => filters.os.includes(osLabel(ep.os_version ?? null)))
     }
     if (filters.agent.length) {
-      list = list.filter(ep => {
-        const agents = ep.agents ?? []
-        const hasS1  = agents.some(a => a.product_name === 'sentinelone')
-        const hasDlp = agents.some(a => a.product_name === 'symantec')
-        const hasWss = agents.some(a => a.product_name === 'symantec_wss')
-        const hasDisabledAgent = agents.some(a => a.status === 'inactive')
-        const agentMap: Record<string, boolean> = {
-          has_s1: hasS1, no_s1: !hasS1,
-          has_dlp: hasDlp, no_dlp: !hasDlp,
-          has_wss: hasWss, no_wss: !hasWss,
-          disabled_agent: hasDisabledAgent,
-        }
-        return filters.agent.some(v => agentMap[v])
-      })
+      const activeAgentFilters = filters.agent.filter(value => (
+        ((value === 'has_s1' || value === 'no_s1') && enabledProductTags.includes('S1'))
+        || ((value === 'has_dlp' || value === 'no_dlp') && enabledProductTags.includes('DLP'))
+        || ((value === 'has_wss' || value === 'no_wss') && enabledProductTags.includes('WSS'))
+        || value === 'disabled_agent'
+      ))
+      if (activeAgentFilters.length > 0) {
+        list = list.filter(ep => {
+          const agents = ep.agents ?? []
+          const hasS1  = agents.some(a => a.product_name === 'sentinelone')
+          const hasDlp = agents.some(a => a.product_name === 'symantec')
+          const hasWss = agents.some(a => a.product_name === 'symantec_wss')
+          const hasDisabledAgent = agents.some(a => a.status === 'inactive')
+          const agentMap: Record<string, boolean> = {
+            has_s1: hasS1, no_s1: !hasS1,
+            has_dlp: hasDlp, no_dlp: !hasDlp,
+            has_wss: hasWss, no_wss: !hasWss,
+            disabled_agent: hasDisabledAgent,
+          }
+          return activeAgentFilters.some(v => agentMap[v])
+        })
+      }
     }
     if (filters.agentStatus.length) {
-      list = list.filter(ep => {
-        const agents   = ep.agents ?? []
-        const s1Agent  = agents.find(a => a.product_name === 'sentinelone')
-        const dlpAgent = agents.find(a => a.product_name === 'symantec')
-        return filters.agentStatus.some(v => {
-          if (v === 's1_active')    return s1Agent?.status  === 'active'
-          if (v === 's1_inactive')  return s1Agent  != null && s1Agent.status  !== 'active'
-          if (v === 'dlp_active')   return dlpAgent?.status === 'active'
-          if (v === 'dlp_inactive') return dlpAgent != null && dlpAgent.status !== 'active'
-          return false
+      const activeStatusFilters = filters.agentStatus.filter(value => (
+        (value.startsWith('s1_') && enabledProductTags.includes('S1'))
+        || (value.startsWith('dlp_') && enabledProductTags.includes('DLP'))
+      ))
+      if (activeStatusFilters.length > 0) {
+        list = list.filter(ep => {
+          const agents   = ep.agents ?? []
+          const s1Agent  = agents.find(a => a.product_name === 'sentinelone')
+          const dlpAgent = agents.find(a => a.product_name === 'symantec')
+          return activeStatusFilters.some(v => {
+            if (v === 's1_active')    return s1Agent?.status  === 'active'
+            if (v === 's1_inactive')  return s1Agent  != null && s1Agent.status  !== 'active'
+            if (v === 'dlp_active')   return dlpAgent?.status === 'active'
+            if (v === 'dlp_inactive') return dlpAgent != null && dlpAgent.status !== 'active'
+            return false
+          })
         })
-      })
+      }
     }
     if (filters.owner.length) {
       list = list.filter(ep => {
@@ -407,7 +414,7 @@ export default function Endpoints() {
       return ta - tb
     })
     return sortDir === 'asc' ? list : list.reverse()
-  }, [raw, filters, sortField, sortDir])
+  }, [raw, filters, sortField, sortDir, enabledProductTags])
 
   const selectedEndpoints = endpoints.filter(ep => selectedIds.has(ep.id))
 
@@ -458,12 +465,18 @@ export default function Endpoints() {
       onClear: () => setFilters(f => ({ ...f, agent: [] })),
       options: [
         { value: 'disabled_agent', label: 'Agent Disabled', count: facetCounts.agent.disabled_agent ?? 0 },
-        { value: 'has_s1',  label: 'Has S1',      count: facetCounts.agent.has_s1  ?? 0 },
-        { value: 'no_s1',   label: 'Missing S1',  count: facetCounts.agent.no_s1   ?? 0 },
-        { value: 'has_dlp', label: 'Has DLP',      count: facetCounts.agent.has_dlp ?? 0 },
-        { value: 'no_dlp',  label: 'Missing DLP', count: facetCounts.agent.no_dlp  ?? 0 },
-        { value: 'has_wss', label: 'Has WSS',      count: facetCounts.agent.has_wss ?? 0 },
-        { value: 'no_wss',  label: 'Missing WSS', count: facetCounts.agent.no_wss  ?? 0 },
+        ...(productEnabled('S1') ? [
+          { value: 'has_s1', label: 'Has S1', count: facetCounts.agent.has_s1 ?? 0 },
+          { value: 'no_s1', label: 'Missing S1', count: facetCounts.agent.no_s1 ?? 0 },
+        ] : []),
+        ...(productEnabled('DLP') ? [
+          { value: 'has_dlp', label: 'Has DLP', count: facetCounts.agent.has_dlp ?? 0 },
+          { value: 'no_dlp', label: 'Missing DLP', count: facetCounts.agent.no_dlp ?? 0 },
+        ] : []),
+        ...(productEnabled('WSS') ? [
+          { value: 'has_wss', label: 'Has WSS', count: facetCounts.agent.has_wss ?? 0 },
+          { value: 'no_wss', label: 'Missing WSS', count: facetCounts.agent.no_wss ?? 0 },
+        ] : []),
       ],
     },
     {
@@ -472,10 +485,14 @@ export default function Endpoints() {
       onToggle: v => toggleFilter('agentStatus', v),
       onClear: () => setFilters(f => ({ ...f, agentStatus: [] })),
       options: [
-        { value: 's1_active',    label: 'S1 Active',       count: facetCounts.agentStatus.s1_active    ?? 0 },
-        { value: 's1_inactive',  label: 'S1 Inactive',     count: facetCounts.agentStatus.s1_inactive  ?? 0 },
-        { value: 'dlp_active',   label: 'DLP Active',      count: facetCounts.agentStatus.dlp_active   ?? 0 },
-        { value: 'dlp_inactive', label: 'DLP Inactive',    count: facetCounts.agentStatus.dlp_inactive ?? 0 },
+        ...(productEnabled('S1') ? [
+          { value: 's1_active', label: 'S1 Active', count: facetCounts.agentStatus.s1_active ?? 0 },
+          { value: 's1_inactive', label: 'S1 Inactive', count: facetCounts.agentStatus.s1_inactive ?? 0 },
+        ] : []),
+        ...(productEnabled('DLP') ? [
+          { value: 'dlp_active', label: 'DLP Active', count: facetCounts.agentStatus.dlp_active ?? 0 },
+          { value: 'dlp_inactive', label: 'DLP Inactive', count: facetCounts.agentStatus.dlp_inactive ?? 0 },
+        ] : []),
       ],
     },
     {

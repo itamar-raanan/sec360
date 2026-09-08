@@ -1,7 +1,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, Response, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, case, or_
+from sqlalchemy import select, func, case, false, literal, or_
 from sqlalchemy.orm import joinedload
 
 from app.api.deps import get_db, get_current_user, require_role
@@ -10,6 +10,7 @@ from app.models.compliance import ComplianceStatus
 from app.models.endpoint import Endpoint
 from app.schemas.compliance import ComplianceStatusResponse, ComplianceSummaryStats
 from app.services.endpoint_inventory import current_endpoint_clause
+from app.services.product_scope import load_product_tags
 
 router = APIRouter(prefix="/compliance", tags=["compliance"])
 
@@ -20,6 +21,14 @@ async def get_compliance_dashboard(
     _: AuthUser = Depends(require_role("viewer")),
 ):
     """Rich analytics payload for the Compliance dashboard page."""
+    active_product_tags = await load_product_tags(db)
+    use_s1 = "S1" in active_product_tags
+    use_dlp = "DLP" in active_product_tags
+    use_wss = "WSS" in active_product_tags
+
+    def issue_metric(enabled, condition, label):
+        expression = func.sum(case((condition, 1), else_=0)) if enabled else literal(0)
+        return expression.label(label)
 
     # ── Summary counts via SQL ────────────────────────────────────────────────
     summary_q = await db.execute(
@@ -28,16 +37,16 @@ async def get_compliance_dashboard(
             func.sum(case((ComplianceStatus.status == "compliant",     1), else_=0)).label("compliant"),
             func.sum(case((ComplianceStatus.status == "partial",       1), else_=0)).label("partial"),
             func.sum(case((ComplianceStatus.status == "non_compliant", 1), else_=0)).label("non_compliant"),
-            func.sum(case((ComplianceStatus.edr_installed == False,    1), else_=0)).label("no_edr"),     # noqa: E712
-            func.sum(case(((ComplianceStatus.edr_installed == True)  & (ComplianceStatus.edr_version_ok == False), 1), else_=0)).label("edr_outdated"),   # noqa: E712
-            func.sum(case((ComplianceStatus.dlp_installed == False,    1), else_=0)).label("no_dlp"),     # noqa: E712
-            func.sum(case(((ComplianceStatus.dlp_installed == True)  & (ComplianceStatus.dlp_version_ok == False), 1), else_=0)).label("dlp_outdated"),   # noqa: E712
-            func.sum(case((ComplianceStatus.wss_installed == False,    1), else_=0)).label("no_wss"),     # noqa: E712
-            func.sum(case(((ComplianceStatus.wss_installed == True)  & (ComplianceStatus.wss_version_ok == False), 1), else_=0)).label("wss_outdated"),   # noqa: E712
-            func.sum(case((ComplianceStatus.wss_installed == False, 1), else_=0)).label("no_network_security"),  # noqa: E712
+            issue_metric(use_s1, ComplianceStatus.edr_installed == False, "no_edr"),  # noqa: E712
+            issue_metric(use_s1, (ComplianceStatus.edr_installed == True) & (ComplianceStatus.edr_version_ok == False), "edr_outdated"),  # noqa: E712
+            issue_metric(use_dlp, ComplianceStatus.dlp_installed == False, "no_dlp"),  # noqa: E712
+            issue_metric(use_dlp, (ComplianceStatus.dlp_installed == True) & (ComplianceStatus.dlp_version_ok == False), "dlp_outdated"),  # noqa: E712
+            issue_metric(use_wss, ComplianceStatus.wss_installed == False, "no_wss"),  # noqa: E712
+            issue_metric(use_wss, (ComplianceStatus.wss_installed == True) & (ComplianceStatus.wss_version_ok == False), "wss_outdated"),  # noqa: E712
+            issue_metric(use_wss, ComplianceStatus.wss_installed == False, "no_network_security"),  # noqa: E712
             # S1 enrichment — only count endpoints where S1 has reported the value
-            func.sum(case((ComplianceStatus.disk_encrypted == False,          1), else_=0)).label("not_encrypted"),   # noqa: E712
-            func.sum(case((ComplianceStatus.device_control_enabled == False,  1), else_=0)).label("no_device_control"),  # noqa: E712
+            issue_metric(use_s1, ComplianceStatus.disk_encrypted == False, "not_encrypted"),  # noqa: E712
+            issue_metric(use_s1, ComplianceStatus.device_control_enabled == False, "no_device_control"),  # noqa: E712
         )
         .join(Endpoint, ComplianceStatus.endpoint_id == Endpoint.id)
         .where(current_endpoint_clause())
@@ -51,6 +60,7 @@ async def get_compliance_dashboard(
             "issues": {"no_edr": 0, "edr_outdated": 0, "no_dlp": 0, "dlp_outdated": 0, "no_wss": 0, "wss_outdated": 0, "no_network_security": 0, "not_encrypted": 0, "no_device_control": 0},
             "os_breakdown": [],
             "worst_offenders": [],
+            "active_product_tags": list(active_product_tags),
         }
 
     # ── OS breakdown via SQL GROUP BY ─────────────────────────────────────────
@@ -83,12 +93,14 @@ async def get_compliance_dashboard(
 
     # ── Worst offenders — pull top 25 non/partial with their failure details ──
     fail_count_expr = (
-        case((ComplianceStatus.edr_installed == False, 1), else_=0) +   # noqa: E712
-        case(((ComplianceStatus.edr_installed == True) & (ComplianceStatus.edr_version_ok == False), 1), else_=0) +  # noqa: E712
-        case((ComplianceStatus.dlp_installed == False, 1), else_=0) +   # noqa: E712
-        case(((ComplianceStatus.dlp_installed == True) & (ComplianceStatus.dlp_version_ok == False), 1), else_=0) +  # noqa: E712
-        case((ComplianceStatus.disk_encrypted == False, 1), else_=0) +   # noqa: E712
-        case((ComplianceStatus.device_control_enabled == False, 1), else_=0)   # noqa: E712
+        (case((ComplianceStatus.edr_installed == False, 1), else_=0) if use_s1 else literal(0)) +  # noqa: E712
+        (case(((ComplianceStatus.edr_installed == True) & (ComplianceStatus.edr_version_ok == False), 1), else_=0) if use_s1 else literal(0)) +  # noqa: E712
+        (case((ComplianceStatus.dlp_installed == False, 1), else_=0) if use_dlp else literal(0)) +  # noqa: E712
+        (case(((ComplianceStatus.dlp_installed == True) & (ComplianceStatus.dlp_version_ok == False), 1), else_=0) if use_dlp else literal(0)) +  # noqa: E712
+        (case((ComplianceStatus.wss_installed == False, 1), else_=0) if use_wss else literal(0)) +  # noqa: E712
+        (case(((ComplianceStatus.wss_installed == True) & (ComplianceStatus.wss_version_ok == False), 1), else_=0) if use_wss else literal(0)) +  # noqa: E712
+        (case((ComplianceStatus.disk_encrypted == False, 1), else_=0) if use_s1 else literal(0)) +  # noqa: E712
+        (case((ComplianceStatus.device_control_enabled == False, 1), else_=0) if use_s1 else literal(0))  # noqa: E712
     ).label("failure_count")
 
     worst_q = await db.execute(
@@ -107,14 +119,14 @@ async def get_compliance_dashboard(
     for cs, fc in worst_q.all():
         ep = cs.endpoint
         failures = []
-        if not cs.edr_installed:                                  failures.append("No EDR")
-        elif not cs.edr_version_ok:                               failures.append("EDR Outdated")
-        if not cs.dlp_installed:                                  failures.append("No DLP")
-        elif not cs.dlp_version_ok:                               failures.append("DLP Outdated")
-        if not cs.wss_installed:                                 failures.append("No Symantec WSS")
-        elif not cs.wss_version_ok:                              failures.append("WSS Outdated")
-        if cs.disk_encrypted is False:                            failures.append("Not Encrypted")
-        if cs.device_control_enabled is False:                    failures.append("Device Control Off")
+        if use_s1 and not cs.edr_installed:                        failures.append("No EDR")
+        elif use_s1 and not cs.edr_version_ok:                     failures.append("EDR Outdated")
+        if use_dlp and not cs.dlp_installed:                       failures.append("No DLP")
+        elif use_dlp and not cs.dlp_version_ok:                    failures.append("DLP Outdated")
+        if use_wss and not cs.wss_installed:                       failures.append("No Symantec WSS")
+        elif use_wss and not cs.wss_version_ok:                    failures.append("WSS Outdated")
+        if use_s1 and cs.disk_encrypted is False:                  failures.append("Not Encrypted")
+        if use_s1 and cs.device_control_enabled is False:          failures.append("Device Control Off")
         worst_offenders.append({
             "endpoint_id":   str(ep.id),
             "hostname":      ep.hostname,
@@ -147,6 +159,7 @@ async def get_compliance_dashboard(
         },
         "os_breakdown":    os_breakdown,
         "worst_offenders": worst_offenders,
+        "active_product_tags": list(active_product_tags),
     }
 
 
@@ -155,16 +168,24 @@ async def get_compliance_summary(
     db: AsyncSession = Depends(get_db),
     _: AuthUser = Depends(require_role("viewer")),
 ):
+    active_product_tags = await load_product_tags(db)
+    use_s1 = "S1" in active_product_tags
+    use_dlp = "DLP" in active_product_tags
+
+    def issue_metric(enabled, condition, label):
+        expression = func.sum(case((condition, 1), else_=0)) if enabled else literal(0)
+        return expression.label(label)
+
     row = (await db.execute(
         select(
             func.count().label("total"),
             func.sum(case((ComplianceStatus.status == "compliant",     1), else_=0)).label("compliant"),
             func.sum(case((ComplianceStatus.status == "partial",       1), else_=0)).label("partial"),
             func.sum(case((ComplianceStatus.status == "non_compliant", 1), else_=0)).label("non_compliant"),
-            func.sum(case((ComplianceStatus.edr_installed == False,    1), else_=0)).label("no_edr"),       # noqa: E712
-            func.sum(case(((ComplianceStatus.edr_installed == True) & (ComplianceStatus.edr_version_ok == False), 1), else_=0)).label("edr_outdated"),  # noqa: E712
-            func.sum(case((ComplianceStatus.dlp_installed == False, 1), else_=0)).label("no_dlp"),  # noqa: E712
-            func.sum(case(((ComplianceStatus.dlp_installed == True) & (ComplianceStatus.dlp_version_ok == False), 1), else_=0)).label("dlp_outdated"),  # noqa: E712
+            issue_metric(use_s1, ComplianceStatus.edr_installed == False, "no_edr"),  # noqa: E712
+            issue_metric(use_s1, (ComplianceStatus.edr_installed == True) & (ComplianceStatus.edr_version_ok == False), "edr_outdated"),  # noqa: E712
+            issue_metric(use_dlp, ComplianceStatus.dlp_installed == False, "no_dlp"),  # noqa: E712
+            issue_metric(use_dlp, (ComplianceStatus.dlp_installed == True) & (ComplianceStatus.dlp_version_ok == False), "dlp_outdated"),  # noqa: E712
         )
         .join(Endpoint, ComplianceStatus.endpoint_id == Endpoint.id)
         .where(current_endpoint_clause())
@@ -226,6 +247,10 @@ async def list_compliance_endpoints(
 ):
     """Filtered list of endpoints with compliance details for the drill-down panel."""
     from sqlalchemy import and_ as sa_and
+    active_product_tags = await load_product_tags(db)
+    use_s1 = "S1" in active_product_tags
+    use_dlp = "DLP" in active_product_tags
+    use_wss = "WSS" in active_product_tags
 
     query = (
         select(ComplianceStatus)
@@ -237,17 +262,26 @@ async def list_compliance_endpoints(
     if comp_status:
         query = query.where(ComplianceStatus.status == comp_status)
 
-    ISSUE_FILTERS = {
-        "no_edr":            ComplianceStatus.edr_installed == False,   # noqa: E712
-        "edr_outdated":      sa_and(ComplianceStatus.edr_installed == True,  ComplianceStatus.edr_version_ok == False),   # noqa: E712
-        "no_dlp":            ComplianceStatus.dlp_installed == False,   # noqa: E712
-        "dlp_outdated":      sa_and(ComplianceStatus.dlp_installed == True,  ComplianceStatus.dlp_version_ok == False),   # noqa: E712
-        "not_encrypted":     ComplianceStatus.disk_encrypted == False,   # noqa: E712
-        "no_device_control": ComplianceStatus.device_control_enabled == False,   # noqa: E712
-        "no_network_security": ComplianceStatus.wss_installed == False,   # noqa: E712
-    }
-    if issue and issue in ISSUE_FILTERS:
-        query = query.where(ISSUE_FILTERS[issue])
+    issue_filters = {}
+    if use_s1:
+        issue_filters.update({
+            "no_edr": ComplianceStatus.edr_installed == False,  # noqa: E712
+            "edr_outdated": sa_and(ComplianceStatus.edr_installed == True, ComplianceStatus.edr_version_ok == False),  # noqa: E712
+            "not_encrypted": ComplianceStatus.disk_encrypted == False,  # noqa: E712
+            "no_device_control": ComplianceStatus.device_control_enabled == False,  # noqa: E712
+        })
+    if use_dlp:
+        issue_filters.update({
+            "no_dlp": ComplianceStatus.dlp_installed == False,  # noqa: E712
+            "dlp_outdated": sa_and(ComplianceStatus.dlp_installed == True, ComplianceStatus.dlp_version_ok == False),  # noqa: E712
+        })
+    if use_wss:
+        issue_filters.update({
+            "no_network_security": ComplianceStatus.wss_installed == False,  # noqa: E712
+            "wss_outdated": sa_and(ComplianceStatus.wss_installed == True, ComplianceStatus.wss_version_ok == False),  # noqa: E712
+        })
+    if issue:
+        query = query.where(issue_filters.get(issue, false()))
 
     OS_PATTERNS: dict[str, list[str]] = {
         "Windows":    ["%windows%"],
@@ -291,22 +325,26 @@ async def list_compliance_endpoints(
 
     def _fail_count(s: ComplianceStatus) -> int:
         return sum([
-            not s.edr_installed,
-            s.edr_installed and not s.edr_version_ok,
-            not s.dlp_installed,
-            s.dlp_installed and not s.dlp_version_ok,
-            s.disk_encrypted is False,
-            s.device_control_enabled is False,
+            use_s1 and not s.edr_installed,
+            use_s1 and s.edr_installed and not s.edr_version_ok,
+            use_dlp and not s.dlp_installed,
+            use_dlp and s.dlp_installed and not s.dlp_version_ok,
+            use_wss and not s.wss_installed,
+            use_wss and s.wss_installed and not s.wss_version_ok,
+            use_s1 and s.disk_encrypted is False,
+            use_s1 and s.device_control_enabled is False,
         ])
 
     def _failures(s: ComplianceStatus) -> list[str]:
         out = []
-        if not s.edr_installed:              out.append("No EDR")
-        elif not s.edr_version_ok:           out.append("EDR Outdated")
-        if not s.dlp_installed:              out.append("No DLP")
-        elif not s.dlp_version_ok:           out.append("DLP Outdated")
-        if s.disk_encrypted is False:        out.append("Not Encrypted")
-        if s.device_control_enabled is False: out.append("Device Control Off")
+        if use_s1 and not s.edr_installed:               out.append("No EDR")
+        elif use_s1 and not s.edr_version_ok:            out.append("EDR Outdated")
+        if use_dlp and not s.dlp_installed:              out.append("No DLP")
+        elif use_dlp and not s.dlp_version_ok:           out.append("DLP Outdated")
+        if use_wss and not s.wss_installed:              out.append("No Symantec WSS")
+        elif use_wss and not s.wss_version_ok:           out.append("WSS Outdated")
+        if use_s1 and s.disk_encrypted is False:         out.append("Not Encrypted")
+        if use_s1 and s.device_control_enabled is False: out.append("Device Control Off")
         return out
 
     return [

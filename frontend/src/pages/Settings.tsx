@@ -746,8 +746,17 @@ function PlatformTab() {
     setMsg(null)
     try {
       await apiClient.put('/settings/system', form)
-      await queryClient.invalidateQueries({ queryKey: ['endpoint-product-tags'] })
-      setMsg({ type: 'success', msg: 'Settings saved' })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['endpoint-product-tags'] }),
+        queryClient.invalidateQueries({ queryKey: ['compliance'] }),
+        queryClient.invalidateQueries({ queryKey: ['compliance-dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['risk'] }),
+        queryClient.invalidateQueries({ queryKey: ['endpoints'] }),
+        queryClient.invalidateQueries({ queryKey: ['endpoints-all'] }),
+        queryClient.invalidateQueries({ queryKey: ['endpoint-detail'] }),
+        queryClient.invalidateQueries({ queryKey: ['user-identity'] }),
+      ])
+      setMsg({ type: 'success', msg: 'Settings saved and security posture recalculated' })
       refetch()
     } catch {
       setMsg({ type: 'error', msg: 'Failed to save settings' })
@@ -780,7 +789,7 @@ function PlatformTab() {
 
       {/* Agent version requirements */}
       <Section title="Minimum agent versions" hint="Setting a version marks it as required and adds it to compliance. Leave blank to skip.">
-        <Field label="SentinelOne minimum version" hint="e.g. 23.1.0.0">
+        {(form.endpoint_product_tags ?? []).includes('S1') && <Field label="SentinelOne minimum version" hint="e.g. 23.1.0.0">
           <input
             type="text"
             value={form.min_s1_version}
@@ -788,8 +797,8 @@ function PlatformTab() {
             placeholder="e.g. 23.1.0.0"
             className="bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm w-44 font-mono focus:outline-none focus:border-emerald-500"
           />
-        </Field>
-        <Field label="Symantec DLP minimum version" hint="e.g. 15.7.0">
+        </Field>}
+        {(form.endpoint_product_tags ?? []).includes('DLP') && <Field label="Symantec DLP minimum version" hint="e.g. 15.7.0">
           <input
             type="text"
             value={form.min_dlp_version}
@@ -797,8 +806,8 @@ function PlatformTab() {
             placeholder="e.g. 15.7.0"
             className="bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm w-44 font-mono focus:outline-none focus:border-emerald-500"
           />
-        </Field>
-        <Field label="Symantec WSS minimum version" hint="e.g. 9.8.1 — also marks WSS as required">
+        </Field>}
+        {(form.endpoint_product_tags ?? []).includes('WSS') && <Field label="Symantec WSS minimum version" hint="e.g. 9.8.1">
           <input
             type="text"
             value={form.min_wss_version}
@@ -806,11 +815,11 @@ function PlatformTab() {
             placeholder="e.g. 9.8.1"
             className="bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm w-44 font-mono focus:outline-none focus:border-emerald-500"
           />
-        </Field>
+        </Field>}
       </Section>
 
       {/* Endpoint product tags */}
-      <Section title="Endpoint product tags" hint="Choose which product-presence badges appear on every endpoint. This changes presentation only; collection and compliance remain active.">
+      <Section title="Endpoint product tags" hint="Selected tags define the required product scope across endpoint views, compliance, coverage, and risk. Data for unselected products is retained.">
         {ENDPOINT_PRODUCT_TAGS.map(({ tag, label, hint }) => (
           <Field key={tag} label={label} hint={hint}>
             <Toggle
@@ -831,10 +840,14 @@ function PlatformTab() {
       {/* Risk weights */}
       <Section title="Risk score weights" hint="Each weight contributes to the endpoint's risk score (0–100)">
         {([
-          ['EDR not installed', 'risk_weight_no_edr'],
-          ['EDR version outdated', 'risk_weight_edr_version'],
-          ['DLP not installed', 'risk_weight_no_dlp'],
-          ['DLP version outdated', 'risk_weight_dlp_version'],
+          ...((form.endpoint_product_tags ?? []).includes('S1') ? [
+            ['EDR not installed', 'risk_weight_no_edr'],
+            ['EDR version outdated', 'risk_weight_edr_version'],
+          ] : []),
+          ...((form.endpoint_product_tags ?? []).includes('DLP') ? [
+            ['DLP not installed', 'risk_weight_no_dlp'],
+            ['DLP version outdated', 'risk_weight_dlp_version'],
+          ] : []),
           ['No user assigned', 'risk_weight_no_user'],
         ] as [string, keyof SystemSettings][]).map(([label, key]) => (
           <Field key={key} label={label}>

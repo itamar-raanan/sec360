@@ -191,6 +191,8 @@ async def get_user_identity(
 ):
     """Full identity profile: user + all endpoints + all agents + compliance."""
     from fastapi import HTTPException, status as http_status
+    from app.models.system_settings import SystemSettings
+    from app.services.product_scope import normalize_product_tags
 
     result = await db.execute(
         select(User)
@@ -204,8 +206,10 @@ async def get_user_identity(
     if not user:
         raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="User not found")
 
+    cfg = (await db.execute(select(SystemSettings).where(SystemSettings.id == 1))).scalar_one_or_none()
+    active_product_tags = set(normalize_product_tags(cfg.endpoint_product_tags if cfg else None))
     endpoint_identities: list[EndpointIdentity] = []
-    s1_count = symantec_count = compliant_count = noncompliant_count = 0
+    s1_count = symantec_count = wss_count = compliant_count = noncompliant_count = 0
 
     for ep in user.endpoints:
         agents = [AgentSummary.model_validate(a) for a in ep.agents]
@@ -219,6 +223,8 @@ async def get_user_identity(
             s1_count += 1
         if "symantec" in products:
             symantec_count += 1
+        if "symantec_wss" in products:
+            wss_count += 1
 
         if ep.compliance_status:
             if ep.compliance_status.status == "compliant":
@@ -243,6 +249,13 @@ async def get_user_identity(
         )
 
     total = len(user.endpoints)
+    required_coverage = []
+    if "S1" in active_product_tags:
+        required_coverage.append(s1_count == total)
+    if "DLP" in active_product_tags:
+        required_coverage.append(symantec_count == total)
+    if "WSS" in active_product_tags:
+        required_coverage.append(wss_count == total)
 
     identity = UserIdentity(
         id=user.id,
@@ -264,9 +277,10 @@ async def get_user_identity(
         total_endpoints=total,
         endpoints_with_sentinelone=s1_count,
         endpoints_with_symantec=symantec_count,
+        endpoints_with_wss=wss_count,
         endpoints_compliant=compliant_count,
         endpoints_non_compliant=noncompliant_count,
-        all_agents_ok=total > 0 and s1_count == total and symantec_count == total,
+        all_agents_ok=total > 0 and all(required_coverage),
     )
     return identity
 

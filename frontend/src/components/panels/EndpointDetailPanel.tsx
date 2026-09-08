@@ -14,6 +14,7 @@ import StatusBadge from '../shared/StatusBadge'
 import NoteBox from '../shared/NoteBox'
 import { useAuthStore } from '../../store/auth'
 import type { Endpoint } from '../../types'
+import { useEndpointProductTags } from '../../hooks/useEndpointProductTags'
 
 interface AgentDetail {
   installed: boolean
@@ -296,6 +297,7 @@ function AgentBlock({ label, detail, simple = false, showStateGroup = false }: {
 
 export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
   const { user } = useAuthStore()
+  const { enabled: productEnabled, tags: activeProductTags } = useEndpointProductTags()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
 
   const { data: ep, isLoading, error } = useQuery<EndpointDetail>({
@@ -414,8 +416,9 @@ export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
               <div className="bg-zinc-900/70 rounded-xl border border-white/[0.08]/50 divide-y divide-gray-700/40">
                 {[
                   { label: 'JumpCloud',   color: 'text-emerald-500', val: ep.last_seen },
-                  { label: 'SentinelOne', color: 'text-emerald-500', val: ep.sentinelone?.last_seen ?? null, fallback: ep.sentinelone?.installed ? 'No data' : 'Not installed' },
-                  { label: 'DLP',         color: 'text-yellow-600',  val: ep.symantec_dlp?.last_seen ?? null, fallback: ep.symantec_dlp?.installed ? 'No data' : 'Not installed' },
+                  ...(productEnabled('S1') ? [{ label: 'SentinelOne', color: 'text-emerald-500', val: ep.sentinelone?.last_seen ?? null, fallback: ep.sentinelone?.installed ? 'No data' : 'Not installed' }] : []),
+                  ...(productEnabled('DLP') ? [{ label: 'DLP', color: 'text-yellow-600', val: ep.symantec_dlp?.last_seen ?? null, fallback: ep.symantec_dlp?.installed ? 'No data' : 'Not installed' }] : []),
+                  ...(productEnabled('WSS') ? [{ label: 'WSS', color: 'text-orange-500', val: ep.symantec_wss?.last_seen ?? null, fallback: ep.symantec_wss?.installed ? 'No data' : 'Not installed' }] : []),
                 ].map(({ label, color, val, fallback }) => (
                   <div key={label} className="flex items-center gap-3 px-4 py-2.5">
                     <Clock className={`w-3.5 h-3.5 ${color} flex-shrink-0`} />
@@ -453,9 +456,10 @@ export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
         {/* ── AGENTS TAB ── */}
         {activeTab === 'agents' && (
           <div className="space-y-3">
-            <AgentBlock label="SentinelOne EDR"    detail={ep.sentinelone} />
-            <AgentBlock label="Symantec DLP"       detail={ep.symantec_dlp} showStateGroup />
-            <AgentBlock label="Symantec WSS Agent" detail={ep.symantec_wss} simple />
+            {productEnabled('S1') && <AgentBlock label="SentinelOne EDR" detail={ep.sentinelone} />}
+            {productEnabled('DLP') && <AgentBlock label="Symantec DLP" detail={ep.symantec_dlp} showStateGroup />}
+            {productEnabled('WSS') && <AgentBlock label="Symantec WSS Agent" detail={ep.symantec_wss} simple />}
+            {activeProductTags.length === 0 && <div className="py-8 text-center text-xs text-zinc-500">No endpoint products are enabled in Platform Settings.</div>}
           </div>
         )}
 
@@ -472,15 +476,21 @@ export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
                   </div>
                   <div className="grid grid-cols-2 gap-1.5 text-xs border-t border-white/[0.08]/50 pt-3">
                     {([
-                      { label: 'EDR Installed',  ok: cs.edr_installed },
-                      { label: 'EDR Up to Date', ok: cs.edr_version_ok },
-                      { label: 'DLP Installed',  ok: cs.dlp_installed },
-                      { label: 'DLP Up to Date', ok: cs.dlp_version_ok },
-                      { label: 'WSS Installed',  ok: cs.wss_installed },
-                      ...(cs.wss_installed ? [{ label: 'WSS Up to Date', ok: cs.wss_version_ok }] : []),
-                      ...(cs.disk_encrypted !== null && cs.disk_encrypted !== undefined
+                      ...(productEnabled('S1') ? [
+                        { label: 'EDR Installed', ok: cs.edr_installed },
+                        { label: 'EDR Up to Date', ok: cs.edr_version_ok },
+                      ] : []),
+                      ...(productEnabled('DLP') ? [
+                        { label: 'DLP Installed', ok: cs.dlp_installed },
+                        { label: 'DLP Up to Date', ok: cs.dlp_version_ok },
+                      ] : []),
+                      ...(productEnabled('WSS') ? [
+                        { label: 'WSS Installed', ok: cs.wss_installed },
+                        ...(cs.wss_installed ? [{ label: 'WSS Up to Date', ok: cs.wss_version_ok }] : []),
+                      ] : []),
+                      ...(productEnabled('S1') && cs.disk_encrypted !== null && cs.disk_encrypted !== undefined
                         ? [{ label: 'Disk Encrypted', ok: cs.disk_encrypted }] : []),
-                      ...(cs.device_control_enabled !== null && cs.device_control_enabled !== undefined
+                      ...(productEnabled('S1') && cs.device_control_enabled !== null && cs.device_control_enabled !== undefined
                         ? [{ label: 'Device Control', ok: cs.device_control_enabled }] : []),
                     ] as { label: string; ok: boolean }[]).map(({ label, ok }) => (
                       <div key={label} className={`flex items-center gap-1.5 ${ok ? 'text-emerald-300' : 'text-red-400'}`}>

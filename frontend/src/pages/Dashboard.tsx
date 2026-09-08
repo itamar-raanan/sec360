@@ -149,6 +149,7 @@ export default function Dashboard() {
   const totalEndpoints = endpoints.data?.total ?? 0
   const summary = compliance.data?.summary
   const issues = compliance.data?.issues
+  const activeProductTags = new Set(compliance.data?.active_product_tags ?? ['S1', 'DLP', 'WSS'])
   const criticalRisk = (risk.data?.users.critical ?? 0) + (risk.data?.endpoints.critical ?? 0)
   const enabledIntegrations = integrations.data?.filter(item => item.is_enabled) ?? []
   const healthyIntegrations = enabledIntegrations.filter(item => item.status === 'connected').length
@@ -167,7 +168,12 @@ export default function Dashboard() {
     { id: 'unencrypted', label: 'Disk encryption disabled', context: 'Endpoints reporting unencrypted storage', count: issues?.no_disk_encryption ?? issues?.not_encrypted ?? 0, severity: 'high', href: '/compliance?issue=not_encrypted', icon: HardDrive },
     { id: 'device-control', label: 'Device control disabled', context: 'Peripheral controls are not enforced', count: issues?.no_device_control ?? 0, severity: 'warning', href: '/compliance?issue=no_device_control', icon: MousePointer },
     { id: 'integration-errors', label: 'Integration health degraded', context: integrationErrors.map(item => item.display_name).join(', ') || 'One or more data sources need attention', count: integrationErrors.length, severity: 'warning', href: '/integrations', icon: Plug },
-  ] satisfies AttentionItem[]).filter(item => item.count > 0)
+  ] satisfies AttentionItem[]).filter(item => {
+    if (item.id === 'missing-edr' || item.id === 'unencrypted' || item.id === 'device-control') return activeProductTags.has('S1') && item.count > 0
+    if (item.id === 'missing-dlp') return activeProductTags.has('DLP') && item.count > 0
+    if (item.id === 'missing-wss') return activeProductTags.has('WSS') && item.count > 0
+    return item.count > 0
+  })
 
   const complianceData = summary ? [
     { name: 'Compliant', value: summary.compliant },
@@ -297,9 +303,9 @@ export default function Dashboard() {
         <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)]">
           <section className="ui-command-surface overflow-hidden">
             <SectionHeading eyebrow="Coverage" title="Security control deployment" action="View endpoints" onAction={() => navigate('/endpoints')} />
-            <CoverageRow label="SentinelOne EDR" detail="Installed endpoint protection" value={coverage.edr} total={totalEndpoints} href="/endpoints?agent=has_s1" onOpen={navigate} />
-            <CoverageRow label="Symantec DLP" detail="Data loss prevention agent" value={coverage.dlp} total={totalEndpoints} href="/endpoints?agent=has_dlp" onOpen={navigate} />
-            <CoverageRow label="Symantec WSS" detail="Web security service agent" value={coverage.wss} total={totalEndpoints} href="/endpoints?agent=has_wss" onOpen={navigate} />
+            {activeProductTags.has('S1') && <CoverageRow label="SentinelOne EDR" detail="Installed endpoint protection" value={coverage.edr} total={totalEndpoints} href="/endpoints?agent=has_s1" onOpen={navigate} />}
+            {activeProductTags.has('DLP') && <CoverageRow label="Symantec DLP" detail="Data loss prevention agent" value={coverage.dlp} total={totalEndpoints} href="/endpoints?agent=has_dlp" onOpen={navigate} />}
+            {activeProductTags.has('WSS') && <CoverageRow label="Symantec WSS" detail="Web security service agent" value={coverage.wss} total={totalEndpoints} href="/endpoints?agent=has_wss" onOpen={navigate} />}
           </section>
 
           <section className="ui-command-surface overflow-hidden">

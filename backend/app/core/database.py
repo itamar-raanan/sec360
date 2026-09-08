@@ -66,6 +66,7 @@ async def init_db():
             # System settings — minimum agent versions
             "ALTER TABLE system_settings    ADD COLUMN IF NOT EXISTS min_s1_version   VARCHAR(50)  DEFAULT ''",
             "ALTER TABLE system_settings    ADD COLUMN IF NOT EXISTS min_dlp_version  VARCHAR(50)  DEFAULT ''",
+            "ALTER TABLE system_settings    ADD COLUMN IF NOT EXISTS endpoint_product_tags JSONB NOT NULL DEFAULT '[\"S1\", \"DLP\", \"WSS\"]'::jsonb",
             # Users — suspended flag from JumpCloud
             "ALTER TABLE users              ADD COLUMN IF NOT EXISTS suspended         BOOLEAN      DEFAULT FALSE",
             # System settings — new risk weight columns

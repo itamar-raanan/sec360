@@ -1,4 +1,4 @@
-from sqlalchemy import Integer, Boolean, Float, String, Text
+from sqlalchemy import Integer, Boolean, Float, String, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
 
@@ -37,6 +37,12 @@ class SystemSettings(Base):
     min_s1_version: Mapped[str] = mapped_column(String(50), default="")
     min_dlp_version: Mapped[str] = mapped_column(String(50), default="")
     min_wss_version: Mapped[str] = mapped_column(String(50), default="")
+
+    # Product-presence badges shown on endpoint rows.
+    endpoint_product_tags: Mapped[list[str]] = mapped_column(
+        JSON,
+        default=lambda: ["S1", "DLP", "WSS"],
+    )
 
     # Google SAML SSO
     saml_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

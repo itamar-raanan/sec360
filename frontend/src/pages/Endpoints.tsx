@@ -28,6 +28,9 @@ const RISK_SCORE_RANGES: Record<string, [number, number]> = {
   low: [0, 25], medium: [26, 50], high: [51, 75], critical: [76, 100],
 }
 
+type EndpointProductTag = 'S1' | 'DLP' | 'WSS'
+const DEFAULT_ENDPOINT_PRODUCT_TAGS: EndpointProductTag[] = ['S1', 'DLP', 'WSS']
+
 function osLabel(osVersion: string | null): string {
   if (!osVersion) return 'unknown'
   const v = osVersion.toLowerCase()
@@ -270,6 +273,12 @@ export default function Endpoints() {
     queryKey: ['endpoints-all'],
     queryFn: async () => (await apiClient.get('/endpoints?limit=2000&active_only=false')).data,
   })
+  const { data: productTagSettings } = useQuery<{ tags: EndpointProductTag[] }>({
+    queryKey: ['endpoint-product-tags'],
+    queryFn: async () => (await apiClient.get('/settings/endpoint-product-tags')).data,
+    staleTime: 5 * 60 * 1000,
+  })
+  const enabledProductTags = productTagSettings?.tags ?? DEFAULT_ENDPOINT_PRODUCT_TAGS
 
   // Compute facet counts from raw (unfiltered) data
   const facetCounts = useMemo(() => {
@@ -623,15 +632,21 @@ export default function Endpoints() {
                         )}
                       </div>
                       <div className={`flex gap-1 flex-wrap ${density === 'compact' ? 'mt-0.5' : 'mt-1'}`}>
-                        <span className={`text-xs px-1.5 py-0.5 rounded border ${hasS1 ? 'border-purple-500/30 text-purple-300 bg-purple-500/10' : 'border-red-500/20 text-red-400/60'}`}>
-                          S1{hasS1 ? '' : ' ✗'}
-                        </span>
-                        <span className={`text-xs px-1.5 py-0.5 rounded border ${hasSym ? 'border-yellow-500/30 text-yellow-300 bg-yellow-500/10' : 'border-red-500/20 text-red-400/60'}`}>
-                          DLP{hasSym ? '' : ' ✗'}
-                        </span>
-                        <span className={`text-xs px-1.5 py-0.5 rounded border ${hasWSS ? 'border-orange-500/30 text-orange-300 bg-orange-500/10' : 'border-red-500/20 text-red-400/60'}`}>
-                          WSS{hasWSS ? '' : ' ✗'}
-                        </span>
+                        {enabledProductTags.includes('S1') && (
+                          <span className={`text-xs px-1.5 py-0.5 rounded border ${hasS1 ? 'border-purple-500/30 text-purple-300 bg-purple-500/10' : 'border-red-500/20 text-red-400/60'}`}>
+                            S1{hasS1 ? '' : ' ✗'}
+                          </span>
+                        )}
+                        {enabledProductTags.includes('DLP') && (
+                          <span className={`text-xs px-1.5 py-0.5 rounded border ${hasSym ? 'border-yellow-500/30 text-yellow-300 bg-yellow-500/10' : 'border-red-500/20 text-red-400/60'}`}>
+                            DLP{hasSym ? '' : ' ✗'}
+                          </span>
+                        )}
+                        {enabledProductTags.includes('WSS') && (
+                          <span className={`text-xs px-1.5 py-0.5 rounded border ${hasWSS ? 'border-orange-500/30 text-orange-300 bg-orange-500/10' : 'border-red-500/20 text-red-400/60'}`}>
+                            WSS{hasWSS ? '' : ' ✗'}
+                          </span>
+                        )}
                         {tagList.slice(0, 2).map((tag: string) => (
                           <span key={tag} className="text-xs px-1.5 py-0.5 rounded border border-gray-600/50 text-zinc-500 bg-zinc-900/50">
                             {tag}

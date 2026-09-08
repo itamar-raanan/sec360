@@ -66,6 +66,7 @@ async def init_db():
             # System settings — minimum agent versions
             "ALTER TABLE system_settings    ADD COLUMN IF NOT EXISTS min_s1_version   VARCHAR(50)  DEFAULT ''",
             "ALTER TABLE system_settings    ADD COLUMN IF NOT EXISTS min_dlp_version  VARCHAR(50)  DEFAULT ''",
+            "ALTER TABLE system_settings    ADD COLUMN IF NOT EXISTS min_wss_version  VARCHAR(50)  DEFAULT ''",
             "ALTER TABLE system_settings    ADD COLUMN IF NOT EXISTS endpoint_product_tags JSONB NOT NULL DEFAULT '[\"S1\", \"DLP\", \"WSS\"]'::jsonb",
             # Users — suspended flag from JumpCloud
             "ALTER TABLE users              ADD COLUMN IF NOT EXISTS suspended         BOOLEAN      DEFAULT FALSE",
@@ -73,6 +74,8 @@ async def init_db():
             "ALTER TABLE system_settings    ADD COLUMN IF NOT EXISTS risk_weight_edr_version FLOAT DEFAULT 20.0",
             "ALTER TABLE system_settings    ADD COLUMN IF NOT EXISTS risk_weight_no_dlp      FLOAT DEFAULT 25.0",
             "ALTER TABLE system_settings    ADD COLUMN IF NOT EXISTS risk_weight_dlp_version FLOAT DEFAULT 15.0",
+            "ALTER TABLE system_settings    ADD COLUMN IF NOT EXISTS risk_weight_no_wss      FLOAT DEFAULT 15.0",
+            "ALTER TABLE system_settings    ADD COLUMN IF NOT EXISTS risk_weight_wss_version FLOAT DEFAULT 10.0",
             "ALTER TABLE system_settings    ADD COLUMN IF NOT EXISTS risk_weight_no_user     FLOAT DEFAULT 10.0",
             # Notes — analyst comments on endpoints / users
             """
@@ -86,10 +89,11 @@ async def init_db():
             )
             """,
             "CREATE INDEX IF NOT EXISTS ix_notes_entity ON notes (entity_type, entity_id)",
-            # Google SAML SSO — auth_users tracking
+            # SAML SSO — auth_users tracking
             "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS saml_subject VARCHAR(255)",
             "CREATE INDEX IF NOT EXISTS ix_auth_users_saml_subject ON auth_users (saml_subject)",
-            # Google SAML SSO — system-wide configuration (stored in system_settings)
+            # SAML SSO — system-wide configuration (stored in system_settings)
+            "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS saml_provider      VARCHAR(30)   DEFAULT 'google'",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS saml_enabled       BOOLEAN       DEFAULT FALSE",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS saml_sp_entity_id  VARCHAR(500)  DEFAULT ''",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS saml_sp_acs_url    VARCHAR(500)  DEFAULT ''",
@@ -101,6 +105,9 @@ async def init_db():
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS saml_sp_key             TEXT          DEFAULT ''",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS saml_allowed_emails      TEXT          DEFAULT ''",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS saml_require_mfa        BOOLEAN       DEFAULT FALSE",
+            # Symantec WSS compliance fields (safe for upgraded installations)
+            "ALTER TABLE compliance_statuses ADD COLUMN IF NOT EXISTS wss_installed  BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE compliance_statuses ADD COLUMN IF NOT EXISTS wss_version_ok BOOLEAN DEFAULT FALSE",
             # S1 enrichment on security_agents
             "ALTER TABLE security_agents ADD COLUMN IF NOT EXISTS disk_encrypted         BOOLEAN       DEFAULT NULL",
             "ALTER TABLE security_agents ADD COLUMN IF NOT EXISTS encryption_status      VARCHAR(50)   DEFAULT NULL",

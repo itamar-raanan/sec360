@@ -83,7 +83,7 @@ export default function SsoMfa() {
             </div>
             <h1 className="text-white font-bold mb-1" style={{ fontSize: 20, letterSpacing: '-0.025em' }}>Two-factor auth</h1>
             <p style={{ fontSize: 12.5, color: 'var(--text-4)' }}>
-              Google SSO verified — enter your authenticator code to continue
+              SSO identity verified — enter your authenticator code to continue
             </p>
           </div>
 

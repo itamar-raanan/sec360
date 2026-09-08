@@ -109,6 +109,8 @@ async def endpoint_risk_score(endpoint_id: str, db: AsyncSession) -> dict:
     w_edr_ver    = cfg.risk_weight_edr_version if cfg else 20.0
     w_no_dlp     = cfg.risk_weight_no_dlp      if cfg else 25.0
     w_dlp_ver    = cfg.risk_weight_dlp_version if cfg else 15.0
+    w_no_wss     = cfg.risk_weight_no_wss      if cfg else 15.0
+    w_wss_ver    = cfg.risk_weight_wss_version if cfg else 10.0
     w_no_user    = cfg.risk_weight_no_user     if cfg else 10.0
     active_products = set(normalize_product_tags(cfg.endpoint_product_tags if cfg else None))
 
@@ -124,7 +126,7 @@ async def endpoint_risk_score(endpoint_id: str, db: AsyncSession) -> dict:
         score += w_no_edr
         factors.append("no_edr")
 
-    if "S1" in active_products and not cs.edr_version_ok:
+    elif "S1" in active_products and not cs.edr_version_ok:
         score += w_edr_ver
         factors.append("edr_outdated")
 
@@ -132,9 +134,16 @@ async def endpoint_risk_score(endpoint_id: str, db: AsyncSession) -> dict:
         score += w_no_dlp
         factors.append("no_dlp")
 
-    if "DLP" in active_products and not cs.dlp_version_ok:
+    elif "DLP" in active_products and not cs.dlp_version_ok:
         score += w_dlp_ver
         factors.append("dlp_outdated")
+
+    if "WSS" in active_products and not cs.wss_installed:
+        score += w_no_wss
+        factors.append("no_wss")
+    elif "WSS" in active_products and not cs.wss_version_ok:
+        score += w_wss_ver
+        factors.append("wss_outdated")
 
     if not endpoint.owner_user_id:
         score += w_no_user

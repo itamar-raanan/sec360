@@ -83,6 +83,8 @@ class SystemSettingsIn(BaseModel):
     risk_weight_edr_version: Optional[float] = None
     risk_weight_no_dlp: Optional[float] = None
     risk_weight_dlp_version: Optional[float] = None
+    risk_weight_no_wss: Optional[float] = None
+    risk_weight_wss_version: Optional[float] = None
     risk_weight_no_user: Optional[float] = None
     risk_weight_no_encryption: Optional[float] = None
     risk_weight_offline: Optional[float] = None
@@ -100,6 +102,7 @@ class SystemSettingsIn(BaseModel):
 
 
 class SamlSettingsIn(BaseModel):
+    saml_provider: Literal["generic", "google", "adfs", "azure_ad", "entra"] = "google"
     saml_enabled: bool = False
     saml_sp_entity_id: str = ""
     saml_sp_acs_url: str = ""
@@ -397,24 +400,33 @@ async def update_system_settings(
         and normalize_product_tags(cfg.endpoint_product_tags)
         != normalize_product_tags(changes["endpoint_product_tags"])
     )
+    compliance_changed = product_scope_changed or any(
+        field in changes for field in ("min_s1_version", "min_dlp_version", "min_wss_version")
+    )
+    risk_changed = compliance_changed or any(
+        field.startswith("risk_weight_") for field in changes
+    )
     for field, val in changes.items():
         setattr(cfg, field, val)
 
     await db.flush()
     await audit_action("update_system_settings", "system_settings", "1", request, db, current, changes)
-    if product_scope_changed:
-        # Compliance and risk are derived data. Rebuild both before confirming
-        # the settings update so every page observes one consistent scope.
+    if compliance_changed:
+        # Compliance and risk are derived data. Rebuild before confirming the
+        # update so every page observes one consistent configuration.
         from app.engines.compliance import run_full_compliance
-        from app.engines.risk import update_all_risk_scores
 
         await run_full_compliance(db)
         await db.flush()
+
+    if risk_changed:
+        from app.engines.risk import update_all_risk_scores
+
         await update_all_risk_scores(db)
     return cfg
 
 
-# ─── Google SAML SSO settings (admin) ────────────────────────────────────────
+# ─── SAML SSO settings (admin) ───────────────────────────────────────────────
 
 @router.get("/saml")
 async def get_saml_settings(
@@ -427,6 +439,7 @@ async def get_saml_settings(
         db.add(cfg)
         await db.flush()
     return {
+        "saml_provider": cfg.saml_provider or "google",
         "saml_enabled": cfg.saml_enabled,
         "saml_sp_entity_id": cfg.saml_sp_entity_id or "",
         "saml_sp_acs_url": cfg.saml_sp_acs_url or "",
@@ -456,6 +469,7 @@ async def update_saml_settings(
         cfg = SystemSettings(id=1)
         db.add(cfg)
 
+    cfg.saml_provider = data.saml_provider
     cfg.saml_enabled = data.saml_enabled
     cfg.saml_sp_entity_id = data.saml_sp_entity_id.strip()
     cfg.saml_sp_acs_url = data.saml_sp_acs_url.strip()
@@ -471,8 +485,13 @@ async def update_saml_settings(
 
     await db.flush()
     await audit_action("update_saml_settings", "system_settings", "1", request, db, current,
-                       {"saml_enabled": data.saml_enabled})
-    logger.info("Admin %s updated SAML settings (enabled=%s)", current.email, data.saml_enabled)
+                       {"saml_enabled": data.saml_enabled, "saml_provider": data.saml_provider})
+    logger.info(
+        "Admin %s updated SAML settings (provider=%s, enabled=%s)",
+        current.email,
+        data.saml_provider,
+        data.saml_enabled,
+    )
     return {"message": "SAML settings saved"}
 
 

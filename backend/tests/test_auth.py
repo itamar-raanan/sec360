@@ -76,3 +76,61 @@ async def test_refresh_token(client: AsyncClient, admin_user):
     res = await client.post("/api/auth/refresh")
     assert res.status_code == 200
     assert "access_token" in res.json()
+
+
+async def test_saml_email_claim_supports_adfs_and_entra_formats():
+    from app.api.routes.auth import _extract_saml_email
+
+    class SamlAuth:
+        def __init__(self, attributes, name_id="opaque-subject"):
+            self.attributes = attributes
+            self.name_id = name_id
+
+        def get_attributes(self):
+            return self.attributes
+
+        def get_nameid(self):
+            return self.name_id
+
+    adfs = SamlAuth({
+        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn": ["Analyst@Example.COM"],
+    })
+    entra = SamlAuth({"preferred_username": ["Entra.User@Example.COM"]})
+    google = SamlAuth({}, "Google.User@Example.COM")
+
+    assert _extract_saml_email(adfs) == "analyst@example.com"
+    assert _extract_saml_email(entra) == "entra.user@example.com"
+    assert _extract_saml_email(google) == "google.user@example.com"
+
+
+async def test_saml_provider_can_be_configured_and_is_publicly_identified(
+    client: AsyncClient,
+    admin_user,
+):
+    login = await client.post(
+        "/api/auth/login",
+        json={"email": "admin@test.local", "password": "Admin123!"},
+    )
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    payload = {
+        "saml_provider": "entra",
+        "saml_enabled": True,
+        "saml_idp_entity_id": "https://sts.windows.net/tenant/",
+        "saml_idp_sso_url": "https://login.microsoftonline.com/tenant/saml2",
+        "saml_idp_cert": "certificate-data",
+    }
+
+    update = await client.put("/api/settings/saml", headers=headers, json=payload)
+    assert update.status_code == 200
+
+    saved = await client.get("/api/settings/saml", headers=headers)
+    assert saved.status_code == 200
+    assert saved.json()["saml_provider"] == "entra"
+
+    public_status = await client.get("/api/auth/saml/status")
+    assert public_status.status_code == 200
+    assert public_status.json() == {
+        "enabled": True,
+        "provider": "entra",
+        "provider_label": "Microsoft Entra ID",
+    }

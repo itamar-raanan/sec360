@@ -49,6 +49,8 @@ interface SystemSettings {
   risk_weight_edr_version: number
   risk_weight_no_dlp: number
   risk_weight_dlp_version: number
+  risk_weight_no_wss: number
+  risk_weight_wss_version: number
   risk_weight_no_user: number
   auto_correlation: boolean
   enforce_mfa: boolean
@@ -848,6 +850,10 @@ function PlatformTab() {
             ['DLP not installed', 'risk_weight_no_dlp'],
             ['DLP version outdated', 'risk_weight_dlp_version'],
           ] : []),
+          ...((form.endpoint_product_tags ?? []).includes('WSS') ? [
+            ['WSS not installed', 'risk_weight_no_wss'],
+            ['WSS version outdated', 'risk_weight_wss_version'],
+          ] : []),
           ['No user assigned', 'risk_weight_no_user'],
         ] as [string, keyof SystemSettings][]).map(([label, key]) => (
           <Field key={key} label={label}>
@@ -959,9 +965,99 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   )
 }
 
-// ── Google SSO (SAML) tab ─────────────────────────────────────────────────────
+// ── SSO (SAML) tab ────────────────────────────────────────────────────────────
+
+type SamlProvider = 'generic' | 'google' | 'adfs' | 'azure_ad' | 'entra'
+
+const SAML_PROVIDERS: Record<SamlProvider, {
+  label: string
+  shortLabel: string
+  description: string
+  consoleName: string
+  entityPlaceholder: string
+  ssoPlaceholder: string
+  metadataHint: string
+  setupSteps: string[]
+}> = {
+  generic: {
+    label: 'Generic SAML 2.0', shortLabel: 'Generic SAML',
+    description: 'Connect any standards-compatible SAML 2.0 identity provider',
+    consoleName: 'your identity provider',
+    entityPlaceholder: 'https://idp.example.com/entity-id',
+    ssoPlaceholder: 'https://idp.example.com/saml/sso',
+    metadataHint: 'Export the IdP metadata XML from your identity provider and upload it here.',
+    setupSteps: [
+      'Create a new SAML 2.0 application in your identity provider.',
+      'Register the SP Entity ID and ACS URL shown above.',
+      'Configure NameID as the user email, or release an email, mail, UPN, or preferred_username claim.',
+      'Export the IdP metadata XML and upload it above, then review and save the configuration.',
+      'Assign authorized users or groups to the application and enable SSO.',
+    ],
+  },
+  google: {
+    label: 'Google Workspace', shortLabel: 'Google Workspace',
+    description: 'Allow users to sign in with their Google Workspace account',
+    consoleName: 'Google Admin Console',
+    entityPlaceholder: 'https://accounts.google.com/o/saml2?idpid=...',
+    ssoPlaceholder: 'https://accounts.google.com/o/saml2/idp?idpid=...',
+    metadataHint: 'In Google Admin, open Apps > Web and mobile apps > your SAML app > Download metadata.',
+    setupSteps: [
+      'In Google Admin Console, go to Apps > Web and mobile apps > Add app > Add custom SAML app.',
+      'Name the app, then register the SP Entity ID and ACS URL shown above.',
+      'Set Name ID format to EMAIL and Name ID to Basic Information > Primary email.',
+      'Download the IdP metadata XML and upload it above.',
+      'Enable the app for the required organizational units, then enable and save SSO here.',
+    ],
+  },
+  adfs: {
+    label: 'ADFS', shortLabel: 'ADFS',
+    description: 'Connect an Active Directory Federation Services relying-party trust',
+    consoleName: 'AD FS Management',
+    entityPlaceholder: 'http://adfs.example.com/adfs/services/trust',
+    ssoPlaceholder: 'https://adfs.example.com/adfs/ls/',
+    metadataHint: 'Download FederationMetadata.xml from ADFS and upload it here.',
+    setupSteps: [
+      'In AD FS Management, add a Relying Party Trust using the SEC360 metadata URL above.',
+      'Confirm the relying-party identifier matches the SP Entity ID and the endpoint matches the ACS URL.',
+      'Add an issuance rule that sends the user email or UPN as NameID or an email/UPN claim.',
+      'Export FederationMetadata.xml from ADFS and upload it above.',
+      'Enable and save SSO here, then test with an invited SEC360 user.',
+    ],
+  },
+  azure_ad: {
+    label: 'Azure AD', shortLabel: 'Azure AD',
+    description: 'Connect an Azure Active Directory enterprise application using SAML',
+    consoleName: 'Azure portal',
+    entityPlaceholder: 'https://sts.windows.net/tenant-id/',
+    ssoPlaceholder: 'https://login.microsoftonline.com/tenant-id/saml2',
+    metadataHint: 'Download Federation Metadata XML from the enterprise application SAML setup page.',
+    setupSteps: [
+      'Create or open an Enterprise Application in Azure AD and choose SAML single sign-on.',
+      'Set Identifier to the SP Entity ID and Reply URL to the ACS URL shown above.',
+      'Set the unique user identifier to user.mail or user.userprincipalname.',
+      'Download Federation Metadata XML and upload it above.',
+      'Assign users or groups to the application, then enable and save SSO here.',
+    ],
+  },
+  entra: {
+    label: 'Microsoft Entra ID', shortLabel: 'Microsoft Entra',
+    description: 'Connect a Microsoft Entra enterprise application using SAML',
+    consoleName: 'Microsoft Entra admin center',
+    entityPlaceholder: 'https://sts.windows.net/tenant-id/',
+    ssoPlaceholder: 'https://login.microsoftonline.com/tenant-id/saml2',
+    metadataHint: 'Download Federation Metadata XML from the enterprise application SAML setup page.',
+    setupSteps: [
+      'Create or open an Enterprise Application in Microsoft Entra ID and choose SAML single sign-on.',
+      'Set Identifier to the SP Entity ID and Reply URL to the ACS URL shown above.',
+      'Set the unique user identifier to user.mail or user.userprincipalname.',
+      'Download Federation Metadata XML and upload it above.',
+      'Assign users or groups to the application, then enable and save SSO here.',
+    ],
+  },
+}
 
 interface SamlSettings {
+  saml_provider: SamlProvider
   saml_enabled: boolean
   saml_sp_entity_id: string
   saml_sp_acs_url: string
@@ -981,16 +1077,16 @@ function parseIdpMetadata(xml: string): { entityId: string; ssoUrl: string; cert
 
   const entityId = doc.documentElement.getAttribute('entityID') ?? ''
 
-  const ssoEl = Array.from(doc.querySelectorAll('SingleSignOnService')).find(
-    el => el.getAttribute('Binding')?.includes('HTTP-Redirect'),
-  )
+  const ssoServices = Array.from(doc.getElementsByTagNameNS('*', 'SingleSignOnService'))
+  const ssoEl = ssoServices.find(el => el.getAttribute('Binding')?.includes('HTTP-Redirect')) ?? ssoServices[0]
   const ssoUrl = ssoEl?.getAttribute('Location') ?? ''
 
   // Prefer the signing cert; fall back to any cert present
-  const signingKey = Array.from(doc.querySelectorAll('KeyDescriptor')).find(
+  const signingKey = Array.from(doc.getElementsByTagNameNS('*', 'KeyDescriptor')).find(
     el => el.getAttribute('use') === 'signing',
   )
-  const cert = (signingKey ?? doc).querySelector?.('X509Certificate')?.textContent?.replace(/\s+/g, '') ?? ''
+  const certRoot = signingKey ?? doc
+  const cert = certRoot.getElementsByTagNameNS('*', 'X509Certificate')[0]?.textContent?.replace(/\s+/g, '') ?? ''
 
   return { entityId, ssoUrl, cert }
 }
@@ -1035,6 +1131,7 @@ function SsoTab() {
     if (remote) {
       setForm(current => current ?? {
         ...remote,
+        saml_provider:       remote.saml_provider       || 'google',
         saml_sp_entity_id:   remote.saml_sp_entity_id   || window.location.origin,
         saml_sp_acs_url:     remote.saml_sp_acs_url     || `${window.location.origin}/api/auth/saml/acs`,
         saml_allowed_emails: remote.saml_allowed_emails ?? '',
@@ -1066,6 +1163,7 @@ function SsoTab() {
     setForm(f => f ? { ...f, [key]: val } : f)
 
   const metadataUrl = `${window.location.origin}/api/auth/saml/metadata`
+  const provider = SAML_PROVIDERS[form.saml_provider] ?? SAML_PROVIDERS.generic
 
   const copyAcsUrl = () => {
     navigator.clipboard.writeText(form.saml_sp_acs_url || `${window.location.origin}/api/auth/saml/acs`)
@@ -1092,15 +1190,26 @@ function SsoTab() {
     <div className="space-y-5 max-w-2xl">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-white">Google SSO (SAML 2.0)</h2>
-          <p className="text-xs text-zinc-500 mt-0.5">Allow users to sign in with their Google Workspace account</p>
+          <h2 className="text-base font-semibold text-white">Single Sign-On (SAML 2.0)</h2>
+          <p className="text-xs text-zinc-500 mt-0.5">{provider.description}</p>
         </div>
         {msg && <Alert type={msg.type} msg={msg.msg} />}
       </div>
 
       {/* Enable toggle */}
       <Section title="SSO Status">
-        <Field label="Enable Google SSO" hint="When enabled, a 'Sign in with Google SSO' button appears on the login page">
+        <Field label="Identity provider" hint="Choose a guided preset or Generic SAML for another SAML 2.0 provider">
+          <select
+            value={form.saml_provider}
+            onChange={e => set('saml_provider', e.target.value as SamlProvider)}
+            className="bg-zinc-950 border border-white/[0.08] text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500"
+          >
+            {(Object.entries(SAML_PROVIDERS) as [SamlProvider, typeof SAML_PROVIDERS[SamlProvider]][]).map(([id, option]) => (
+              <option key={id} value={id}>{option.label}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label={`Enable ${provider.shortLabel} SSO`} hint={`When enabled, a 'Continue with ${provider.shortLabel}' button appears on the login page`}>
           <Toggle checked={form.saml_enabled} onChange={v => set('saml_enabled', v)} />
         </Field>
         <Field label="Default role for new SSO users" hint="Applied when a user logs in via SSO for the first time">
@@ -1114,13 +1223,13 @@ function SsoTab() {
             <option value="admin">Admin</option>
           </select>
         </Field>
-        <Field label="Require 2FA after SSO" hint="Users must enter their authenticator code after Google sign-in">
+        <Field label="Require 2FA after SSO" hint={`Users must enter their authenticator code after ${provider.shortLabel} sign-in`}>
           <Toggle checked={form.saml_require_mfa} onChange={v => set('saml_require_mfa', v)} />
         </Field>
       </Section>
 
       {/* Service Provider config */}
-      <Section title="Service Provider (this app)" hint="Enter these values when creating the SAML app in Google Admin Console">
+      <Section title="Service Provider (this app)" hint={`Enter these values when creating the SAML app in ${provider.consoleName}`}>
         <Field label="SP Entity ID" hint="A unique URI identifying this service provider">
           <input
             type="text"
@@ -1130,7 +1239,7 @@ function SsoTab() {
             className="bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm w-80 focus:outline-none focus:border-emerald-500"
           />
         </Field>
-        <Field label="ACS URL" hint="Where Google POSTs the SAML response — register this in Google Admin">
+        <Field label="ACS URL" hint={`Where ${provider.shortLabel} posts the SAML response`}>
           <div className="flex items-center gap-2">
             <input
               type="text"
@@ -1152,7 +1261,7 @@ function SsoTab() {
             </button>
           </div>
         </Field>
-        <Field label="SP Metadata" hint="Upload this XML to Google Admin to auto-configure the IdP settings">
+        <Field label="SP Metadata" hint={`Import this XML into ${provider.consoleName} when supported`}>
           <a
             href={metadataUrl}
             target="_blank"
@@ -1172,8 +1281,7 @@ function SsoTab() {
         <div>
           <div className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Import IdP metadata</div>
           <p className="text-xs text-zinc-500 mt-1">
-            Download the metadata XML from Google Admin Console and upload it here to auto-fill all IdP fields.
-            In Google Admin go to <em>Apps &gt; Web and mobile apps &gt; your SAML app &gt; Download metadata</em>.
+            {provider.metadataHint}
           </p>
         </div>
         {metaMsg && <Alert type={metaMsg.type} msg={metaMsg.msg} />}
@@ -1203,13 +1311,13 @@ function SsoTab() {
       </div>
 
       {/* Identity Provider config */}
-      <Section title="Identity Provider (Google)" hint="These fields are populated automatically when you upload the metadata XML above">
+      <Section title={`Identity Provider (${provider.label})`} hint="These fields are populated automatically when you upload the metadata XML above">
         <Field label="IdP Entity ID">
           <input
             type="text"
             value={form.saml_idp_entity_id}
             onChange={e => set('saml_idp_entity_id', e.target.value)}
-            placeholder="https://accounts.google.com/o/saml2?idpid=..."
+            placeholder={provider.entityPlaceholder}
             className="bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm w-80 focus:outline-none focus:border-emerald-500"
           />
         </Field>
@@ -1218,13 +1326,13 @@ function SsoTab() {
             type="text"
             value={form.saml_idp_sso_url}
             onChange={e => set('saml_idp_sso_url', e.target.value)}
-            placeholder="https://accounts.google.com/o/saml2/idp?idpid=..."
+            placeholder={provider.ssoPlaceholder}
             className="bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm w-80 focus:outline-none focus:border-emerald-500"
           />
         </Field>
         <div className="px-4 py-3">
           <div className="text-sm text-zinc-300 mb-1.5">IdP Certificate</div>
-          <div className="text-xs text-zinc-500 mb-2">Paste the x509 certificate from Google Admin (no <code className="text-zinc-400">-----BEGIN/END CERTIFICATE-----</code> headers)</div>
+          <div className="text-xs text-zinc-500 mb-2">Paste the IdP x509 signing certificate (PEM headers are optional)</div>
           <textarea
             value={form.saml_idp_cert}
             onChange={e => set('saml_idp_cert', e.target.value)}
@@ -1236,7 +1344,7 @@ function SsoTab() {
       </Section>
 
       {/* Optional SP signing */}
-      <Section title="SP Signing (optional)" hint="Only needed if Google requires signed AuthnRequests">
+      <Section title="SP Signing (optional)" hint={`Only needed if ${provider.shortLabel} requires signed authentication requests`}>
         <div className="px-4 py-3">
           <div className="text-sm text-zinc-300 mb-1.5">SP Certificate</div>
           <textarea
@@ -1268,13 +1376,8 @@ function SsoTab() {
 
       {/* Setup instructions */}
       <div className="bg-emerald-500/5 border border-emerald-500/10 rounded-xl p-4 text-xs text-zinc-400 space-y-1.5">
-        <div className="text-emerald-400 font-semibold mb-2 text-sm">Google Admin setup steps</div>
-        <p>1. In <strong className="text-white">Google Admin Console</strong> go to <em>Apps &gt; Web and mobile apps &gt; Add app &gt; Add custom SAML app</em></p>
-        <p>2. Name the app (e.g. "SEC360"), then click <em>Continue</em></p>
-        <p>3. Copy the <strong className="text-white">SSO URL</strong>, <strong className="text-white">Entity ID</strong>, and <strong className="text-white">Certificate</strong> into the fields above</p>
-        <p>4. Set <strong className="text-white">ACS URL</strong> to the value shown above and <strong className="text-white">Entity ID</strong> to your SP Entity ID</p>
-        <p>5. Set <strong className="text-white">Name ID format</strong> to <em>EMAIL</em> and <strong className="text-white">Name ID</strong> to <em>Basic Information &gt; Primary email</em></p>
-        <p>6. Save, enable the app for your org units, then toggle SSO on above and save</p>
+        <div className="text-emerald-400 font-semibold mb-2 text-sm">{provider.label} setup steps</div>
+        {provider.setupSteps.map((step, index) => <p key={step}>{index + 1}. {step}</p>)}
       </div>
 
       <button
@@ -1504,7 +1607,7 @@ export default function Settings() {
     { id: 'users', label: 'Users & Access', icon: Users, adminOnly: true },
     { id: 'account', label: 'My Account', icon: User, adminOnly: false },
     { id: 'platform', label: 'Platform', icon: Settings2, adminOnly: true },
-    { id: 'sso', label: 'Google SSO', icon: KeyRound, adminOnly: true },
+    { id: 'sso', label: 'SSO', icon: KeyRound, adminOnly: true },
     { id: 'certificate', label: 'HTTPS Certificate', icon: FileKey2, adminOnly: true },
     { id: 'audit', label: 'Audit Log', icon: ClipboardList, adminOnly: true },
   ]

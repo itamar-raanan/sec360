@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.models.agent import SecurityAgent
 from app.models.compliance import ComplianceStatus
 from app.models.endpoint import Endpoint
+from app.models.system_settings import SystemSettings
 
 
 pytestmark = pytest.mark.asyncio
@@ -95,3 +96,37 @@ async def test_unknown_endpoint_product_tag_is_rejected(client: AsyncClient, adm
     )
 
     assert response.status_code == 422
+
+
+async def test_wss_scope_contributes_to_endpoint_risk_without_double_counting(
+    db_session,
+):
+    from app.engines.risk import endpoint_risk_score
+
+    endpoint = Endpoint(hostname="wss-risk", is_active=True, source="jumpcloud")
+    db_session.add(endpoint)
+    await db_session.flush()
+    db_session.add(SystemSettings(
+        id=1,
+        endpoint_product_tags=["WSS"],
+        risk_weight_no_wss=15,
+        risk_weight_wss_version=10,
+        risk_weight_no_user=10,
+    ))
+    compliance = ComplianceStatus(
+        endpoint_id=endpoint.id,
+        wss_installed=False,
+        wss_version_ok=False,
+    )
+    db_session.add(compliance)
+    await db_session.commit()
+
+    missing = await endpoint_risk_score(str(endpoint.id), db_session)
+    assert missing["score"] == 25
+    assert missing["factors"] == ["no_wss", "no_user_assigned"]
+
+    compliance.wss_installed = True
+    await db_session.commit()
+    outdated = await endpoint_risk_score(str(endpoint.id), db_session)
+    assert outdated["score"] == 20
+    assert outdated["factors"] == ["wss_outdated", "no_user_assigned"]

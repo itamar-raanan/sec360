@@ -4,6 +4,7 @@ import { LogOut, Menu, Moon, Search, ShieldCheck, Sun, X } from 'lucide-react'
 import { useAuthStore } from '../../store/auth'
 import { useThemeStore } from '../../store/theme'
 import { visibleNavigation } from './navigation'
+import { useConnectedIntegrations } from '../../hooks/useConnectedIntegrations'
 
 const PRIMARY_PATHS = ['/dashboard', '/endpoints', '/compliance', '/activity']
 
@@ -18,7 +19,8 @@ export default function MobileNavigation({ onOpenCmd }: MobileNavigationProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const { user, logout } = useAuthStore()
   const { theme, toggle: toggleTheme } = useThemeStore()
-  const items = visibleNavigation(user?.role)
+  const { connected } = useConnectedIntegrations()
+  const items = visibleNavigation(user?.role, connected)
   const primary = items.filter(item => PRIMARY_PATHS.includes(item.to))
 
   useEffect(() => setOpen(false), [location.pathname])

@@ -120,6 +120,11 @@ async def init_db():
             "CREATE UNIQUE INDEX IF NOT EXISTS uix_activity_events_external_id ON activity_events (external_id) WHERE external_id IS NOT NULL",
             # Removed feature storage. No retained feature references depend on it.
             "DROP TABLE IF EXISTS ai_insights",
+            # Retired integrations: remove credentials and source-specific data,
+            # while retaining canonical users that may be owned by another source.
+            "DELETE FROM integration_configs WHERE integration_type IN ('hibob', 'cloudsoc')",
+            "UPDATE users SET sources = sources - 'hibob' WHERE sources ? 'hibob'",
+            "DELETE FROM activity_events WHERE details->>'app' = 'cloudsoc'",
             # GlobalProtect retirement — remove stale records and schema fields.
             "DELETE FROM security_agents WHERE product_name::text = 'globalprotect'",
             "ALTER TABLE compliance_statuses DROP COLUMN IF EXISTS gp_version_ok",

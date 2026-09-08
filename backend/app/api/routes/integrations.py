@@ -4,13 +4,20 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from fastapi import Request
 from app.api.deps import get_db, get_current_user, require_role, audit_action
 from app.core.database import AsyncSessionLocal
 from app.models.user import AuthUser
 from app.models.integration import IntegrationConfig
+from app.integrations.catalog import (
+    INTEGRATION_DEFAULTS,
+    INTEGRATION_TYPES,
+    RETIRED_INTEGRATION_TYPES,
+    catalog_payload,
+)
+from app.integrations.registry import get_collector_class
 from app.schemas.integration import (
     IntegrationConfigResponse,
     IntegrationConfigUpdate,
@@ -21,17 +28,6 @@ from app.schemas.integration import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
-
-INTEGRATION_DEFAULTS = [
-    ("jumpcloud", "JumpCloud"),
-    ("sentinelone", "SentinelOne"),
-    ("symantec_dlp", "Symantec DLP"),
-    ("google_workspace", "Google Workspace"),
-    ("hibob", "HiBob"),
-    ("puppet", "Puppet"),
-    ("active_directory", "Active Directory"),
-]
-
 
 def _to_response(config: IntegrationConfig) -> IntegrationConfigResponse:
     return IntegrationConfigResponse(
@@ -49,6 +45,11 @@ def _to_response(config: IntegrationConfig) -> IntegrationConfigResponse:
 
 async def _ensure_defaults(db: AsyncSession) -> None:
     """Create default integration rows if they don't exist."""
+    await db.execute(
+        delete(IntegrationConfig).where(
+            IntegrationConfig.integration_type.in_(RETIRED_INTEGRATION_TYPES)
+        )
+    )
     for itype, display_name in INTEGRATION_DEFAULTS:
         existing = (await db.execute(
             select(IntegrationConfig).where(IntegrationConfig.integration_type == itype)
@@ -77,6 +78,14 @@ async def list_integrations(
     return [_to_response(c) for c in configs]
 
 
+@router.get("/catalog")
+async def integration_catalog(
+    _: AuthUser = Depends(get_current_user),
+):
+    """Return the authoritative built-in product store."""
+    return catalog_payload()
+
+
 @router.put("/{integration_type}", response_model=IntegrationConfigResponse)
 async def update_integration(
     integration_type: str,
@@ -90,6 +99,8 @@ async def update_integration(
     )).scalar_one_or_none()
 
     if not config:
+        if integration_type not in INTEGRATION_TYPES:
+            raise HTTPException(status_code=404, detail="Integration product not found")
         # Find display name
         display_name = next(
             (dn for it, dn in INTEGRATION_DEFAULTS if it == integration_type),
@@ -103,8 +114,9 @@ async def update_integration(
 
     config.credentials = body.credentials
     config.is_enabled = body.is_enabled
-    if config.status == "unconfigured" or not config.status:
-        config.status = "unconfigured"
+    # New or changed credentials must be verified before product features unlock.
+    config.status = "unconfigured"
+    config.last_error = None
     await db.flush()
     await audit_action("update_integration", "integration", integration_type, request, db, current, {"enabled": body.is_enabled})
     return _to_response(config)
@@ -150,11 +162,12 @@ async def test_integration(
 
     result = await _run_test(integration_type, config.credentials, db)
 
-    # Update status based on test result
+    # A successful connection test installs the product's gated capabilities.
     if result.get("success"):
-        if config.status == "unconfigured":
-            config.status = "unconfigured"  # Keep unconfigured until sync
+        config.status = "connected"
+        config.last_error = None
     else:
+        config.status = "error"
         config.last_error = result.get("message", "Test failed")
 
     await db.flush()
@@ -210,58 +223,11 @@ async def sync_integration(
 
 async def _run_test(integration_type: str, credentials: dict, db: AsyncSession) -> dict:
     try:
-        if integration_type == "jumpcloud":
-            from app.collectors.jumpcloud import JumpCloudCollector
-            collector = JumpCloudCollector(credentials=credentials, db=db)
-            return await collector.test_connection()
-
-        elif integration_type == "sentinelone":
-            from app.collectors.sentinelone import SentinelOneCollector
-            collector = SentinelOneCollector(credentials=credentials, db=db)
-            return await collector.test_connection()
-
-        elif integration_type == "symantec_dlp":
-            from app.collectors.symantec import SymantecCollector
-            collector = SymantecCollector(credentials=credentials, db=db)
-            return await collector.test_connection()
-
-        elif integration_type == "google_workspace":
-            from app.collectors.google_workspace import GoogleWorkspaceCollector
-            collector = GoogleWorkspaceCollector(credentials=credentials, db=db)
-            return await collector.test_connection()
-
-        elif integration_type == "hibob":
-            from app.collectors.hibob import HiBobCollector
-            collector = HiBobCollector(credentials=credentials, db=db)
-            return await collector.test_connection()
-
-        elif integration_type == "puppet":
-            from app.collectors.puppet import PuppetCollector
-            collector = PuppetCollector(credentials=credentials, db=db)
-            return await collector.test_connection()
-
-        elif integration_type == "active_directory":
-            from app.collectors.active_directory import ActiveDirectoryCollector
-            collector = ActiveDirectoryCollector(credentials=credentials, db=db)
-            return await collector.test_connection()
-
-        elif integration_type == "cloudsoc":
-            from app.collectors.cloudsoc import CloudSOCCollector
-            collector = CloudSOCCollector(credentials=credentials, db=db)
-            return await collector.test_connection()
-
-        elif integration_type.startswith("custom_api"):
-            from app.collectors.custom_api import CustomApiCollector
-            collector = CustomApiCollector(credentials=credentials, db=db)
-            return await collector.test_connection()
-
-        elif integration_type.startswith("custom_db"):
-            from app.collectors.custom_db import CustomDbCollector
-            collector = CustomDbCollector(credentials=credentials, db=db)
-            return await collector.test_connection()
-
-        else:
+        collector_class = get_collector_class(integration_type)
+        if collector_class is None:
             return {"success": False, "message": f"Unknown integration type: {integration_type}"}
+        collector = collector_class(credentials=credentials, db=db)
+        return await collector.test_connection()
 
     except Exception as e:
         logger.error(f"Test connection error for {integration_type}: {e}", exc_info=True)
@@ -272,38 +238,10 @@ async def _run_collect(integration_type: str, credentials: dict) -> dict:
     """Run a collector in its own isolated DB session so failures never contaminate the caller's transaction."""
     async with AsyncSessionLocal() as session:
         try:
-            if integration_type == "jumpcloud":
-                from app.collectors.jumpcloud import JumpCloudCollector
-                collector = JumpCloudCollector(credentials=credentials, db=session)
-            elif integration_type == "sentinelone":
-                from app.collectors.sentinelone import SentinelOneCollector
-                collector = SentinelOneCollector(credentials=credentials, db=session)
-            elif integration_type == "symantec_dlp":
-                from app.collectors.symantec import SymantecCollector
-                collector = SymantecCollector(credentials=credentials, db=session)
-            elif integration_type == "google_workspace":
-                from app.collectors.google_workspace import GoogleWorkspaceCollector
-                collector = GoogleWorkspaceCollector(credentials=credentials, db=session)
-            elif integration_type == "hibob":
-                from app.collectors.hibob import HiBobCollector
-                collector = HiBobCollector(credentials=credentials, db=session)
-            elif integration_type == "puppet":
-                from app.collectors.puppet import PuppetCollector
-                collector = PuppetCollector(credentials=credentials, db=session)
-            elif integration_type == "active_directory":
-                from app.collectors.active_directory import ActiveDirectoryCollector
-                collector = ActiveDirectoryCollector(credentials=credentials, db=session)
-            elif integration_type == "cloudsoc":
-                from app.collectors.cloudsoc import CloudSOCCollector
-                collector = CloudSOCCollector(credentials=credentials, db=session)
-            elif integration_type.startswith("custom_api"):
-                from app.collectors.custom_api import CustomApiCollector
-                collector = CustomApiCollector(credentials=credentials, db=session)
-            elif integration_type.startswith("custom_db"):
-                from app.collectors.custom_db import CustomDbCollector
-                collector = CustomDbCollector(credentials=credentials, db=session)
-            else:
+            collector_class = get_collector_class(integration_type)
+            if collector_class is None:
                 return {"records_synced": 0, "error": f"Unknown integration type: {integration_type}"}
+            collector = collector_class(credentials=credentials, db=session)
 
             result = await collector.collect()
 

@@ -9,13 +9,17 @@ from sqlalchemy import case, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.api.deps import get_db, require_role
+from app.api.deps import get_db, require_connected_integration, require_role
 from app.models.application import ApplicationVulnerability
 from app.models.endpoint import Endpoint
 from app.models.user import AuthUser
 
 
-router = APIRouter(prefix="/application-vulnerabilities", tags=["application-vulnerabilities"])
+router = APIRouter(
+    prefix="/application-vulnerabilities",
+    tags=["application-vulnerabilities"],
+    dependencies=[Depends(require_connected_integration("sentinelone"))],
+)
 
 
 def _csv_safe(value):

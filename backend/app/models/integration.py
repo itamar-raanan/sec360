@@ -11,7 +11,7 @@ class IntegrationConfig(Base):
     __tablename__ = "integration_configs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    integration_type = Column(String(50), unique=True, nullable=False)  # jumpcloud, sentinelone, symantec_dlp, google_workspace, hibob
+    integration_type = Column(String(50), unique=True, nullable=False)
     display_name = Column(String(100), nullable=False)
     credentials = Column(EncryptedJSON, nullable=True)  # encrypted at rest; set CREDENTIALS_ENCRYPTION_KEY
     is_enabled = Column(Boolean, default=False)

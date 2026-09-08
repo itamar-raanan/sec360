@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from app.collectors.sentinelone import SentinelOneCollector
 from app.models.application import ApplicationVulnerability
 from app.models.endpoint import Endpoint
+from app.models.integration import IntegrationConfig
 
 
 pytestmark = pytest.mark.asyncio
@@ -139,6 +140,13 @@ async def test_collector_bulk_upserts_multiple_batches_and_removes_stale_rows(db
 async def test_vulnerability_api_summary_filters_detail_and_csv(
     client: AsyncClient, db_session, admin_user
 ):
+    db_session.add(IntegrationConfig(
+        integration_type="sentinelone",
+        display_name="SentinelOne",
+        credentials={"api_key": "test"},
+        status="connected",
+        is_enabled=True,
+    ))
     collector = SentinelOneCollector(credentials={"api_key": "test"}, db=db_session)
     try:
         await collector._upsert_application_vulnerabilities([

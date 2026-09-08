@@ -13,7 +13,15 @@ async def _token(client: AsyncClient, email: str, password: str) -> str:
     return response.json()["access_token"]
 
 
-async def test_viewer_cannot_search_dlp_policies(client: AsyncClient, viewer_user):
+async def test_viewer_cannot_search_dlp_policies(client: AsyncClient, db_session, viewer_user):
+    db_session.add(IntegrationConfig(
+        integration_type="symantec_dlp",
+        display_name="Symantec DLP",
+        credentials={"db_type": "oracle"},
+        status="connected",
+        is_enabled=True,
+    ))
+    await db_session.commit()
     token = await _token(client, "viewer@test.local", "Viewer123!")
     response = await client.get(
         "/api/dlp-policy-search",
@@ -29,7 +37,7 @@ async def test_search_requires_configured_symantec_integration(client: AsyncClie
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 409
-    assert "credentials" in response.json()["detail"].lower()
+    assert "connect" in response.json()["detail"].lower()
 
 
 async def test_analyst_can_search_with_existing_oracle_credentials(

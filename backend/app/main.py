@@ -77,22 +77,19 @@ async def _seed_auth_defaults():
 async def _seed_integration_defaults():
     from sqlalchemy import select
     from app.core.database import AsyncSessionLocal
+    from app.integrations.catalog import INTEGRATION_DEFAULTS, RETIRED_INTEGRATION_TYPES
     from app.models.integration import IntegrationConfig
-
-    INTEGRATIONS = [
-        ("jumpcloud",        "JumpCloud"),
-        ("sentinelone",      "SentinelOne"),
-        ("symantec_dlp",     "Symantec DLP"),
-        ("puppet",           "Puppet"),
-        ("active_directory", "Active Directory"),
-        ("google_workspace", "Google Workspace"),
-        ("hibob",            "HiBob"),
-        ("cloudsoc",         "Symantec CloudSOC"),
-    ]
 
     try:
         async with AsyncSessionLocal() as db:
-            for itype, display_name in INTEGRATIONS:
+            retired = (await db.execute(
+                select(IntegrationConfig).where(
+                    IntegrationConfig.integration_type.in_(RETIRED_INTEGRATION_TYPES)
+                )
+            )).scalars().all()
+            for config in retired:
+                await db.delete(config)
+            for itype, display_name in INTEGRATION_DEFAULTS:
                 existing = (await db.execute(
                     select(IntegrationConfig).where(IntegrationConfig.integration_type == itype)
                 )).scalar_one_or_none()

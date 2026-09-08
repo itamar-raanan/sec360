@@ -100,6 +100,30 @@ def require_role(required_role: str):
     return checker
 
 
+def require_connected_integration(integration_type: str):
+    """Block an integration-owned feature until its product is connected."""
+    async def checker(
+        _: AuthUser = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> None:
+        from app.models.integration import IntegrationConfig
+
+        integration = (await db.execute(
+            select(IntegrationConfig).where(
+                IntegrationConfig.integration_type == integration_type,
+                IntegrationConfig.is_enabled.is_(True),
+                IntegrationConfig.status == "connected",
+            )
+        )).scalar_one_or_none()
+        if integration is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Connect the {integration_type} integration to use this feature.",
+            )
+
+    return checker
+
+
 async def audit_action(
     action: str,
     resource_type: str | None,

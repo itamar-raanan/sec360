@@ -99,29 +99,6 @@ async def collect_sentinelone():
         await _update_integration_status("sentinelone", False, error=str(e))
 
 
-async def collect_hibob():
-    config_id, credentials = await _get_integration_config("hibob")
-    if not credentials:
-        logger.debug("Scheduler: HiBob not configured or disabled, skipping")
-        return
-
-    logger.info("Scheduler: Running HiBob collection")
-    try:
-        from app.collectors.hibob import HiBobCollector
-        async with AsyncSessionLocal() as db:
-            collector = HiBobCollector(credentials=credentials, db=db)
-            result = await collector.collect()
-            await db.commit()
-
-        if result.get("error"):
-            await _update_integration_status("hibob", False, error=result["error"])
-        else:
-            await _update_integration_status("hibob", True, records=result.get("records_synced", 0))
-    except Exception as e:
-        logger.error(f"Scheduler: HiBob collection failed: {e}", exc_info=True)
-        await _update_integration_status("hibob", False, error=str(e))
-
-
 async def collect_google():
     config_id, credentials = await _get_integration_config("google_workspace")
     if not credentials:
@@ -168,6 +145,50 @@ async def collect_symantec():
         await _update_integration_status("symantec_dlp", False, error=str(e))
 
 
+async def collect_catalog_product(integration_type: str, display_name: str):
+    """Collect a configured store product that does not need bespoke scheduling."""
+    _, credentials = await _get_integration_config(integration_type)
+    if not credentials:
+        logger.debug("Scheduler: %s not configured or disabled, skipping", display_name)
+        return
+
+    logger.info("Scheduler: Running %s collection", display_name)
+    try:
+        from app.integrations.registry import get_collector_class
+
+        collector_class = get_collector_class(integration_type)
+        if collector_class is None:
+            raise RuntimeError(f"No collector registered for {integration_type}")
+        async with AsyncSessionLocal() as db:
+            collector = collector_class(credentials=credentials, db=db)
+            result = await collector.collect()
+            await db.commit()
+
+        if result.get("error"):
+            await _update_integration_status(
+                integration_type, False, error=result["error"]
+            )
+        else:
+            await _update_integration_status(
+                integration_type, True, records=result.get("records_synced", 0)
+            )
+    except Exception as exc:
+        logger.error("Scheduler: %s collection failed: %s", display_name, exc, exc_info=True)
+        await _update_integration_status(integration_type, False, error=str(exc))
+
+
+async def collect_puppet():
+    await collect_catalog_product("puppet", "Puppet")
+
+
+async def collect_active_directory():
+    await collect_catalog_product("active_directory", "Active Directory")
+
+
+async def collect_adfs():
+    await collect_catalog_product("adfs", "ADFS")
+
+
 async def send_scheduled_reports():
     """Check for due scheduled reports and send them."""
     from sqlalchemy import select
@@ -206,29 +227,6 @@ async def send_scheduled_reports():
             logger.info("Sent scheduled report '%s' to %s", r.name, r.recipients)
         except Exception as e:
             logger.error("Failed to send scheduled report '%s': %s", r.name, e, exc_info=True)
-
-
-async def collect_cloudsoc():
-    config_id, credentials = await _get_integration_config("cloudsoc")
-    if not credentials:
-        logger.debug("Scheduler: CloudSOC not configured or disabled, skipping")
-        return
-
-    logger.info("Scheduler: Running CloudSOC collection")
-    try:
-        from app.collectors.cloudsoc import CloudSOCCollector
-        async with AsyncSessionLocal() as db:
-            collector = CloudSOCCollector(credentials=credentials, db=db)
-            result = await collector.collect()
-            await db.commit()
-
-        if result.get("error"):
-            await _update_integration_status("cloudsoc", False, error=result["error"])
-        else:
-            await _update_integration_status("cloudsoc", True, records=result.get("records_synced", 0))
-    except Exception as e:
-        logger.error(f"Scheduler: CloudSOC collection failed: {e}", exc_info=True)
-        await _update_integration_status("cloudsoc", False, error=str(e))
 
 
 async def purge_google_workspace_data():
@@ -328,13 +326,10 @@ async def collect_all_and_process():
 
     Ordering matters:
     - JumpCloud first: creates the canonical endpoint + user records.
-    - SentinelOne second: enriches those records with agent data.
-    - Symantec third: further enriches with DLP agent data.
-    Running these three sequentially avoids deadlocks from concurrent writes
+    - Directory and infrastructure products establish canonical inventory.
+    - SentinelOne and Symantec then enrich endpoints with security posture.
+    Running these collectors sequentially avoids deadlocks from concurrent writes
     to the same endpoint/agent rows.
-
-    HiBob and Google Workspace only write to the users table and are run in
-    parallel with each other after the endpoint collectors finish.
     """
     import asyncio
 
@@ -342,23 +337,24 @@ async def collect_all_and_process():
 
     # ── Phase 1: endpoint collectors (sequential to avoid row-level deadlocks) ──
     for name, coro_fn in (
-        ("jumpcloud",   collect_jumpcloud),
-        ("sentinelone", collect_sentinelone),
-        ("symantec",    collect_symantec),
+        ("jumpcloud",       collect_jumpcloud),
+        ("active_directory", collect_active_directory),
+        ("puppet",          collect_puppet),
+        ("sentinelone",     collect_sentinelone),
+        ("symantec",        collect_symantec),
     ):
         try:
             await coro_fn()
         except Exception as e:
             logger.error("Scheduler: %s collector raised: %s", name, e, exc_info=True)
 
-    # ── Phase 2: user/HR + activity collectors (parallel) ──
-    hr_results = await asyncio.gather(
-        collect_hibob(),
+    # ── Phase 2: independent identity services (parallel) ──
+    identity_results = await asyncio.gather(
         collect_google(),
-        collect_cloudsoc(),
+        collect_adfs(),
         return_exceptions=True,
     )
-    for name, r in zip(("hibob", "google", "cloudsoc"), hr_results):
+    for name, r in zip(("google", "adfs"), identity_results):
         if isinstance(r, Exception):
             logger.error("Scheduler: %s collector raised: %s", name, r, exc_info=True)
 

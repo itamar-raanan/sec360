@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Activity, AlertTriangle, ArrowRight, CheckCircle2, CircleAlert,
   Database, HardDrive, Monitor, MousePointer, Plug, Radar,
-  Server, Shield, ShieldCheck, ShieldOff, UserCheck, Wifi,
+  Server, Shield, ShieldCheck, ShieldOff, Wifi,
 } from 'lucide-react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import { formatDistanceToNow } from 'date-fns'
@@ -25,7 +25,6 @@ const INTEGRATION_ICONS: Record<string, React.ElementType> = {
   sentinelone: Shield,
   symantec_dlp: Database,
   google_workspace: Wifi,
-  hibob: UserCheck,
 }
 
 type AttentionItem = {

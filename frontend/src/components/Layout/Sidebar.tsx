@@ -12,6 +12,7 @@ import {
 import { useAuthStore } from '../../store/auth'
 import { useThemeStore } from '../../store/theme'
 import { visibleNavigation } from './navigation'
+import { useConnectedIntegrations } from '../../hooks/useConnectedIntegrations'
 
 interface SidebarProps {
   collapsed?: boolean
@@ -23,13 +24,14 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
   const { user, logout } = useAuthStore()
   const { theme, toggle: toggleTheme } = useThemeStore()
   const navigate = useNavigate()
+  const { connected } = useConnectedIntegrations()
 
   const handleLogout = async () => {
     await logout()
     navigate('/login')
   }
 
-  const visibleItems = visibleNavigation(user?.role)
+  const visibleItems = visibleNavigation(user?.role, connected)
 
   return (
     <aside

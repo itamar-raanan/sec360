@@ -272,13 +272,8 @@ async def get_user_identity(
 
 
 def _infer_sources(user: User) -> list[str]:
-    """Guess which systems this user was synced from based on available fields."""
-    sources = []
-    if user.email:
-        sources.append("jumpcloud")
-    if user.department or user.manager:
-        sources.append("hibob")
-    return sources
+    """Return the collector provenance stored on the canonical user."""
+    return sorted((user.sources or {}).keys())
 
 
 @router.post("/correlate", status_code=200)

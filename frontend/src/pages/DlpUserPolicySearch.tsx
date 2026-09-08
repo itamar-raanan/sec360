@@ -42,6 +42,7 @@ const csvColumns: Array<[keyof DlpPolicyExclusion, string]> = [
   ['personal_email_excluded_domains', 'PERSONAL_EMAIL_EXCLUDED_DOMAINS'],
   ['personal_email_max_recipients', 'PERSONAL_EMAIL_MAX_RECIPIENTS'],
   ['modified_date', 'MODIFIED_DATE'],
+  ['modified_by_name', 'MODIFIED_BY_NAME'],
   ['modified_by_id', 'MODIFIED_BY_ID'],
   ['object_uuid', 'OBJECT_UUID'],
 ]
@@ -171,6 +172,8 @@ export default function DlpUserPolicySearch() {
         item.ip_addresses,
         item.url_domains,
         item.personal_email_excluded_domains,
+        item.modified_by_name,
+        item.modified_by_id,
         item.object_uuid,
       ].some(value => normalize(value).includes(needle))
     })
@@ -377,7 +380,14 @@ export default function DlpUserPolicySearch() {
                               {item.policy_id != null && <div className="mt-1 font-mono text-[10px]" style={{ color: 'var(--text-4)' }}>Policy {String(item.policy_id)}</div>}
                             </td>
                             <td className="px-3 py-3.5 align-top"><StatusPill value={item.object_status} /></td>
-                            <td className="whitespace-nowrap px-3 py-3.5 align-top text-[11px]" style={{ color: 'var(--text-3)' }}>{formatDate(item.modified_date)}</td>
+                            <td className="whitespace-nowrap px-3 py-3.5 align-top">
+                              <div className="text-[11px]" style={{ color: 'var(--text-3)' }}>{formatDate(item.modified_date)}</div>
+                              {(item.modified_by_name || item.modified_by_id != null) && (
+                                <div className="mt-1 max-w-[190px] truncate text-[10px]" style={{ color: 'var(--text-4)' }} title={item.modified_by_name || `User ID ${String(item.modified_by_id)}`}>
+                                  by {item.modified_by_name || `User ID ${String(item.modified_by_id)}`}
+                                </div>
+                              )}
+                            </td>
                           </tr>
                           {isExpanded && (
                             <tr className="border-b" style={{ borderColor: 'var(--border)', background: 'color-mix(in srgb, var(--surface-3) 62%, transparent)' }}>
@@ -395,7 +405,12 @@ export default function DlpUserPolicySearch() {
                                   <DetailField label="Personal email excluded domains" value={item.personal_email_excluded_domains} mono />
                                   <DetailField label="Personal email breadth" value={item.personal_email_breadth} />
                                   <DetailField label="Max personal email recipients" value={item.personal_email_max_recipients} />
-                                  <DetailField label="Modified by ID" value={item.modified_by_id} mono />
+                                  <DetailField
+                                    label="Last editor"
+                                    value={item.modified_by_name
+                                      ? `${item.modified_by_name}${item.modified_by_id != null ? ` (ID ${String(item.modified_by_id)})` : ''}`
+                                      : item.modified_by_id != null ? `User ID ${String(item.modified_by_id)}` : null}
+                                  />
                                   <DetailField label="Usage" value={item.used_as} />
                                 </div>
                               </td>

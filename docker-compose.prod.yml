@@ -64,6 +64,11 @@ services:
       - .env
     environment:
       DB_URL: postgresql+asyncpg://${POSTGRES_USER:-sec360}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sec360}
+    # setup.sh copies the host's first usable resolver into HOST_DNS. Docker's
+    # embedded DNS still handles Compose service names and forwards other
+    # lookups to this resolver, including private on-prem zones.
+    dns:
+      - ${HOST_DNS:-127.0.0.11}
     depends_on:
       postgres:
         condition: service_healthy

@@ -60,7 +60,7 @@ echo ""
 # ── 2. Environment file ───────────────────────────────────────────────────────
 info "Setting up environment..."
 
-if [[ -f ".env" ]]; then
+if [[ -s ".env" ]]; then
   warn ".env already exists — skipping creation. Edit it manually if needed."
 else
   if [[ ! -f ".env.example" ]]; then
@@ -72,17 +72,67 @@ else
   if command -v python3 &>/dev/null; then
     JWT_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
     DB_PASS=$(python3 -c "import secrets; print('sec360_' + secrets.token_hex(12))")
+    CREDENTIALS_KEY=$(python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
   else
     JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "CHANGE_ME_$(date +%s)")
     DB_PASS="sec360_$(openssl rand -hex 12 2>/dev/null || echo 'changeme')"
+    CREDENTIALS_KEY=$(openssl rand -base64 32 2>/dev/null | tr '+/' '-_' | tr -d '\n')
   fi
 
   # Patch .env with generated values
   sed -i "s|CHANGE_ME_generate_a_64_char_random_hex_string|${JWT_SECRET}|" .env
   sed -i "s|CHANGE_ME_strong_password_here|${DB_PASS}|" .env
+  sed -i "s|CHANGE_ME_generate_a_fernet_key|${CREDENTIALS_KEY}|" .env
 
   success ".env created with generated secrets."
   warn "Review .env and update CORS_ORIGINS with your actual hostname before going live."
+fi
+
+# Repair the placeholder left by older setup versions, but never rotate a real
+# key because existing integration credentials depend on it for decryption.
+if ! grep -q '^CREDENTIALS_ENCRYPTION_KEY=' .env \
+  || grep -q '^CREDENTIALS_ENCRYPTION_KEY=CHANGE_ME_' .env; then
+  if command -v python3 &>/dev/null; then
+    CREDENTIALS_KEY=$(python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
+  else
+    CREDENTIALS_KEY=$(openssl rand -base64 32 2>/dev/null | tr '+/' '-_' | tr -d '\n')
+  fi
+  if grep -q '^CREDENTIALS_ENCRYPTION_KEY=' .env; then
+    sed -i "s|^CREDENTIALS_ENCRYPTION_KEY=.*|CREDENTIALS_ENCRYPTION_KEY=${CREDENTIALS_KEY}|" .env
+  else
+    echo "CREDENTIALS_ENCRYPTION_KEY=${CREDENTIALS_KEY}" >> .env
+  fi
+  success "Credential-encryption key generated."
+fi
+
+# Use the same upstream DNS resolver as the host for private on-prem zones.
+# Preserve an explicit administrator override across setup reruns.
+HOST_DNS=$(awk -F= '$1 == "HOST_DNS" && length($2) > 0 { print $2; exit }' .env)
+if [[ -n "$HOST_DNS" ]]; then
+  success "Container DNS is configured to use ${HOST_DNS}."
+else
+  # systemd-resolved commonly exposes only a loopback stub in
+  # /etc/resolv.conf, so prefer its upstream resolver file when present.
+  for RESOLV_FILE in /run/systemd/resolve/resolv.conf /etc/resolv.conf; do
+    if [[ -f "$RESOLV_FILE" ]]; then
+      HOST_DNS=$(awk '
+        $1 == "nameserver" && $2 !~ /^127\./ && $2 != "::1" { print $2; exit }
+      ' "$RESOLV_FILE")
+      [[ -n "$HOST_DNS" ]] && break
+    fi
+  done
+fi
+
+if [[ -n "$HOST_DNS" ]] && ! grep -Eq '^HOST_DNS=.+$' .env; then
+  if grep -q '^HOST_DNS=' .env; then
+    sed -i "s|^HOST_DNS=.*|HOST_DNS=${HOST_DNS}|" .env
+  else
+    echo "HOST_DNS=${HOST_DNS}" >> .env
+  fi
+  success "Container DNS configured to use host resolver ${HOST_DNS}."
+elif [[ -z "$HOST_DNS" ]]; then
+  warn "Could not detect a non-loopback host DNS resolver."
+  warn "Set HOST_DNS=<corporate-dns-ip> in .env if private names do not resolve."
 fi
 
 echo ""

@@ -115,6 +115,27 @@ async def test_collector_preserves_exact_risk_data_and_full_refreshes(db_session
         await collector.client.aclose()
 
 
+async def test_collector_bulk_upserts_multiple_batches_and_removes_stale_rows(db_session):
+    collector = SentinelOneCollector(credentials={"api_key": "test"}, db=db_session)
+    try:
+        findings = [_risk(f"risk-{index}") for index in range(1005)]
+        assert await collector._upsert_application_vulnerabilities(findings, {}) == 1005
+        await db_session.commit()
+        assert await db_session.scalar(
+            select(func.count()).select_from(ApplicationVulnerability)
+        ) == 1005
+
+        replacement = _risk("risk-0", severity="CRITICAL")
+        assert await collector._upsert_application_vulnerabilities([replacement], {}) == 1
+        await db_session.commit()
+
+        remaining = (await db_session.execute(select(ApplicationVulnerability))).scalar_one()
+        assert remaining.sentinelone_id == "risk-0"
+        assert remaining.severity == "CRITICAL"
+    finally:
+        await collector.client.aclose()
+
+
 async def test_vulnerability_api_summary_filters_detail_and_csv(
     client: AsyncClient, db_session, admin_user
 ):

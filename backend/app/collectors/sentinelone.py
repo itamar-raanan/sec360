@@ -184,93 +184,143 @@ class SentinelOneCollector(BaseCollector):
         findings: list[dict[str, Any]],
         agent_id_map: dict[str, str],
     ) -> int:
-        """Upsert a successful full snapshot and remove findings no longer returned."""
-        from sqlalchemy import select
-        from app.engines.correlation import find_endpoint_by_hostname
-        from app.models.application import ApplicationVulnerability
+        """Bulk-upsert a full snapshot and remove findings no longer returned.
 
-        existing = {
-            row.sentinelone_id: row
-            for row in (await self.db.execute(select(ApplicationVulnerability))).scalars().all()
-        }
-        seen: set[str] = set()
-        endpoint_name_cache: dict[str, uuid.UUID | None] = {}
+        Application Management tenants can return hundreds of thousands of rows.
+        Loading every existing ORM object and flushing one object at a time makes
+        that volume effectively unbounded and prevents the surrounding sync from
+        committing.  Build plain mappings and let the database perform batched
+        ``ON CONFLICT`` upserts instead.
+        """
+        from sqlalchemy import delete, select
+        from app.engines.correlation import normalize_hostname
+        from app.models.application import ApplicationVulnerability
+        from app.models.endpoint import Endpoint
+
+        dialect_name = self.db.get_bind().dialect.name
+        if dialect_name == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as dialect_insert
+        elif dialect_name == "sqlite":
+            from sqlalchemy.dialects.sqlite import insert as dialect_insert
+        else:
+            raise RuntimeError(
+                f"Application vulnerability bulk sync does not support {dialect_name}"
+            )
+
         now = datetime.now(timezone.utc)
+
+        # Resolve the uncommon hostname fallback once, rather than issuing a
+        # database query for every finding that lacks a usable SentinelOne ID.
+        endpoint_name_map: dict[str, uuid.UUID] = {}
+        endpoints = (await self.db.execute(select(Endpoint))).scalars().all()
+        for endpoint in sorted(endpoints, key=lambda item: item.source != "jumpcloud"):
+            normalized = normalize_hostname(endpoint.hostname)
+            if normalized and normalized not in endpoint_name_map:
+                endpoint_name_map[normalized] = endpoint.id
+
+        table = ApplicationVulnerability.__table__
+        update_column_names = [
+            column.name
+            for column in table.columns
+            if column.name not in {"id", "sentinelone_id"}
+        ]
+        # Keep each statement comfortably below asyncpg/PostgreSQL's bind
+        # parameter limit. Only the current batch is materialized, which avoids
+        # duplicating the already-large SentinelOne response in memory.
+        batch_size = 500
+        batch: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+
+        async def flush_batch() -> None:
+            if not batch:
+                return
+            statement = dialect_insert(table).values(batch)
+            statement = statement.on_conflict_do_update(
+                index_elements=[table.c.sentinelone_id],
+                set_={
+                    name: getattr(statement.excluded, name)
+                    for name in update_column_names
+                },
+            )
+            await self.db.execute(statement)
+            batch.clear()
 
         for raw in findings:
             sentinelone_id = str(raw.get("id") or "").strip()
             if not sentinelone_id:
                 logger.warning("SentinelOne: skipping vulnerability finding without id")
                 continue
-            seen.add(sentinelone_id)
-            finding = existing.get(sentinelone_id)
-            if not finding:
-                finding = ApplicationVulnerability(
-                    sentinelone_id=sentinelone_id,
-                    application=str(raw.get("application") or raw.get("applicationName") or "Unknown application"),
-                    application_name=str(raw.get("applicationName") or raw.get("application") or "Unknown application"),
-                    cve_id=str(raw.get("cveId") or "Unknown CVE"),
-                    endpoint_name=str(raw.get("endpointName") or "Unknown endpoint"),
-                    raw_json=raw,
-                    synced_at=now,
-                )
-                self.db.add(finding)
+            if sentinelone_id in seen_ids:
+                continue
+            seen_ids.add(sentinelone_id)
 
             s1_endpoint_id = str(raw.get("endpointId") or "").strip() or None
             correlated_id = agent_id_map.get(s1_endpoint_id or "")
-            if correlated_id:
-                finding.endpoint_id = uuid.UUID(correlated_id)
-            elif raw.get("endpointName"):
-                endpoint_name = str(raw["endpointName"])
-                if endpoint_name not in endpoint_name_cache:
-                    endpoint = await find_endpoint_by_hostname(self.db, endpoint_name)
-                    endpoint_name_cache[endpoint_name] = endpoint.id if endpoint else None
-                finding.endpoint_id = endpoint_name_cache[endpoint_name]
+            endpoint_name = str(raw.get("endpointName") or "Unknown endpoint")
+            endpoint_id = (
+                uuid.UUID(correlated_id)
+                if correlated_id
+                else endpoint_name_map.get(normalize_hostname(endpoint_name))
+            )
+            batch.append({
+                "id": uuid.uuid4(),
+                "sentinelone_id": sentinelone_id,
+                "endpoint_id": endpoint_id,
+                "sentinelone_endpoint_id": s1_endpoint_id,
+                "application": str(raw.get("application") or raw.get("applicationName") or "Unknown application"),
+                "application_name": str(raw.get("applicationName") or raw.get("application") or "Unknown application"),
+                "application_vendor": raw.get("applicationVendor"),
+                "application_version": raw.get("applicationVersion"),
+                "cve_id": str(raw.get("cveId") or "Unknown CVE"),
+                "cvss_version": raw.get("cvssVersion"),
+                "nvd_cvss_version": raw.get("nvdCvssVersion"),
+                "nvd_base_score": self._parse_float(raw.get("nvdBaseScore")),
+                "risk_score": self._parse_float(raw.get("riskScore")),
+                "severity": str(raw.get("severity") or "UNKNOWN").upper(),
+                "endpoint_name": endpoint_name,
+                "endpoint_type": raw.get("endpointType"),
+                "os_type": raw.get("osType"),
+                "days_detected": self._parse_int(raw.get("daysDetected")),
+                "detection_date": self._parse_datetime(raw.get("detectionDate")),
+                "published_date": self._parse_datetime(raw.get("publishedDate")),
+                "last_scan_date": self._parse_datetime(raw.get("lastScanDate")),
+                "last_scan_result": raw.get("lastScanResult"),
+                "exploit_code_maturity": raw.get("exploitCodeMaturity"),
+                "remediation_level": raw.get("remediationLevel"),
+                "report_confidence": raw.get("reportConfidence"),
+                "mitigation_status": raw.get("mitigationStatus"),
+                "mitigation_status_change_time": self._parse_datetime(raw.get("mitigationStatusChangeTime")),
+                "mitigation_status_changed_by": raw.get("mitigationStatusChangedBy"),
+                "mitigation_status_reason": raw.get("mitigationStatusReason"),
+                "status": raw.get("status"),
+                "mark_type": raw.get("markType"),
+                "marked_by": raw.get("markedBy"),
+                "marked_date": self._parse_datetime(raw.get("markedDate")),
+                "reason": raw.get("reason"),
+                "raw_json": raw,
+                "synced_at": now,
+            })
+            if len(batch) >= batch_size:
+                await flush_batch()
+                if len(seen_ids) % 25_000 == 0:
+                    logger.info(
+                        "SentinelOne: imported %d application vulnerability findings",
+                        len(seen_ids),
+                    )
 
-            finding.sentinelone_endpoint_id = s1_endpoint_id
-            finding.application = str(raw.get("application") or raw.get("applicationName") or "Unknown application")
-            finding.application_name = str(raw.get("applicationName") or raw.get("application") or "Unknown application")
-            finding.application_vendor = raw.get("applicationVendor")
-            finding.application_version = raw.get("applicationVersion")
-            finding.cve_id = str(raw.get("cveId") or "Unknown CVE")
-            finding.cvss_version = raw.get("cvssVersion")
-            finding.nvd_cvss_version = raw.get("nvdCvssVersion")
-            finding.nvd_base_score = self._parse_float(raw.get("nvdBaseScore"))
-            finding.risk_score = self._parse_float(raw.get("riskScore"))
-            finding.severity = str(raw.get("severity") or "UNKNOWN").upper()
-            finding.endpoint_name = str(raw.get("endpointName") or "Unknown endpoint")
-            finding.endpoint_type = raw.get("endpointType")
-            finding.os_type = raw.get("osType")
-            finding.days_detected = self._parse_int(raw.get("daysDetected"))
-            finding.detection_date = self._parse_datetime(raw.get("detectionDate"))
-            finding.published_date = self._parse_datetime(raw.get("publishedDate"))
-            finding.last_scan_date = self._parse_datetime(raw.get("lastScanDate"))
-            finding.last_scan_result = raw.get("lastScanResult")
-            finding.exploit_code_maturity = raw.get("exploitCodeMaturity")
-            finding.remediation_level = raw.get("remediationLevel")
-            finding.report_confidence = raw.get("reportConfidence")
-            finding.mitigation_status = raw.get("mitigationStatus")
-            finding.mitigation_status_change_time = self._parse_datetime(raw.get("mitigationStatusChangeTime"))
-            finding.mitigation_status_changed_by = raw.get("mitigationStatusChangedBy")
-            finding.mitigation_status_reason = raw.get("mitigationStatusReason")
-            finding.status = raw.get("status")
-            finding.mark_type = raw.get("markType")
-            finding.marked_by = raw.get("markedBy")
-            finding.marked_date = self._parse_datetime(raw.get("markedDate"))
-            finding.reason = raw.get("reason")
-            finding.raw_json = raw
-            finding.synced_at = now
+        await flush_batch()
 
-        for sentinelone_id, stale in existing.items():
-            if sentinelone_id not in seen:
-                await self.db.delete(stale)
+        stale_result = await self.db.execute(
+            delete(ApplicationVulnerability).where(ApplicationVulnerability.synced_at != now)
+        )
+        removed = stale_result.rowcount or 0
 
         await self.db.flush()
         logger.info(
             "SentinelOne: synced %d application vulnerabilities; removed %d stale findings",
-            len(seen), len(existing.keys() - seen),
+            len(seen_ids), removed,
         )
-        return len(seen)
+        return len(seen_ids)
 
     async def _upsert_agents(self, agents: list) -> tuple[int, dict]:
         import uuid as _uuid

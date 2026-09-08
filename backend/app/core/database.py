@@ -118,15 +118,9 @@ async def init_db():
             # D-1/R-4: external event ID — prevents duplicate inserts across concurrent collection runs
             "ALTER TABLE activity_events ADD COLUMN IF NOT EXISTS external_id VARCHAR(255)",
             "CREATE UNIQUE INDEX IF NOT EXISTS uix_activity_events_external_id ON activity_events (external_id) WHERE external_id IS NOT NULL",
+            # Removed feature storage. No retained feature references depend on it.
+            "DROP TABLE IF EXISTS ai_insights",
             # GlobalProtect retirement — remove stale records and schema fields.
-            """
-            DO $$
-            BEGIN
-                IF to_regclass('public.ai_insights') IS NOT NULL THEN
-                    DELETE FROM ai_insights WHERE insight_type = 'endpoints_missing_vpn';
-                END IF;
-            END $$
-            """,
             "DELETE FROM security_agents WHERE product_name::text = 'globalprotect'",
             "ALTER TABLE compliance_statuses DROP COLUMN IF EXISTS gp_version_ok",
             "ALTER TABLE compliance_statuses DROP COLUMN IF EXISTS gp_installed",

@@ -14,11 +14,7 @@ const Integrations = lazy(() => import('./pages/Integrations'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Reports = lazy(() => import('./pages/Reports'))
 const SsoMfa = lazy(() => import('./pages/SsoMfa'))
-const AIInsights = lazy(() => import('./pages/AIInsights'))
-const AIChat = lazy(() => import('./pages/AIChat'))
-const Investigation = lazy(() => import('./pages/Investigation'))
 const DlpUserPolicySearch = lazy(() => import('./pages/DlpUserPolicySearch'))
-const DataQuality = lazy(() => import('./pages/DataQuality'))
 const ApplicationVulnerabilities = lazy(() => import('./pages/ApplicationVulnerabilities'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
@@ -77,12 +73,8 @@ export default function App() {
         <Route path="/users" element={<Users />} />
         <Route path="/compliance" element={<Compliance />} />
         <Route path="/activity" element={<Activity />} />
-        <Route path="/investigation" element={<Investigation />} />
-        <Route path="/data-quality" element={<DataQuality />} />
         <Route path="/application-vulnerabilities" element={<ApplicationVulnerabilities />} />
         <Route path="/dlp-user-policy-search" element={<AnalystOnly><DlpUserPolicySearch /></AnalystOnly>} />
-        <Route path="/ai-insights" element={<AnalystOnly><AIInsights /></AnalystOnly>} />
-        <Route path="/ai-chat" element={<AIChat />} />
         <Route path="/reports" element={<AnalystOnly><Reports /></AnalystOnly>} />
         <Route path="/integrations" element={<AdminOnly><Integrations /></AdminOnly>} />
         <Route path="/security" element={<Navigate to="/settings" replace />} />

@@ -200,8 +200,8 @@ export default function Dashboard() {
             <span className="ui-status-chip font-mono">
               {latestSync ? `Fresh ${formatDistanceToNow(latestSync, { addSuffix: true })}` : 'No completed sync'}
             </span>
-            <button onClick={() => navigate('/investigation')} className="ui-primary-button">
-              Investigate <ArrowRight size={13} />
+            <button onClick={() => navigate('/endpoints?risk=critical')} className="ui-primary-button">
+              Review risk <ArrowRight size={13} />
             </button>
           </div>
         </section>
@@ -315,7 +315,7 @@ export default function Dashboard() {
 
         <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
           <section className="ui-command-surface overflow-hidden">
-            <SectionHeading eyebrow="Risk watchlist" title="Entities requiring investigation" action="Open investigation" onAction={() => navigate('/investigation')} />
+            <SectionHeading eyebrow="Risk watchlist" title="Entities requiring attention" action="Open endpoints" onAction={() => navigate('/endpoints?risk=critical')} />
             <div className="grid grid-cols-1 sm:grid-cols-2 sm:divide-x" style={{ borderColor: 'var(--border)' }}>
               <div>
                 <p className="ui-eyebrow px-5 pb-2 pt-4">Users</p>

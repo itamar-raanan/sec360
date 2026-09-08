@@ -141,11 +141,13 @@ All settings live in `.env`. The most important ones:
 
 Integration credentials (JumpCloud, SentinelOne, etc.) are managed through the **Integrations** page in the UI — you don't need to set them in `.env`.
 
+After the first startup, administrators can replace the HTTPS certificate from **Settings → HTTPS Certificate**. Upload the PEM/CRT certificate bundle and its matching unencrypted private key. SEC360 validates the pair and reloads nginx automatically; the certificate persists in the `sec360_tls_data` Docker volume.
+
 ---
 
 ## Data Persistence
 
-PostgreSQL data is stored in a named Docker volume `sec360_postgres_data`. It survives container restarts and upgrades.
+PostgreSQL data is stored in `sec360_postgres_data`, and the active HTTPS certificate is stored in `sec360_tls_data`. Both named Docker volumes survive container restarts and upgrades.
 
 ### Backup
 

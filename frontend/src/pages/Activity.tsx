@@ -383,7 +383,8 @@ export default function Activity() {
             className={selectClass} style={selectStyle}>
             <option value="">All sources</option>
             <option value="google_workspace">Google</option>
-            <option value="jumpcloud">JumpCloud</option>
+            <option value="adfs">ADFS</option>
+            <option value="active_directory">Active Directory</option>
           </select>
           <select value={isSuspicious} onChange={e => { setIsSuspicious(e.target.value); setPage(1) }}
             className={selectClass} style={selectStyle}>

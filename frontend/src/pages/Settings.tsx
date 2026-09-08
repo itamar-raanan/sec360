@@ -23,12 +23,14 @@ import {
   KeyRound,
   ExternalLink,
   Copy,
+  FileKey2,
+  Upload,
 } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
 import apiClient from '../api/client'
 import { useConfirm } from '../components/shared/ConfirmDialog'
 
-type Tab = 'users' | 'account' | 'platform' | 'sso' | 'audit'
+type Tab = 'users' | 'account' | 'platform' | 'sso' | 'certificate' | 'audit'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -1241,6 +1243,107 @@ function SsoTab() {
   )
 }
 
+// ── HTTPS certificate tab ───────────────────────────────────────────────────
+
+interface TlsCertificateStatus {
+  configured: boolean
+  valid: boolean
+  writable: boolean
+  subject?: string
+  issuer?: string
+  not_after?: string
+  dns_names?: string[]
+  fingerprint_sha256?: string
+}
+
+function CertificateTab() {
+  const queryClient = useQueryClient()
+  const certificateInput = useRef<HTMLInputElement>(null)
+  const keyInput = useRef<HTMLInputElement>(null)
+  const [certificate, setCertificate] = useState<File | null>(null)
+  const [privateKey, setPrivateKey] = useState<File | null>(null)
+  const [message, setMessage] = useState<{ type: 'error' | 'success'; msg: string } | null>(null)
+  const statusQuery = useQuery<TlsCertificateStatus>({
+    queryKey: ['tls-certificate'],
+    queryFn: () => apiClient.get('/settings/tls-certificate').then(response => response.data),
+  })
+  const uploadMutation = useMutation({
+    mutationFn: async () => {
+      if (!certificate || !privateKey) throw new Error('Select both the certificate and its private key.')
+      const data = new FormData()
+      data.append('certificate', certificate)
+      data.append('private_key', privateKey)
+      return apiClient.post('/settings/tls-certificate', data).then(response => response.data)
+    },
+    onSuccess: data => {
+      setMessage({ type: 'success', msg: data.message })
+      setCertificate(null)
+      setPrivateKey(null)
+      if (certificateInput.current) certificateInput.current.value = ''
+      if (keyInput.current) keyInput.current.value = ''
+      queryClient.invalidateQueries({ queryKey: ['tls-certificate'] })
+    },
+    onError: (error: { response?: { data?: { detail?: string } }; message?: string }) => {
+      setMessage({ type: 'error', msg: error.response?.data?.detail ?? error.message ?? 'Certificate upload failed' })
+    },
+  })
+  const current = statusQuery.data
+  const expiresInDays = current?.not_after
+    ? Math.ceil((new Date(current.not_after).getTime() - Date.now()) / 86_400_000)
+    : null
+  const pickerClass = 'group block cursor-pointer rounded-xl border border-[var(--border)] bg-[var(--surface-inset)] p-4 transition-[border-color,transform] duration-150 hover:border-[var(--border-lit)] active:scale-[0.99]'
+
+  return (
+    <div className="max-w-4xl space-y-5">
+      <div>
+        <h2 className="text-base font-semibold text-white">HTTPS certificate</h2>
+        <p className="mt-0.5 max-w-2xl text-xs leading-relaxed text-zinc-500">Replace the certificate served by SEC360. Files are validated as a matching pair before installation, and nginx reloads automatically.</p>
+      </div>
+      {message && <Alert type={message.type} msg={message.msg} />}
+      {statusQuery.isError && <Alert type="error" msg="Certificate status could not be loaded." />}
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+        <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-inset)]">
+          <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-inset-strong)] px-4 py-3">
+            <div className="flex items-center gap-2"><ShieldCheck size={15} className={current?.valid ? 'text-emerald-400' : 'text-zinc-500'} /><span className="text-xs font-semibold uppercase tracking-wider text-zinc-300">Active certificate</span></div>
+            {current && <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${current.valid ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400' : 'border-red-500/20 bg-red-500/10 text-red-400'}`}>{current.valid ? 'Valid' : 'Attention required'}</span>}
+          </div>
+          {statusQuery.isLoading ? (
+            <div className="space-y-3 p-4">{[72, 88, 56, 96].map(width => <div key={width} className="shimmer h-3 rounded" style={{ width: `${width}%` }} />)}</div>
+          ) : !current?.configured ? (
+            <div className="px-4 py-8 text-center"><FileKey2 size={28} className="mx-auto text-zinc-600" /><p className="mt-3 text-sm font-medium text-zinc-300">No certificate detected</p><p className="mt-1 text-xs text-zinc-500">Upload a certificate and matching private key.</p></div>
+          ) : current.error ? (
+            <div className="flex items-start gap-2 px-4 py-5 text-xs text-red-400"><AlertCircle size={14} className="mt-0.5 flex-shrink-0" /><span>{current.error}</span></div>
+          ) : (
+            <dl className="divide-y divide-[var(--border)] text-xs">
+              <div className="grid gap-1 px-4 py-3 sm:grid-cols-[110px_1fr]"><dt className="text-zinc-500">Subject</dt><dd className="break-all font-mono text-zinc-300">{current.subject}</dd></div>
+              <div className="grid gap-1 px-4 py-3 sm:grid-cols-[110px_1fr]"><dt className="text-zinc-500">Issuer</dt><dd className="break-all text-zinc-300">{current.issuer}</dd></div>
+              <div className="grid gap-1 px-4 py-3 sm:grid-cols-[110px_1fr]"><dt className="text-zinc-500">DNS names</dt><dd className="text-zinc-300">{current.dns_names?.join(', ') || 'None declared'}</dd></div>
+              <div className="grid gap-1 px-4 py-3 sm:grid-cols-[110px_1fr]"><dt className="text-zinc-500">Expires</dt><dd className={expiresInDays !== null && expiresInDays < 30 ? 'text-amber-400' : 'text-zinc-300'}>{current.not_after ? fmtDate(current.not_after) : 'Unknown'}{expiresInDays !== null ? ` · ${expiresInDays} days` : ''}</dd></div>
+              <div className="grid gap-1 px-4 py-3 sm:grid-cols-[110px_1fr]"><dt className="text-zinc-500">SHA-256</dt><dd className="break-all font-mono text-[10px] text-zinc-400">{current.fingerprint_sha256}</dd></div>
+            </dl>
+          )}
+        </section>
+
+        <aside className="space-y-3 border-t border-[var(--border)] pt-4 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
+          <div><p className="text-sm font-medium text-zinc-200">Install replacement</p><p className="mt-1 text-xs leading-relaxed text-zinc-500">Use a PEM/CRT certificate bundle and its unencrypted matching private key. The server certificate must be first.</p></div>
+          <label className={pickerClass}>
+            <input ref={certificateInput} type="file" accept=".pem,.crt,.cer,application/x-pem-file,application/pkix-cert" className="sr-only" onChange={event => { setMessage(null); setCertificate(event.target.files?.[0] ?? null) }} />
+            <span className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400"><Upload size={15} /></span><span className="min-w-0"><span className="block text-xs font-medium text-zinc-300">Certificate bundle</span><span className="mt-0.5 block truncate text-[10px] text-zinc-500">{certificate?.name ?? 'Choose .pem, .crt, or .cer'}</span></span></span>
+          </label>
+          <label className={pickerClass}>
+            <input ref={keyInput} type="file" accept=".pem,.key,application/x-pem-file" className="sr-only" onChange={event => { setMessage(null); setPrivateKey(event.target.files?.[0] ?? null) }} />
+            <span className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-800 text-zinc-400"><FileKey2 size={15} /></span><span className="min-w-0"><span className="block text-xs font-medium text-zinc-300">Private key</span><span className="mt-0.5 block truncate text-[10px] text-zinc-500">{privateKey?.name ?? 'Choose .pem or .key'}</span></span></span>
+          </label>
+          {!current?.writable && current && <p className="rounded-lg border border-amber-500/20 bg-amber-500/[0.07] px-3 py-2 text-xs text-amber-300">The certificate store is read-only. Recreate the containers with the updated Docker Compose configuration.</p>}
+          <button onClick={() => uploadMutation.mutate()} disabled={!certificate || !privateKey || uploadMutation.isPending || current?.writable === false} className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-[background-color,transform] duration-150 hover:bg-emerald-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-emerald-900 disabled:text-emerald-300/60"><Upload size={14} />{uploadMutation.isPending ? 'Validating and installing…' : 'Validate and install'}</button>
+          <p className="text-[10px] leading-relaxed text-zinc-600">A protected backup of the previous pair is retained. Private-key contents are never returned by the API or written to the audit log.</p>
+        </aside>
+      </div>
+    </div>
+  )
+}
+
 // ── Audit log tab ─────────────────────────────────────────────────────────────
 
 function AuditTab() {
@@ -1356,6 +1459,7 @@ export default function Settings() {
     { id: 'account', label: 'My Account', icon: User, adminOnly: false },
     { id: 'platform', label: 'Platform', icon: Settings2, adminOnly: true },
     { id: 'sso', label: 'Google SSO', icon: KeyRound, adminOnly: true },
+    { id: 'certificate', label: 'HTTPS Certificate', icon: FileKey2, adminOnly: true },
     { id: 'audit', label: 'Audit Log', icon: ClipboardList, adminOnly: true },
   ]
 
@@ -1394,6 +1498,7 @@ export default function Settings() {
         {tab === 'account' && <AccountTab />}
         {tab === 'platform' && isAdmin && <PlatformTab />}
         {tab === 'sso' && isAdmin && <SsoTab />}
+        {tab === 'certificate' && isAdmin && <CertificateTab />}
         {tab === 'audit' && isAdmin && <AuditTab />}
       </div>
     </div>

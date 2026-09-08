@@ -5,19 +5,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, get_current_user, require_role
+from app.api.deps import get_db, require_any_connected_integration, require_role
 from app.models.user import AuthUser
 from app.models.activity import ActivityEvent
 from app.schemas.activity import ActivityEventResponse
 
-router = APIRouter(prefix="/activity", tags=["activity"])
+router = APIRouter(
+    prefix="/activity",
+    tags=["activity"],
+    dependencies=[Depends(require_any_connected_integration(
+        "adfs", "active_directory", "google_workspace"
+    ))],
+)
 
 
 @router.get("", response_model=list[ActivityEventResponse])
 async def list_activity(
     response: Response,
     event_type: Optional[str] = Query(None),
-    source: Optional[str] = Query(None),   # e.g. "jumpcloud" or "google_workspace"
+    source: Optional[str] = Query(None),
     user_id: Optional[str] = Query(None),
     country: Optional[str] = Query(None),
     is_suspicious: Optional[bool] = Query(None),

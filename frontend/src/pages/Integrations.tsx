@@ -222,6 +222,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
     color: '#0ea5e9',
     icon: Building2,
     dataProduces: ['Users', 'Endpoints', 'Departments'],
+    unlocks: ['Activity'],
     docsHint: 'Requires a service account with read access to your AD tree',
     fields: [
       {
@@ -282,6 +283,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
     color: '#16a34a',
     icon: Globe,
     dataProduces: ['Login Events', 'App Usage', 'Users'],
+    unlocks: ['Activity'],
     docsHint: 'Requires a Service Account with domain-wide delegation',
     fields: [
       {
@@ -309,6 +311,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
     color: '#0284c7',
     icon: KeyRound,
     dataProduces: ['Federation Metadata', 'Service Health'],
+    unlocks: ['Activity'],
     docsHint: 'Uses the public federation metadata endpoint; no privileged account is required.',
     fields: [
       {
@@ -1384,6 +1387,11 @@ export default function Integrations() {
     connected: integrations.filter((c) => c.status === 'connected').length,
     custom: integrations.filter((c) => c.integration_type.startsWith('custom_')).length,
   }
+  const unlockedFeatureCount = new Set(
+    integrations
+      .filter(item => item.status === 'connected' && item.is_enabled)
+      .flatMap(item => getCatalogEntry(item.integration_type)?.unlocks ?? [])
+  ).size
 
   return (
     <div className="settings-split-layout absolute inset-0 flex overflow-hidden">
@@ -1481,9 +1489,7 @@ export default function Integrations() {
                 <div className="text-[10px] uppercase tracking-wider text-zinc-600">Connected</div>
               </div>
               <div className="pl-4">
-                <div className="text-lg font-semibold text-white">
-                  {integrations.filter((item) => item.status === 'connected' && (getCatalogEntry(item.integration_type)?.unlocks?.length ?? 0) > 0).length}
-                </div>
+                <div className="text-lg font-semibold text-white">{unlockedFeatureCount}</div>
                 <div className="text-[10px] uppercase tracking-wider text-zinc-600">Feature packs</div>
               </div>
             </div>

@@ -23,6 +23,7 @@ class DlpPolicyExclusion(BaseModel):
     personal_email_max_recipients: Any = None
     modified_date: str | None = None
     modified_by_id: Any = None
+    modified_by_name: str | None = None
     object_uuid: str | None = None
 
 

@@ -19,6 +19,7 @@ export interface DlpPolicyExclusion {
   personal_email_max_recipients: string | number | null
   modified_date: string | null
   modified_by_id: string | number | null
+  modified_by_name: string | null
   object_uuid: string | null
 }
 

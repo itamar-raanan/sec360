@@ -81,6 +81,7 @@ async def test_analyst_can_search_with_existing_oracle_credentials(
         "personal_email_max_recipients": None,
         "modified_date": "2026-08-31T12:00:00",
         "modified_by_id": 3,
+        "modified_by_name": "Administrator",
         "object_uuid": "test-uuid",
     }], False))
     monkeypatch.setattr(
@@ -100,5 +101,6 @@ async def test_analyst_can_search_with_existing_oracle_credentials(
     assert body["truncated"] is False
     assert body["items"][0]["policy_name"] == "Outbound source code"
     assert body["items"][0]["user_patterns"] == "alice@example.com"
+    assert body["items"][0]["modified_by_name"] == "Administrator"
     assert "db_password" not in response.text
     query_mock.assert_awaited_once()

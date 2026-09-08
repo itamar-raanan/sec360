@@ -1254,6 +1254,7 @@ interface TlsCertificateStatus {
   not_after?: string
   dns_names?: string[]
   fingerprint_sha256?: string
+  error?: string
 }
 
 function CertificateTab() {

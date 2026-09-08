@@ -7,7 +7,7 @@ import pyotp
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from pydantic import BaseModel
 from app.api.deps import get_db, get_current_user, audit_action
@@ -220,7 +220,50 @@ async def accept_invite(
     }
 
 
-# ── Google SAML SSO ───────────────────────────────────────────────────────────
+# ── SAML SSO ──────────────────────────────────────────────────────────────────
+
+SAML_PROVIDER_LABELS = {
+    "generic": "SSO",
+    "google": "Google Workspace",
+    "adfs": "ADFS",
+    "azure_ad": "Azure AD",
+    "entra": "Microsoft Entra ID",
+}
+
+
+def _saml_provider_label(provider: str | None) -> str:
+    return SAML_PROVIDER_LABELS.get(provider or "", "SSO")
+
+
+def _first_saml_value(value) -> str:
+    if isinstance(value, (list, tuple)):
+        value = value[0] if value else ""
+    return str(value or "").strip()
+
+
+def _extract_saml_email(auth) -> str:
+    """Resolve the login email across common Google, ADFS and Entra claims."""
+    attributes = auth.get_attributes() or {}
+    by_lower_name = {str(key).lower(): value for key, value in attributes.items()}
+    claim_names = (
+        "email",
+        "mail",
+        "emailaddress",
+        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
+        "userprincipalname",
+        "upn",
+        "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/upn",
+        "preferred_username",
+    )
+    for claim_name in claim_names:
+        candidate = _first_saml_value(by_lower_name.get(claim_name.lower()))
+        if candidate:
+            return candidate.lower()
+
+    # Email NameID is the standard configuration and remains the fallback for
+    # existing Google Workspace installations.
+    name_id = _first_saml_value(auth.get_nameid())
+    return name_id.lower()
 
 def _build_saml_request(request: Request, post_data: dict | None = None) -> dict:
     scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
@@ -244,7 +287,7 @@ async def _load_saml_cfg(db: AsyncSession, request: Request):
     if not cfg or not cfg.saml_enabled:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Google SSO is not enabled. Configure it in Settings → Google SSO.",
+            detail="SSO is not enabled. Configure it in Settings → SSO.",
         )
     # Derive base URL from the incoming request (respects X-Forwarded-Proto/Host)
     scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
@@ -263,7 +306,7 @@ async def _load_saml_cfg(db: AsyncSession, request: Request):
     if missing:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"SSO configuration incomplete. Missing: {', '.join(missing)}. Go to Settings → Google SSO.",
+            detail=f"SSO configuration incomplete. Missing: {', '.join(missing)}. Go to Settings → SSO.",
         )
     return cfg
 
@@ -298,22 +341,27 @@ def _saml_settings_dict(cfg) -> dict:
 
 @router.get("/saml/status")
 async def saml_status(db: AsyncSession = Depends(get_db)):
-    """Public endpoint — returns whether Google SSO is configured and enabled."""
+    """Public endpoint — returns whether SAML SSO is configured and enabled."""
     from app.models.system_settings import SystemSettings
     cfg = (await db.execute(select(SystemSettings).where(SystemSettings.id == 1))).scalar_one_or_none()
+    provider = cfg.saml_provider if cfg else "generic"
+    status_payload = {
+        "provider": provider or "generic",
+        "provider_label": _saml_provider_label(provider),
+    }
     if not cfg or not cfg.saml_enabled:
-        return {"enabled": False}
+        return {"enabled": False, **status_payload}
     missing = [f for f, v in [
         ("idp_entity_id", cfg.saml_idp_entity_id),
         ("idp_sso_url", cfg.saml_idp_sso_url),
         ("idp_cert", cfg.saml_idp_cert),
     ] if not v or not v.strip()]
-    return {"enabled": len(missing) == 0}
+    return {"enabled": len(missing) == 0, **status_payload}
 
 
 @router.get("/saml/login")
 async def saml_login(request: Request, db: AsyncSession = Depends(get_db)):
-    """Initiate Google SAML SSO — redirects the browser to Google's sign-in page."""
+    """Initiate SAML SSO — redirects the browser to the configured IdP."""
     from onelogin.saml2.auth import OneLogin_Saml2_Auth
 
     cfg = await _load_saml_cfg(db, request)
@@ -324,7 +372,7 @@ async def saml_login(request: Request, db: AsyncSession = Depends(get_db)):
 
 @router.post("/saml/acs")
 async def saml_acs(request: Request, db: AsyncSession = Depends(get_db)):
-    """Assertion Consumer Service — receives and validates Google's SAML response."""
+    """Assertion Consumer Service — receives and validates the IdP SAML response."""
     from onelogin.saml2.auth import OneLogin_Saml2_Auth
 
     cfg = await _load_saml_cfg(db, request)
@@ -338,18 +386,21 @@ async def saml_acs(request: Request, db: AsyncSession = Depends(get_db)):
         logger.warning("SAML ACS error: %s", reason)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"SSO authentication failed: {reason}")
 
-    email = auth.get_nameid()
+    email = _extract_saml_email(auth)
     if not email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="SAML response missing email (NameID)")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SAML response is missing a supported email or UPN claim",
+        )
 
-    saml_subject = auth.get_nameid()
+    saml_subject = _first_saml_value(auth.get_nameid()) or email
 
     # Build the frontend base URL early — needed for error redirects below
     scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
     host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
     frontend_base = f"{scheme}://{host}"
 
-    result = await db.execute(select(AuthUser).where(AuthUser.email == email))
+    result = await db.execute(select(AuthUser).where(func.lower(AuthUser.email) == email))
     user = result.scalar_one_or_none()
 
     if user is None:
@@ -360,7 +411,7 @@ async def saml_acs(request: Request, db: AsyncSession = Depends(get_db)):
         )
 
     if not user.is_active:
-        # Pending invitation: auto-activate on first SSO login (identity proven via Google)
+        # Pending invitation: auto-activate on first SSO login (identity proven by the IdP)
         if user.invitation_token:
             user.is_active = True
             user.invitation_token = None
@@ -443,7 +494,7 @@ async def saml_mfa_verify(
 
 @router.get("/saml/metadata")
 async def saml_metadata(request: Request, db: AsyncSession = Depends(get_db)):
-    """Return this service provider's SAML metadata XML (upload to Google Admin)."""
+    """Return this service provider's SAML metadata XML for the configured IdP."""
     from onelogin.saml2.auth import OneLogin_Saml2_Auth
 
     cfg = await _load_saml_cfg(db, request)

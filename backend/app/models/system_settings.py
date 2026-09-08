@@ -15,6 +15,8 @@ class SystemSettings(Base):
     risk_weight_edr_version: Mapped[float] = mapped_column(Float, default=20.0)
     risk_weight_no_dlp: Mapped[float] = mapped_column(Float, default=25.0)
     risk_weight_dlp_version: Mapped[float] = mapped_column(Float, default=15.0)
+    risk_weight_no_wss: Mapped[float] = mapped_column(Float, default=15.0)
+    risk_weight_wss_version: Mapped[float] = mapped_column(Float, default=10.0)
     risk_weight_no_user: Mapped[float] = mapped_column(Float, default=10.0)
     # Legacy columns kept for DB compatibility — no longer used in scoring
     risk_weight_no_encryption: Mapped[float] = mapped_column(Float, default=0.0)
@@ -44,7 +46,8 @@ class SystemSettings(Base):
         default=lambda: ["S1", "DLP", "WSS"],
     )
 
-    # Google SAML SSO
+    # SAML SSO. Existing installations default to Google for compatibility.
+    saml_provider: Mapped[str] = mapped_column(String(30), default="google")
     saml_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     saml_sp_entity_id: Mapped[str] = mapped_column(String(500), default="")
     saml_sp_acs_url: Mapped[str] = mapped_column(String(500), default="")

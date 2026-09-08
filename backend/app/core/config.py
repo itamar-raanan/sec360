@@ -62,9 +62,9 @@ class Settings(BaseSettings):
     # Set SAML_IDP_SSO_URL, SAML_IDP_ENTITY_ID, and SAML_IDP_CERT to enable SSO
     SAML_SP_ENTITY_ID: str = ""
     SAML_SP_ACS_URL: str = ""        # e.g. https://sec360.yourcompany.com/api/auth/saml/acs
-    SAML_IDP_ENTITY_ID: str = ""     # from Google Admin SAML app setup
-    SAML_IDP_SSO_URL: str = ""       # from Google Admin SAML app setup
-    SAML_IDP_CERT: str = ""          # x509 cert from Google Admin (no headers, no newlines)
+    SAML_IDP_ENTITY_ID: str = ""     # from the identity provider's SAML app setup
+    SAML_IDP_SSO_URL: str = ""       # identity provider SSO endpoint
+    SAML_IDP_CERT: str = ""          # identity provider x509 signing certificate
     SAML_SP_CERT: str = ""           # optional: SP signing cert
     SAML_SP_KEY: str = ""            # optional: SP signing private key
     SAML_DEFAULT_ROLE: str = "viewer"  # role assigned to auto-provisioned SSO users

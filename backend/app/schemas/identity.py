@@ -22,6 +22,8 @@ class ComplianceSummary(BaseModel):
     edr_version_ok: bool
     dlp_installed: bool
     dlp_version_ok: bool
+    wss_installed: bool = False
+    wss_version_ok: bool = False
     disk_encrypted: Optional[bool] = None
     device_control_enabled: Optional[bool] = None
     last_evaluated: datetime
@@ -70,6 +72,7 @@ class UserIdentity(BaseModel):
     total_endpoints: int = 0
     endpoints_with_sentinelone: int = 0
     endpoints_with_symantec: int = 0
+    endpoints_with_wss: int = 0
     endpoints_compliant: int = 0
     endpoints_non_compliant: int = 0
     all_agents_ok: bool = False

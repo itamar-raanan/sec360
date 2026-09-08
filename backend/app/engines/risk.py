@@ -92,6 +92,7 @@ async def endpoint_risk_score(endpoint_id: str, db: AsyncSession) -> dict:
     from app.models.endpoint import Endpoint
     from app.models.compliance import ComplianceStatus
     from app.models.system_settings import SystemSettings
+    from app.services.product_scope import normalize_product_tags
 
     result = await db.execute(select(Endpoint).where(Endpoint.id == endpoint_id))
     endpoint = result.scalars().first()
@@ -109,6 +110,7 @@ async def endpoint_risk_score(endpoint_id: str, db: AsyncSession) -> dict:
     w_no_dlp     = cfg.risk_weight_no_dlp      if cfg else 25.0
     w_dlp_ver    = cfg.risk_weight_dlp_version if cfg else 15.0
     w_no_user    = cfg.risk_weight_no_user     if cfg else 10.0
+    active_products = set(normalize_product_tags(cfg.endpoint_product_tags if cfg else None))
 
     score = 0.0
     factors = []
@@ -118,19 +120,19 @@ async def endpoint_risk_score(endpoint_id: str, db: AsyncSession) -> dict:
         factors.append("no_compliance_data")
         return {"score": min(score, 100), "level": risk_level(score), "factors": factors}
 
-    if not cs.edr_installed:
+    if "S1" in active_products and not cs.edr_installed:
         score += w_no_edr
         factors.append("no_edr")
 
-    if not cs.edr_version_ok:
+    if "S1" in active_products and not cs.edr_version_ok:
         score += w_edr_ver
         factors.append("edr_outdated")
 
-    if not cs.dlp_installed:
+    if "DLP" in active_products and not cs.dlp_installed:
         score += w_no_dlp
         factors.append("no_dlp")
 
-    if not cs.dlp_version_ok:
+    if "DLP" in active_products and not cs.dlp_version_ok:
         score += w_dlp_ver
         factors.append("dlp_outdated")
 

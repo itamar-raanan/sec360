@@ -12,6 +12,7 @@ import apiClient from '../api/client'
 import { usePanelStore } from '../store/panels'
 import { useConnectedIntegrations } from '../hooks/useConnectedIntegrations'
 import type { Endpoint, User as HrUser } from '../types'
+import { type EndpointProductTag, useEndpointProductTags } from '../hooks/useEndpointProductTags'
 
 interface NavCommand {
   kind: 'nav'
@@ -23,6 +24,7 @@ interface NavCommand {
   keywords?: string[]
   requiredIntegration?: string
   requiredAnyIntegration?: string[]
+  requiredProductTag?: EndpointProductTag
 }
 
 interface EndpointResult {
@@ -64,6 +66,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const navigate = useNavigate()
   const { openPanel } = usePanelStore()
   const { connected } = useConnectedIntegrations()
+  const { enabled: productEnabled } = useEndpointProductTags()
   const inputRef = useRef<HTMLInputElement>(null)
   const debouncedQuery = useDebounce(query, 200)
 
@@ -84,8 +87,9 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const quickCommands = React.useMemo<NavCommand[]>(() => [
     { kind: 'nav', id: 'critical-endpoints', label: 'Critical-risk endpoints', description: 'Open endpoints at the critical risk threshold', icon: Radar, action: () => navigate('/endpoints?risk=critical'), keywords: ['critical', 'risk', 'urgent', 'investigate'] },
     { kind: 'nav', id: 'non-compliant-endpoints', label: 'Non-compliant endpoints', description: 'Review devices outside the security baseline', icon: ShieldOff, action: () => navigate('/compliance?status=non_compliant'), keywords: ['failed', 'noncompliant', 'remediate'] },
-    { kind: 'nav', id: 'missing-edr', label: 'Endpoints missing EDR', description: 'Find devices without SentinelOne coverage', icon: ShieldOff, action: () => navigate('/compliance?issue=no_edr'), keywords: ['sentinelone', 'agent', 'coverage'] },
-    { kind: 'nav', id: 'missing-wss', label: 'Endpoints missing WSS', description: 'Find devices outside web security enforcement', icon: Wifi, action: () => navigate('/compliance?issue=no_network_security'), keywords: ['symantec', 'web', 'proxy', 'coverage'] },
+    { kind: 'nav', id: 'missing-edr', label: 'Endpoints missing EDR', description: 'Find devices without SentinelOne coverage', icon: ShieldOff, action: () => navigate('/compliance?issue=no_edr'), keywords: ['sentinelone', 'agent', 'coverage'], requiredProductTag: 'S1' },
+    { kind: 'nav', id: 'missing-dlp', label: 'Endpoints missing DLP', description: 'Find devices without Symantec DLP coverage', icon: Database, action: () => navigate('/compliance?issue=no_dlp'), keywords: ['symantec', 'dlp', 'agent', 'coverage'], requiredProductTag: 'DLP' },
+    { kind: 'nav', id: 'missing-wss', label: 'Endpoints missing WSS', description: 'Find devices outside web security enforcement', icon: Wifi, action: () => navigate('/compliance?issue=no_network_security'), keywords: ['symantec', 'web', 'proxy', 'coverage'], requiredProductTag: 'WSS' },
     { kind: 'nav', id: 'unassigned-endpoints', label: 'Unassigned endpoints', description: 'Find devices without a correlated owner', icon: UserX, action: () => navigate('/endpoints?owner=unassigned'), keywords: ['owner', 'correlation', 'orphan'] },
     { kind: 'nav', id: 'critical-app-vulnerabilities', label: 'Critical application vulnerabilities', description: 'Open critical SentinelOne software findings', icon: Bug, action: () => navigate('/application-vulnerabilities?severity=CRITICAL'), keywords: ['cve', 'critical', 'software', 'patch'], requiredIntegration: 'sentinelone' },
     { kind: 'nav', id: 'suspicious-activity', label: 'Suspicious activity', description: 'Open the filtered security event timeline', icon: Activity, action: () => navigate('/activity?is_suspicious=true'), keywords: ['events', 'alerts', 'anomalies'], requiredAnyIntegration: ['adfs', 'active_directory', 'google_workspace'] },
@@ -110,11 +114,15 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
       !command.requiredIntegration || connected.has(command.requiredIntegration)
     ).filter(command =>
       !command.requiredAnyIntegration || command.requiredAnyIntegration.some(type => connected.has(type))
+    ).filter(command =>
+      !command.requiredProductTag || productEnabled(command.requiredProductTag)
     )
     const availableQuick = quickCommands.filter(command =>
       !command.requiredIntegration || connected.has(command.requiredIntegration)
     ).filter(command =>
       !command.requiredAnyIntegration || command.requiredAnyIntegration.some(type => connected.has(type))
+    ).filter(command =>
+      !command.requiredProductTag || productEnabled(command.requiredProductTag)
     )
 
     if (!q) return availableNav
@@ -145,7 +153,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     }))
 
     return [...navMatches, ...epResults, ...userResults]
-  }, [query, searchData, navCommands, quickCommands, connected])
+  }, [query, searchData, navCommands, quickCommands, connected, productEnabled])
 
   useEffect(() => {
     if (open) {

@@ -12,15 +12,18 @@ import StatusBadge from '../shared/StatusBadge'
 import NoteBox from '../shared/NoteBox'
 import { useAuthStore } from '../../store/auth'
 import type { UserIdentity } from '../../types'
+import { useEndpointProductTags } from '../../hooks/useEndpointProductTags'
 
 const PRODUCT_LABELS: Record<string, string> = {
   sentinelone: 'SentinelOne', symantec: 'Symantec DLP',
+  symantec_wss: 'Symantec WSS',
   jumpcloud: 'JumpCloud', other: 'Other',
 }
 
 const PRODUCT_COLORS: Record<string, string> = {
   sentinelone: 'bg-emerald-500/15 text-purple-300 border-emerald-500/30',
   symantec: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30',
+  symantec_wss: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
   jumpcloud: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
   other: 'bg-gray-500/15 text-zinc-300 border-gray-500/30',
 }
@@ -82,6 +85,7 @@ function ComplianceCheck({ label, ok }: { label: string; ok: boolean }) {
 
 export function UserDetailPanel({ userId }: { userId: string }) {
   const { user: authUser } = useAuthStore()
+  const { enabled: productEnabled } = useEndpointProductTags()
   const { data: identity, isLoading, error } = useQuery<UserIdentity>({
     queryKey: ['user-identity', userId],
     queryFn: async () => (await apiClient.get(`/users/${userId}/identity`)).data,
@@ -210,8 +214,9 @@ export function UserDetailPanel({ userId }: { userId: string }) {
           <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Agent Coverage</div>
           <div className="grid grid-cols-2 gap-2">
             {[
-              { label: 'SentinelOne', count: identity.endpoints_with_sentinelone },
-              { label: 'Symantec DLP', count: identity.endpoints_with_symantec },
+              ...(productEnabled('S1') ? [{ label: 'SentinelOne', count: identity.endpoints_with_sentinelone }] : []),
+              ...(productEnabled('DLP') ? [{ label: 'Symantec DLP', count: identity.endpoints_with_symantec }] : []),
+              ...(productEnabled('WSS') ? [{ label: 'Symantec WSS', count: identity.endpoints_with_wss }] : []),
             ].map(({ label, count }) => {
               const ok = identity.total_endpoints > 0 && count === identity.total_endpoints
               return (
@@ -258,9 +263,17 @@ export function UserDetailPanel({ userId }: { userId: string }) {
                     {ep.username && <div className="text-zinc-400">User: <span className="text-zinc-200">{ep.username}</span></div>}
                     {ep.last_seen && <div className="text-zinc-400">Seen: <span className="text-zinc-200">{formatDistanceToNow(new Date(ep.last_seen), { addSuffix: true })}</span></div>}
                   </div>
-                  {ep.agents.length > 0 ? (
+                  {ep.agents.filter(a => (
+                    (a.product_name !== 'sentinelone' || productEnabled('S1'))
+                    && (a.product_name !== 'symantec' || productEnabled('DLP'))
+                    && (a.product_name !== 'symantec_wss' || productEnabled('WSS'))
+                  )).length > 0 ? (
                     <div className="flex flex-wrap gap-1">
-                      {ep.agents.map(a => <AgentPill key={a.id} product={a.product_name} status={a.status} />)}
+                      {ep.agents.filter(a => (
+                        (a.product_name !== 'sentinelone' || productEnabled('S1'))
+                        && (a.product_name !== 'symantec' || productEnabled('DLP'))
+                        && (a.product_name !== 'symantec_wss' || productEnabled('WSS'))
+                      )).map(a => <AgentPill key={a.id} product={a.product_name} status={a.status} />)}
                     </div>
                   ) : (
                     <div className="flex items-center gap-1.5 text-xs text-red-400">
@@ -270,14 +283,16 @@ export function UserDetailPanel({ userId }: { userId: string }) {
                   )}
                   {ep.compliance && (
                     <div className="border-t border-white/[0.08] pt-2.5 grid grid-cols-2 gap-y-1 gap-x-4 text-xs">
-                      <ComplianceCheck label="EDR installed"  ok={ep.compliance.edr_installed} />
-                      <ComplianceCheck label="EDR up to date" ok={ep.compliance.edr_version_ok} />
-                      <ComplianceCheck label="DLP installed"  ok={ep.compliance.dlp_installed} />
-                      <ComplianceCheck label="DLP up to date" ok={ep.compliance.dlp_version_ok} />
-                      {ep.compliance.disk_encrypted !== null && ep.compliance.disk_encrypted !== undefined && (
+                      {productEnabled('S1') && <ComplianceCheck label="EDR installed" ok={ep.compliance.edr_installed} />}
+                      {productEnabled('S1') && <ComplianceCheck label="EDR up to date" ok={ep.compliance.edr_version_ok} />}
+                      {productEnabled('DLP') && <ComplianceCheck label="DLP installed" ok={ep.compliance.dlp_installed} />}
+                      {productEnabled('DLP') && <ComplianceCheck label="DLP up to date" ok={ep.compliance.dlp_version_ok} />}
+                      {productEnabled('WSS') && <ComplianceCheck label="WSS installed" ok={ep.compliance.wss_installed} />}
+                      {productEnabled('WSS') && <ComplianceCheck label="WSS up to date" ok={ep.compliance.wss_version_ok} />}
+                      {productEnabled('S1') && ep.compliance.disk_encrypted !== null && ep.compliance.disk_encrypted !== undefined && (
                         <ComplianceCheck label="Disk encrypted" ok={ep.compliance.disk_encrypted} />
                       )}
-                      {ep.compliance.device_control_enabled !== null && ep.compliance.device_control_enabled !== undefined && (
+                      {productEnabled('S1') && ep.compliance.device_control_enabled !== null && ep.compliance.device_control_enabled !== undefined && (
                         <ComplianceCheck label="Device control" ok={ep.compliance.device_control_enabled} />
                       )}
                     </div>

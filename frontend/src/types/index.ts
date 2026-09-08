@@ -206,6 +206,7 @@ export interface UserIdentity extends User {
   total_endpoints: number
   endpoints_with_sentinelone: number
   endpoints_with_symantec: number
+  endpoints_with_wss: number
   endpoints_compliant: number
   endpoints_non_compliant: number
   all_agents_ok: boolean

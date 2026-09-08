@@ -95,7 +95,7 @@ export default function Users() {
     endpoint:   searchParams.get('endpoint') ? [searchParams.get('endpoint')!] : [],
   }))
 
-  // Sync URL params when navigating to this page from AI Insights deep links
+  // Sync URL params when navigating here from dashboard and command links.
   const prevParams = useRef(searchParams.toString())
   useEffect(() => {
     const paramsStr = searchParams.toString()

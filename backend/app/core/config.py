@@ -42,9 +42,6 @@ class Settings(BaseSettings):
     # Redis — optional; enables persistent brute-force rate limiting across restarts
     REDIS_URL: Optional[str] = None
 
-    # AI Engine — set ANTHROPIC_API_KEY to enable LLM-powered explanations
-    ANTHROPIC_API_KEY: Optional[str] = None
-
     # SentinelOne
     SENTINELONE_URL: Optional[str] = None
     SENTINELONE_API_TOKEN: Optional[str] = None
@@ -78,7 +75,9 @@ class Settings(BaseSettings):
     def SAML_ENABLED(self) -> bool:
         return bool(self.SAML_IDP_SSO_URL and self.SAML_IDP_ENTITY_ID and self.SAML_IDP_CERT)
 
-    model_config = {"env_file": ".env", "case_sensitive": True}
+    # Ignore retired keys left in an existing deployment's .env so feature
+    # removal cannot prevent the backend from starting after an upgrade.
+    model_config = {"env_file": ".env", "case_sensitive": True, "extra": "ignore"}
 
 
 settings = Settings()

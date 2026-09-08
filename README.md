@@ -67,11 +67,6 @@ docker-compose exec backend python -m app.seed
 - Filter by event type and suspicious flag
 - Real-time suspicious activity highlighting
 
-### Investigation
-- Search users and endpoints
-- User deep-dive: risk factors, MFA status, device list, activity timeline
-- Device deep-dive: compliance checks, agent status, owner info
-
 ## Data Sources
 
 | Source | Data Type | Endpoint |

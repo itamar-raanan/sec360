@@ -367,123 +367,6 @@ async def collect_all_and_process():
     logger.info("Scheduler: Full collection cycle complete")
 
 
-async def run_ai_analysis():
-    """Run AI anomaly detection engine and persist new insights."""
-    logger.info("Scheduler: Running AI analysis engine")
-    try:
-        from app.engines.anomaly_engine import run_all_detections
-        from app.engines.ai_explainer import generate_insight_description
-        from app.models.ai_insight import AIInsight
-        from app.models.user import User
-        from sqlalchemy import select, func, and_
-        from datetime import timedelta
-        import uuid as _uuid
-        from typing import Optional
-
-        async with AsyncSessionLocal() as db:
-            candidates = await run_all_detections(db, hours_back=24)
-            if not candidates:
-                logger.info("Scheduler: AI analysis — no anomalies detected")
-                return
-
-            logger.info("Scheduler: AI analysis found %d candidate insights", len(candidates))
-
-            # ── Bulk dedup: load all non-dismissed insights created in last 24h ──
-            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-            existing_rows = (await db.execute(
-                select(AIInsight.insight_type, AIInsight.user_id)
-                .where(
-                    and_(
-                        AIInsight.created_at >= cutoff,
-                        AIInsight.is_dismissed == False,  # noqa: E712
-                    )
-                )
-            )).fetchall()
-            # Set of (insight_type, user_id_str_or_None) already present
-            existing_keys: set[tuple[str, Optional[str]]] = {
-                (row[0], str(row[1]) if row[1] else None)
-                for row in existing_rows
-            }
-            logger.info("Scheduler: %d insight(s) already exist in dedup window", len(existing_keys))
-
-            # ── Bulk-load users referenced by per-user candidates ──
-            user_ids_needed = list({
-                _uuid.UUID(c["user_id"]) for c in candidates if c.get("user_id")
-            })
-            users_map: dict[_uuid.UUID, User] = {}
-            if user_ids_needed:
-                u_rows = (await db.execute(
-                    select(User).where(User.id.in_(user_ids_needed))
-                )).scalars().all()
-                users_map = {u.id: u for u in u_rows}
-
-            # ── Create new insights ──
-            created = 0
-            for c in candidates:
-                insight_type = c["insight_type"]
-                user_id_str: Optional[str] = c.get("user_id")
-                dedup_key = (insight_type, user_id_str)
-
-                if dedup_key in existing_keys:
-                    logger.debug("Scheduler: skipping duplicate %s (user=%s)", insight_type, user_id_str)
-                    continue
-
-                uid: Optional[_uuid.UUID] = None
-                if user_id_str:
-                    try:
-                        uid = _uuid.UUID(user_id_str)
-                    except ValueError:
-                        pass
-
-                user = users_map.get(uid) if uid else None
-                user_name = (user.full_name or user.email) if user else "Unknown"
-                user_email = user.email if user else ""
-                user_dept = user.department if user else None
-
-                try:
-                    description = await generate_insight_description(
-                        insight_type=insight_type,
-                        title=c["title"],
-                        evidence=c.get("evidence") or {},
-                        user_name=user_name,
-                        user_email=user_email,
-                        user_dept=user_dept,
-                    )
-                except Exception as desc_err:
-                    logger.warning(
-                        "Scheduler: description generation failed for %s: %s — using title as fallback",
-                        insight_type, desc_err,
-                    )
-                    description = c["title"]
-
-                try:
-                    db.add(AIInsight(
-                        insight_type=insight_type,
-                        severity=c["severity"],
-                        title=c["title"],
-                        description=description,
-                        user_id=uid,
-                        evidence=c.get("evidence"),
-                        event_ids=c.get("event_ids") or [],
-                        is_dismissed=False,
-                        is_new=True,
-                        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
-                    ))
-                    existing_keys.add(dedup_key)  # prevent in-batch duplicates
-                    created += 1
-                    logger.debug("Scheduler: queued insight %s [%s]", insight_type, c["severity"])
-                except Exception as add_err:
-                    logger.error("Scheduler: failed to add insight %s: %s", insight_type, add_err)
-
-            await db.commit()
-            logger.info(
-                "Scheduler: AI analysis complete — %d new insight(s) created, %d skipped (duplicates)",
-                created, len(candidates) - created,
-            )
-    except Exception as e:
-        logger.error("Scheduler: AI analysis failed: %s", e, exc_info=True)
-
-
 def start_scheduler():
     interval_minutes = settings.COLLECTOR_INTERVAL_MINUTES
 
@@ -514,13 +397,6 @@ def start_scheduler():
         id="purge_audit_logs",
         replace_existing=True,
     )
-    scheduler.add_job(
-        run_ai_analysis,
-        trigger=IntervalTrigger(hours=1),
-        id="ai_analysis",
-        replace_existing=True,
-    )
-
     scheduler.start()
     logger.info(f"Scheduler started with {interval_minutes}min interval")
 

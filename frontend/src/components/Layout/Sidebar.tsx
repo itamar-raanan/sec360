@@ -9,10 +9,8 @@ import {
   Sun,
   Moon,
 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../../store/auth'
 import { useThemeStore } from '../../store/theme'
-import { fetchInsightStats } from '../../api/ai'
 import { visibleNavigation } from './navigation'
 
 interface SidebarProps {
@@ -25,17 +23,6 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
   const { user, logout } = useAuthStore()
   const { theme, toggle: toggleTheme } = useThemeStore()
   const navigate = useNavigate()
-  const userRank = user?.role === 'admin' ? 3 : user?.role === 'analyst' ? 2 : 1
-
-  // Fetch insight stats to show alert dot on AI Insights nav item
-  const { data: insightStats } = useQuery({
-    queryKey: ['ai-insight-stats'],
-    queryFn: fetchInsightStats,
-    refetchInterval: 30000,
-    // Only fetch for analyst+ roles
-    enabled: userRank >= 2,
-  })
-  const hasUrgentInsights = (insightStats?.critical ?? 0) + (insightStats?.high ?? 0) > 0
 
   const handleLogout = async () => {
     await logout()
@@ -126,7 +113,6 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
           </p>
         )}
         {visibleItems.map(({ to, icon: Icon, label }) => {
-          const showDot = to === '/ai-insights' && hasUrgentInsights
           return (
             <NavLink
               key={to}
@@ -151,22 +137,12 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
                     />
                   )}
                   <span
-                    className={`relative rounded-md p-1 transition-[background-color] duration-150 flex-shrink-0 ${
+                    className={`rounded-md p-1 transition-[background-color] duration-150 flex-shrink-0 ${
                       isActive ? 'text-emerald-400' : 'text-zinc-600 group-hover:text-zinc-300'
                     }`}
                     style={isActive ? { background: 'var(--accent-dim)' } : {}}
                   >
                     <Icon size={14} strokeWidth={isActive ? 2.5 : 2} />
-                    {showDot && (
-                      <span
-                        className="absolute top-0 right-0 w-2 h-2 rounded-full"
-                        style={{
-                          background: '#ef4444',
-                          border: '1.5px solid var(--surface-1)',
-                          transform: 'translate(30%, -30%)',
-                        }}
-                      />
-                    )}
                   </span>
                   <span
                     className="overflow-hidden whitespace-nowrap flex-1 flex items-center gap-1.5"
@@ -177,19 +153,6 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
                     }}
                   >
                     {label}
-                    {showDot && !collapsed && (
-                      <span
-                        className="inline-flex items-center text-[9px] font-bold px-1 py-0.5 rounded-full flex-shrink-0"
-                        style={{
-                          color: '#ef4444',
-                          background: 'rgba(239,68,68,0.12)',
-                          border: '1px solid rgba(239,68,68,0.20)',
-                          lineHeight: 1,
-                        }}
-                      >
-                        {(insightStats?.critical ?? 0) + (insightStats?.high ?? 0)}
-                      </span>
-                    )}
                   </span>
                 </>
               )}

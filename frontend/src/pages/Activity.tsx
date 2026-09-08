@@ -18,12 +18,10 @@ import {
   ShieldCheck,
   Fingerprint,
   Cloud,
-  Sparkles,
   Monitor,
 } from 'lucide-react'
 import { fetchActivity } from '../api/activity'
 import { usePanelStore } from '../store/panels'
-import { explainEvent } from '../api/ai'
 import { SkeletonEventRows } from '../components/shared/Skeleton'
 import type { ActivityEvent, EventType } from '../types'
 
@@ -73,24 +71,11 @@ function groupKey(e: ActivityEvent): string {
 
 function EventRow({ event, indent = false }: { event: ActivityEvent; indent?: boolean }) {
   const [expanded, setExpanded] = useState(false)
-  const [explain, setExplain] = useState<{ loading: boolean; text: string | null }>({ loading: false, text: null })
   const { openPanel } = usePanelStore()
   const cfg = EVENT_CONFIG[event.event_type] ?? { icon: ActivityIcon, label: event.event_type, accent: '#71717a', bg: 'rgba(113,113,122,0.10)' }
   const Icon = cfg.icon
   const description = (event.details as any)?.description as string | undefined
   const hasExpandable = event.details && Object.keys(event.details).filter(k => !['app','source','description','event_name'].includes(k)).length > 0
-
-  const handleExplain = async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (explain.loading || explain.text) return
-    setExplain({ loading: true, text: null })
-    try {
-      const result = await explainEvent(event.id)
-      setExplain({ loading: false, text: result.explanation })
-    } catch {
-      setExplain({ loading: false, text: 'Unable to generate explanation for this event.' })
-    }
-  }
 
   return (
     <div style={{ borderBottom: '1px solid var(--border)' }}>
@@ -171,39 +156,13 @@ function EventRow({ event, indent = false }: { event: ActivityEvent; indent?: bo
             )}
           </div>
         </div>
-        <div className="flex-shrink-0 flex flex-col items-end gap-1.5 pt-0.5">
+        <div className="flex-shrink-0 flex items-center gap-2 pt-0.5">
           <span className="text-[11px] tabular-nums whitespace-nowrap" style={{ color: 'var(--text-4)' }}>
             {format(new Date(event.timestamp), 'HH:mm')}
           </span>
-          <button onClick={handleExplain} disabled={explain.loading} title="AI explain"
-            className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-[background-color,color,border-color] duration-150 disabled:opacity-50"
-            style={{ color: explain.text ? '#a78bfa' : 'var(--text-4)', background: explain.text ? 'rgba(167,139,250,0.08)' : 'transparent', border: explain.text ? '1px solid rgba(167,139,250,0.20)' : '1px solid transparent' }}
-            onMouseEnter={e => { if (!explain.text) { e.currentTarget.style.color = '#a78bfa'; e.currentTarget.style.background = 'rgba(167,139,250,0.08)'; e.currentTarget.style.borderColor = 'rgba(167,139,250,0.20)' } }}
-            onMouseLeave={e => { if (!explain.text) { e.currentTarget.style.color = 'var(--text-4)'; e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' } }}>
-            {explain.loading ? (
-              <svg className="animate-spin" width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
-            ) : <Sparkles size={10} />}
-            Explain
-          </button>
           {hasExpandable && <ChevronDown size={12} style={{ color: 'var(--text-4)', transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }} />}
         </div>
       </div>
-
-      {explain.text && (
-        <div className="pb-3 pt-0 ml-11" style={{ paddingLeft: indent ? 56 : undefined }}>
-          <div className="rounded-lg p-3 text-[12px] mx-5" style={{ background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.18)' }}>
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-1.5">
-                <Sparkles size={11} style={{ color: '#a78bfa' }} />
-                <span className="text-[11px] font-semibold" style={{ color: '#a78bfa' }}>AI Analysis</span>
-              </div>
-              <button onClick={e => { e.stopPropagation(); setExplain({ loading: false, text: null }) }}
-                className="text-[10px]" style={{ color: 'var(--text-4)' }}>✕</button>
-            </div>
-            <p className="leading-relaxed" style={{ color: 'var(--text-2)' }}>{explain.text}</p>
-          </div>
-        </div>
-      )}
 
       {expanded && hasExpandable && (
         <div className="pb-3 pt-0 ml-11">

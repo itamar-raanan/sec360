@@ -23,6 +23,7 @@ from app.core.security import hash_password, verify_password
 from app.models.user import AuthUser
 from app.models.system_settings import SystemSettings
 from app.models.audit import AuditLog
+from app.services.product_scope import normalize_product_tags
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -79,6 +80,10 @@ class MfaVerifyRequest(BaseModel):
 class SystemSettingsIn(BaseModel):
     offline_threshold_hours: Optional[int] = None
     risk_weight_no_edr: Optional[float] = None
+    risk_weight_edr_version: Optional[float] = None
+    risk_weight_no_dlp: Optional[float] = None
+    risk_weight_dlp_version: Optional[float] = None
+    risk_weight_no_user: Optional[float] = None
     risk_weight_no_encryption: Optional[float] = None
     risk_weight_offline: Optional[float] = None
     risk_weight_outdated_agent: Optional[float] = None
@@ -347,9 +352,6 @@ async def mfa_disable(
 
 # ─── System settings (admin) ──────────────────────────────────────────────────
 
-DEFAULT_ENDPOINT_PRODUCT_TAGS = ["S1", "DLP", "WSS"]
-
-
 @router.get("/endpoint-product-tags")
 async def get_endpoint_product_tags(
     db: AsyncSession = Depends(get_db),
@@ -357,8 +359,8 @@ async def get_endpoint_product_tags(
 ):
     """Return the endpoint badge selection to every authenticated role."""
     cfg = (await db.execute(select(SystemSettings).where(SystemSettings.id == 1))).scalar_one_or_none()
-    tags = cfg.endpoint_product_tags if cfg else DEFAULT_ENDPOINT_PRODUCT_TAGS
-    return {"tags": tags if tags is not None else DEFAULT_ENDPOINT_PRODUCT_TAGS}
+    tags = normalize_product_tags(cfg.endpoint_product_tags if cfg else None)
+    return {"tags": list(tags)}
 
 @router.get("/system")
 async def get_system_settings(
@@ -386,11 +388,29 @@ async def update_system_settings(
         db.add(cfg)
 
     changes = data.model_dump(exclude_none=True)
+    if "endpoint_product_tags" in changes:
+        changes["endpoint_product_tags"] = list(
+            normalize_product_tags(changes["endpoint_product_tags"])
+        )
+    product_scope_changed = (
+        "endpoint_product_tags" in changes
+        and normalize_product_tags(cfg.endpoint_product_tags)
+        != normalize_product_tags(changes["endpoint_product_tags"])
+    )
     for field, val in changes.items():
         setattr(cfg, field, val)
 
     await db.flush()
     await audit_action("update_system_settings", "system_settings", "1", request, db, current, changes)
+    if product_scope_changed:
+        # Compliance and risk are derived data. Rebuild both before confirming
+        # the settings update so every page observes one consistent scope.
+        from app.engines.compliance import run_full_compliance
+        from app.engines.risk import update_all_risk_scores
+
+        await run_full_compliance(db)
+        await db.flush()
+        await update_all_risk_scores(db)
     return cfg
 
 

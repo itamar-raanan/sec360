@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, func, select
 
 from app.services.endpoint_inventory import current_endpoint_clause
+from app.services.product_scope import normalize_product_tags
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,10 @@ async def evaluate_endpoint(endpoint_id, db: AsyncSession):
     min_s1_ver  = (cfg.min_s1_version  or "").strip() if cfg else ""
     min_dlp_ver = (cfg.min_dlp_version or "").strip() if cfg else ""
     min_wss_ver = (cfg.min_wss_version or "").strip() if cfg else ""
+    active_products = set(normalize_product_tags(cfg.endpoint_product_tags if cfg else None))
+    use_s1 = "S1" in active_products
+    use_dlp = "DLP" in active_products
+    use_wss = "WSS" in active_products
 
     # ── SentinelOne EDR ──────────────────────────────────────────────────────
     s1_agent = next((a for a in agents if a.product_name == "sentinelone"), None)
@@ -83,21 +88,23 @@ async def evaluate_endpoint(endpoint_id, db: AsyncSession):
     device_control_enabled: bool | None = s1_agent.device_control_enabled if s1_agent else None
 
     # ── Overall status ───────────────────────────────────────────────────────
-    # Core mandatory checks (EDR + DLP always required)
-    checks: list[bool] = [edr_installed, dlp_installed]
-    if min_s1_ver:
+    checks: list[bool] = []
+    if use_s1:
+        checks.append(edr_installed)
+    if use_s1 and min_s1_ver:
         checks.append(edr_version_ok)
-    if min_dlp_ver:
+    if use_dlp:
+        checks.append(dlp_installed)
+    if use_dlp and min_dlp_ver:
         checks.append(dlp_version_ok)
-    # WSS becomes mandatory when a minimum version is configured.
-    if min_wss_ver:
+    if use_wss:
         checks.append(wss_installed)
-        if wss_installed:
+        if min_wss_ver:
             checks.append(wss_version_ok)
-    # Include encryption/device_control only when S1 has reported a value
-    if disk_encrypted is not None:
+    # These controls are reported by SentinelOne and follow its product scope.
+    if use_s1 and disk_encrypted is not None:
         checks.append(disk_encrypted)
-    if device_control_enabled is not None:
+    if use_s1 and device_control_enabled is not None:
         checks.append(device_control_enabled)
 
     passed = sum(checks)

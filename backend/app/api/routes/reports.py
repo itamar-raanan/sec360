@@ -20,6 +20,7 @@ from app.models.compliance import ComplianceStatus
 from app.models.activity import ActivityEvent
 from app.models.report import ScheduledReport
 from app.services.endpoint_inventory import current_endpoint_clause
+from app.services.product_scope import load_product_tags
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -74,6 +75,7 @@ class ScheduledReportOut(BaseModel):
 
 async def _compliance_data(db: AsyncSession, filters: dict) -> tuple[list[str], list[list]]:
     status_filter = filters.get("status")
+    active_product_tags = set(await load_product_tags(db))
     q = (
         select(
             Endpoint.hostname,
@@ -83,6 +85,8 @@ async def _compliance_data(db: AsyncSession, filters: dict) -> tuple[list[str], 
             ComplianceStatus.edr_version_ok,
             ComplianceStatus.dlp_installed,
             ComplianceStatus.dlp_version_ok,
+            ComplianceStatus.wss_installed,
+            ComplianceStatus.wss_version_ok,
             ComplianceStatus.last_evaluated,
         )
         .join(ComplianceStatus, Endpoint.id == ComplianceStatus.endpoint_id)
@@ -93,15 +97,26 @@ async def _compliance_data(db: AsyncSession, filters: dict) -> tuple[list[str], 
         q = q.where(ComplianceStatus.status == status_filter)
 
     rows = (await db.execute(q.limit(MAX_EXPORT_ROWS + 1))).all()
-    headers = ["Hostname", "OS", "Status", "EDR Installed", "EDR Version OK",
-               "DLP Installed", "DLP Version OK", "Last Evaluated"]
-    data = [
-        [r.hostname, r.os_version, r.status,
-         str(r.edr_installed), str(r.edr_version_ok),
-         str(r.dlp_installed), str(r.dlp_version_ok),
-         r.last_evaluated.isoformat() if r.last_evaluated else ""]
-        for r in rows
-    ]
+    headers = ["Hostname", "OS", "Status"]
+    if "S1" in active_product_tags:
+        headers.extend(["EDR Installed", "EDR Version OK"])
+    if "DLP" in active_product_tags:
+        headers.extend(["DLP Installed", "DLP Version OK"])
+    if "WSS" in active_product_tags:
+        headers.extend(["WSS Installed", "WSS Version OK"])
+    headers.append("Last Evaluated")
+
+    data = []
+    for row in rows:
+        values = [row.hostname, row.os_version, row.status]
+        if "S1" in active_product_tags:
+            values.extend([str(row.edr_installed), str(row.edr_version_ok)])
+        if "DLP" in active_product_tags:
+            values.extend([str(row.dlp_installed), str(row.dlp_version_ok)])
+        if "WSS" in active_product_tags:
+            values.extend([str(row.wss_installed), str(row.wss_version_ok)])
+        values.append(row.last_evaluated.isoformat() if row.last_evaluated else "")
+        data.append(values)
     return headers, data
 
 

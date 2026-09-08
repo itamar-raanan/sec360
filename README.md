@@ -1,6 +1,6 @@
 # SEC360 - Security Visibility Platform
 
-A full-stack security visibility platform that aggregates data from SentinelOne, Symantec, Prisma Access, Google Workspace, and HiBob HR to provide unified security visibility.
+A full-stack security visibility platform that connects SentinelOne, Symantec DLP, JumpCloud, Puppet, Google Workspace, ADFS, and Active Directory to provide unified security visibility.
 
 ## Architecture
 
@@ -72,10 +72,12 @@ docker-compose exec backend python -m app.seed
 | Source | Data Type | Endpoint |
 |--------|-----------|----------|
 | SentinelOne | Endpoints + EDR agents | GET /web/api/v2.1/agents |
-| HiBob | Users (HR) | GET /v1/people |
+| JumpCloud | Users + managed devices | Admin API |
+| Active Directory | Users + computers | LDAP |
+| Puppet | Nodes + operating systems | PuppetDB API v4 |
 | Google Workspace | Login activity | Reports API |
-| Symantec | DLP agent status | GET /sepm/api/v1/computers |
-| Prisma Access | Network events | GET /api/sase/v1.0/resource/query/traffic |
+| Symantec DLP | DLP agents + policy exclusions | Enforce database |
+| ADFS | Federation metadata + availability | Federation Metadata endpoint |
 
 ## Risk Scoring
 

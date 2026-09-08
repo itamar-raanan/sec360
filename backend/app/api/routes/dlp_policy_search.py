@@ -6,14 +6,18 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import audit_action, get_db, require_role
+from app.api.deps import audit_action, get_db, require_connected_integration, require_role
 from app.models.integration import IntegrationConfig
 from app.models.user import AuthUser
 from app.schemas.dlp_policy_search import DlpPolicySearchResponse
 from app.services.dlp_policy_search import MAX_DLP_POLICY_ROWS, query_dlp_policy_exclusions
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/dlp-policy-search", tags=["dlp-policy-search"])
+router = APIRouter(
+    prefix="/dlp-policy-search",
+    tags=["dlp-policy-search"],
+    dependencies=[Depends(require_connected_integration("symantec_dlp"))],
+)
 
 
 @router.get("", response_model=DlpPolicySearchResponse)

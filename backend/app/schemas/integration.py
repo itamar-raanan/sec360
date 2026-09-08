@@ -19,9 +19,10 @@ class IntegrationCredentials(BaseModel):
     # Google Workspace
     service_account_json: Optional[str] = None
     admin_email: Optional[str] = None
-    # HiBob
-    service_user_id: Optional[str] = None
-    service_user_token: Optional[str] = None
+    # ADFS
+    service_url: Optional[str] = None
+    metadata_url: Optional[str] = None
+    verify_ssl: Optional[bool] = None
 
 
 class IntegrationConfigUpdate(BaseModel):

@@ -384,7 +384,6 @@ export default function Activity() {
             <option value="">All sources</option>
             <option value="google_workspace">Google</option>
             <option value="jumpcloud">JumpCloud</option>
-            <option value="cloudsoc">CloudSOC</option>
           </select>
           <select value={isSuspicious} onChange={e => { setIsSuspicious(e.target.value); setPage(1) }}
             className={selectClass} style={selectStyle}>

@@ -8,7 +8,6 @@ import {
   GitBranch,
   Building2,
   Globe,
-  Users,
   CheckCircle2,
   XCircle,
   Clock,
@@ -30,7 +29,6 @@ import {
   Activity,
   Package,
   ChevronRight,
-  Cloud,
 } from 'lucide-react'
 import {
   fetchIntegrations,
@@ -65,6 +63,7 @@ type CatalogEntry = {
   color: string
   icon: LucideIcon
   dataProduces: string[]
+  unlocks?: string[]
   fields: FieldDef[]
   docsHint?: string
 }
@@ -98,6 +97,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
     color: '#7c3aed',
     icon: Shield,
     dataProduces: ['Endpoints', 'Agents', 'Threats'],
+    unlocks: ['Applications Vulnerabilities'],
     docsHint: 'Management Console → Settings → Users → API Token',
     fields: [
       {
@@ -125,6 +125,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
     color: '#d97706',
     icon: Lock,
     dataProduces: ['DLP Agents', 'Policy Violations'],
+    unlocks: ['DLP User Policy Search'],
     docsHint: 'Requires direct database access to the Symantec DLP Enforce DB',
     fields: [
       {
@@ -301,77 +302,38 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
       },
     ],
   },
-  hibob: {
-    label: 'HiBob',
-    category: 'hr',
-    description: 'HR system — user identity, org structure, and employment data',
-    color: '#ec4899',
-    icon: Users,
-    dataProduces: ['Employees', 'Departments', 'Employment Status'],
-    docsHint: 'HiBob Settings → Integrations → Service Users',
+  adfs: {
+    label: 'ADFS',
+    category: 'directory',
+    description: 'Federation metadata and service availability monitoring',
+    color: '#0284c7',
+    icon: KeyRound,
+    dataProduces: ['Federation Metadata', 'Service Health'],
+    docsHint: 'Uses the public federation metadata endpoint; no privileged account is required.',
     fields: [
       {
-        name: 'service_user_id',
-        label: 'Service User ID',
-        type: 'text',
-        placeholder: 'service-user@company.com',
-        required: true,
-        group: 'auth',
-      },
-      {
-        name: 'service_user_token',
-        label: 'Service User Token',
-        type: 'password',
-        placeholder: 'HiBob service token',
-        required: true,
-        group: 'auth',
-      },
-    ],
-  },
-  cloudsoc: {
-    label: 'Symantec CloudSOC',
-    category: 'casb',
-    description: 'Cloud Access Security Broker — shadow IT, cloud app activity, and threat detection',
-    color: '#f59e0b',
-    icon: Cloud,
-    dataProduces: ['Cloud Activity Logs', 'Threat Incidents', 'Policy Violations'],
-    docsHint: 'CloudSOC Console → Settings (⚙) → API Keys → Add New API Key',
-    fields: [
-      {
-        name: 'tenant_id',
-        label: 'Tenant ID',
-        type: 'text',
-        placeholder: 'your-tenant-id',
-        hint: 'Found in the CloudSOC console URL or API key download',
-        required: true,
-        group: 'connection',
-      },
-      {
-        name: 'key_id',
-        label: 'Key ID',
-        type: 'text',
-        placeholder: 'API Key ID (username)',
-        hint: 'The Key-ID from your downloaded API key file',
-        required: true,
-        group: 'auth',
-      },
-      {
-        name: 'key_secret',
-        label: 'Key Secret',
-        type: 'password',
-        placeholder: 'API Key Secret (password)',
-        hint: 'The Key-Secret from your downloaded API key file',
-        required: true,
-        group: 'auth',
-      },
-      {
-        name: 'base_url',
-        label: 'Base URL',
+        name: 'service_url',
+        label: 'ADFS Service URL',
         type: 'url',
-        placeholder: 'https://api-vip.elastica.net',
-        hint: 'US: https://api-vip.elastica.net  ·  EU: https://api.eu.elastica.net',
-        required: false,
-        group: 'connection',
+        placeholder: 'https://adfs.example.com/adfs',
+        required: true,
+      },
+      {
+        name: 'metadata_url',
+        label: 'Metadata URL',
+        type: 'url',
+        placeholder: 'Optional — derived from the service URL',
+        hint: 'Override only when federation metadata is hosted at a custom path.',
+      },
+      {
+        name: 'verify_ssl',
+        label: 'Verify SSL',
+        type: 'select',
+        defaultValue: 'true',
+        options: [
+          { value: 'true', label: 'Yes (recommended)' },
+          { value: 'false', label: 'No (skip verification)' },
+        ],
       },
     ],
   },
@@ -386,13 +348,12 @@ type CategoryDef = {
 }
 
 const CATEGORIES: CategoryDef[] = [
-  { id: 'all', label: 'All Integrations', icon: LayoutGrid },
+  { id: 'all', label: 'Product Store', icon: LayoutGrid },
   { id: 'connected', label: 'Connected', icon: CheckCircle2 },
   { id: 'directory', label: 'Directory & IAM', icon: KeyRound },
   { id: 'security', label: 'Endpoint Security', icon: ShieldCheck },
   { id: 'dlp', label: 'Data Protection', icon: Lock },
   { id: 'config', label: 'Config Management', icon: GitBranch },
-  { id: 'hr', label: 'HR & Identity', icon: Users },
   { id: 'productivity', label: 'Productivity', icon: Globe },
   { id: 'custom', label: 'Custom', icon: Puzzle },
 ]
@@ -590,6 +551,7 @@ function IntegrationCard({
   const color = catalog?.color ?? '#6366f1'
   const description = catalog?.description ?? config.display_name
   const produces = catalog?.dataProduces ?? []
+  const unlocks = catalog?.unlocks ?? []
   const category = catalog?.category ?? 'custom'
 
   const categoryLabel = CATEGORIES.find((c) => c.id === category)?.label ?? category
@@ -634,6 +596,15 @@ function IntegrationCard({
                   {p}
                 </span>
               ))}
+            </div>
+          )}
+
+          {unlocks.length > 0 && (
+            <div className="mt-2 flex items-center gap-1.5 text-[10px] font-medium">
+              <Lock size={10} className={config.status === 'connected' ? 'text-emerald-400' : 'text-zinc-600'} />
+              <span className={config.status === 'connected' ? 'text-emerald-400' : 'text-zinc-500'}>
+                {config.status === 'connected' ? 'Unlocked' : 'Connect to unlock'}: {unlocks.join(', ')}
+              </span>
             </div>
           )}
         </div>
@@ -692,6 +663,7 @@ function IntegrationPanel({
   const color = catalog?.color ?? '#6366f1'
   const description = catalog?.description ?? config?.display_name ?? ''
   const produces = catalog?.dataProduces ?? []
+  const unlocks = catalog?.unlocks ?? []
   const category = catalog?.category ?? 'custom'
   const categoryLabel = CATEGORIES.find((c) => c.id === category)?.label ?? category
   const fields = catalog?.fields ?? []
@@ -701,19 +673,27 @@ function IntegrationPanel({
       saveIntegrationCredentials(config!.integration_type, creds, true),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['integrations'] })
+      setTestResult({ success: true, message: 'Configuration saved. Test the connection to unlock product features.' })
       setView('status')
     },
   })
 
   const testMutation = useMutation({
     mutationFn: () => testIntegration(config!.integration_type),
-    onSuccess: (data) => setTestResult(data),
+    onSuccess: (data) => {
+      setTestResult(data)
+      queryClient.invalidateQueries({ queryKey: ['integrations'] })
+    },
     onError: (err: Error) => setTestResult({ success: false, message: err.message }),
   })
 
   const syncMutation = useMutation({
     mutationFn: () => syncIntegration(config!.integration_type),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['integrations'] }),
+    onSuccess: (data) => {
+      setTestResult(data)
+      queryClient.invalidateQueries({ queryKey: ['integrations'] })
+    },
+    onError: (err: Error) => setTestResult({ success: false, message: err.message }),
   })
 
   const removeCreditsMutation = useMutation({
@@ -764,7 +744,7 @@ function IntegrationPanel({
 
       {/* Panel */}
       <div
-        className={`fixed top-0 right-0 h-full w-[520px] z-50 flex flex-col bg-[var(--surface-1)] border-l border-[var(--border)] shadow-2xl transition-transform duration-300 ease-out ${
+        className={`fixed top-0 right-0 h-full w-full sm:w-[520px] z-50 flex flex-col bg-[var(--surface-1)] border-l border-[var(--border)] shadow-2xl transition-transform duration-300 ease-out ${
           visible ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -844,6 +824,28 @@ function IntegrationPanel({
                       </div>
                     )}
                   </div>
+
+                  {unlocks.length > 0 && (
+                    <div className={`rounded-xl border p-4 ${
+                      config.status === 'connected'
+                        ? 'border-emerald-500/25 bg-emerald-500/[0.07]'
+                        : 'border-[var(--border)] bg-[var(--surface-2)]'
+                    }`}>
+                      <div className="flex items-start gap-3">
+                        <div className={`mt-0.5 flex h-7 w-7 items-center justify-center rounded-lg ${
+                          config.status === 'connected' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-zinc-800 text-zinc-500'
+                        }`}>
+                          {config.status === 'connected' ? <CheckCircle2 size={14} /> : <Lock size={13} />}
+                        </div>
+                        <div>
+                          <p className={`text-xs font-semibold ${config.status === 'connected' ? 'text-emerald-300' : 'text-zinc-300'}`}>
+                            {config.status === 'connected' ? 'Feature unlocked' : 'Available after connection'}
+                          </p>
+                          <p className="mt-1 text-xs text-zinc-500">{unlocks.join(', ')}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Data produced */}
                   {produces.length > 0 && (
@@ -1392,7 +1394,10 @@ export default function Integrations() {
             <div className="w-7 h-7 bg-emerald-600/20 rounded-lg flex items-center justify-center">
               <Plug size={14} className="text-emerald-400" />
             </div>
-            <span className="text-white font-bold text-sm">Integrations</span>
+            <div>
+              <span className="block text-white font-bold text-sm">Integration Store</span>
+              <span className="block text-[10px] text-zinc-600">Connect your security stack</span>
+            </div>
           </div>
         </div>
 
@@ -1443,13 +1448,14 @@ export default function Integrations() {
       <main className="flex-1 overflow-y-auto">
         <div className="ui-page-container !mx-0 !max-w-3xl">
           {/* Header */}
-          <div className="flex items-center justify-between mb-5">
+          <div className="mb-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] p-5">
+            <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-white font-bold text-xl">
-                {CATEGORIES.find((c) => c.id === category)?.label ?? 'Integrations'}
+                {CATEGORIES.find((c) => c.id === category)?.label ?? 'Product Store'}
               </h1>
               <p className="text-zinc-500 text-xs mt-0.5">
-                {filtered.length} integration{filtered.length !== 1 ? 's' : ''}
+                Connect trusted products and unlock their tools across SEC360.
               </p>
             </div>
             <button
@@ -1464,6 +1470,23 @@ export default function Integrations() {
               )}
               {correlateMutation.isPending ? 'Correlating...' : 'Run Correlation'}
             </button>
+            </div>
+            <div className="mt-5 grid grid-cols-3 divide-x divide-[var(--border)] border-t border-[var(--border)] pt-4">
+              <div>
+                <div className="text-lg font-semibold text-white">{integrations.length}</div>
+                <div className="text-[10px] uppercase tracking-wider text-zinc-600">Available</div>
+              </div>
+              <div className="pl-4">
+                <div className="text-lg font-semibold text-emerald-400">{counts.connected}</div>
+                <div className="text-[10px] uppercase tracking-wider text-zinc-600">Connected</div>
+              </div>
+              <div className="pl-4">
+                <div className="text-lg font-semibold text-white">
+                  {integrations.filter((item) => item.status === 'connected' && (getCatalogEntry(item.integration_type)?.unlocks?.length ?? 0) > 0).length}
+                </div>
+                <div className="text-[10px] uppercase tracking-wider text-zinc-600">Feature packs</div>
+              </div>
+            </div>
           </div>
 
           {correlateResult && (
@@ -1515,7 +1538,7 @@ export default function Integrations() {
                 <p className="text-zinc-400 text-sm font-medium">No integrations in this category</p>
                 <p className="text-zinc-600 text-xs mt-1">
                   {category === 'connected'
-                    ? 'Connect and sync an integration to see it here'
+                    ? 'Configure and verify a product connection to see it here'
                     : 'Add a custom integration or select a different category'}
                 </p>
               </div>

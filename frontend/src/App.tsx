@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect } from 'react'
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import Layout from './components/Layout/Layout'
 import { useAuthStore } from './store/auth'
+import { useConnectedIntegrations } from './hooks/useConnectedIntegrations'
 
 const Login = lazy(() => import('./pages/Login'))
 const AcceptInvite = lazy(() => import('./pages/AcceptInvite'))
@@ -41,6 +42,13 @@ function AnalystOnly({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function IntegrationOnly({ integration, children }: { integration: string; children: React.ReactNode }) {
+  const { connected, isLoading } = useConnectedIntegrations()
+  if (isLoading) return <RouteLoader />
+  if (!connected.has(integration)) return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   const navigate = useNavigate()
   const { restoreSession } = useAuthStore()
@@ -73,8 +81,8 @@ export default function App() {
         <Route path="/users" element={<Users />} />
         <Route path="/compliance" element={<Compliance />} />
         <Route path="/activity" element={<Activity />} />
-        <Route path="/application-vulnerabilities" element={<ApplicationVulnerabilities />} />
-        <Route path="/dlp-user-policy-search" element={<AnalystOnly><DlpUserPolicySearch /></AnalystOnly>} />
+        <Route path="/application-vulnerabilities" element={<IntegrationOnly integration="sentinelone"><ApplicationVulnerabilities /></IntegrationOnly>} />
+        <Route path="/dlp-user-policy-search" element={<AnalystOnly><IntegrationOnly integration="symantec_dlp"><DlpUserPolicySearch /></IntegrationOnly></AnalystOnly>} />
         <Route path="/reports" element={<AnalystOnly><Reports /></AnalystOnly>} />
         <Route path="/integrations" element={<AdminOnly><Integrations /></AdminOnly>} />
         <Route path="/security" element={<Navigate to="/settings" replace />} />

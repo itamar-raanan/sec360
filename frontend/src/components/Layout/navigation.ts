@@ -21,6 +21,7 @@ export interface NavigationItem {
   shortLabel?: string
   minRole: ProductRole
   group: 'Monitor' | 'Analyze' | 'Manage'
+  requiredIntegration?: string
 }
 
 export const ROLE_RANK: Record<ProductRole, number> = { viewer: 1, analyst: 2, admin: 3 }
@@ -31,14 +32,17 @@ export const NAV_ITEMS: NavigationItem[] = [
   { to: '/users', icon: Users, label: 'Users', minRole: 'viewer', group: 'Monitor' },
   { to: '/compliance', icon: CheckCircle, label: 'Compliance', minRole: 'viewer', group: 'Monitor' },
   { to: '/activity', icon: Activity, label: 'Activity', minRole: 'viewer', group: 'Monitor' },
-  { to: '/application-vulnerabilities', icon: Bug, label: 'App Vulnerabilities', shortLabel: 'Vulnerabilities', minRole: 'viewer', group: 'Analyze' },
-  { to: '/dlp-user-policy-search', icon: Database, label: 'DLP Policy Search', minRole: 'analyst', group: 'Analyze' },
+  { to: '/application-vulnerabilities', icon: Bug, label: 'App Vulnerabilities', shortLabel: 'Vulnerabilities', minRole: 'viewer', group: 'Analyze', requiredIntegration: 'sentinelone' },
+  { to: '/dlp-user-policy-search', icon: Database, label: 'DLP Policy Search', minRole: 'analyst', group: 'Analyze', requiredIntegration: 'symantec_dlp' },
   { to: '/reports', icon: FileText, label: 'Reports', minRole: 'analyst', group: 'Manage' },
-  { to: '/integrations', icon: Plug, label: 'Integrations', minRole: 'admin', group: 'Manage' },
+  { to: '/integrations', icon: Plug, label: 'Integration Store', shortLabel: 'Integrations', minRole: 'admin', group: 'Manage' },
   { to: '/settings', icon: Settings, label: 'Settings', minRole: 'admin', group: 'Manage' },
 ]
 
-export function visibleNavigation(role?: string) {
+export function visibleNavigation(role?: string, connected = new Set<string>()) {
   const safeRole = (role === 'admin' || role === 'analyst' ? role : 'viewer') as ProductRole
-  return NAV_ITEMS.filter(item => ROLE_RANK[safeRole] >= ROLE_RANK[item.minRole])
+  return NAV_ITEMS.filter(item =>
+    ROLE_RANK[safeRole] >= ROLE_RANK[item.minRole]
+    && (!item.requiredIntegration || connected.has(item.requiredIntegration))
+  )
 }

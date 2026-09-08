@@ -243,7 +243,8 @@ export interface IntegrationCredentials {
   // Google Workspace
   service_account_json?: string
   admin_email?: string
-  // HiBob
-  service_user_id?: string
-  service_user_token?: string
+  // ADFS
+  service_url?: string
+  metadata_url?: string
+  verify_ssl?: string
 }

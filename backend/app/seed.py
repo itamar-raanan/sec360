@@ -36,17 +36,10 @@ async def seed():
 
         # ── Default integration configs ──────────────────────────────────────
         print("  Creating default integration configs...")
+        from app.integrations.catalog import INTEGRATION_DEFAULTS
         from app.models.integration import IntegrationConfig
 
-        INTEGRATIONS = [
-            ("jumpcloud", "JumpCloud"),
-            ("sentinelone", "SentinelOne"),
-            ("symantec_dlp", "Symantec DLP"),
-            ("google_workspace", "Google Workspace"),
-            ("hibob", "HiBob"),
-        ]
-
-        for itype, display_name in INTEGRATIONS:
+        for itype, display_name in INTEGRATION_DEFAULTS:
             existing = (await db.execute(
                 select(IntegrationConfig).where(IntegrationConfig.integration_type == itype)
             )).scalar_one_or_none()

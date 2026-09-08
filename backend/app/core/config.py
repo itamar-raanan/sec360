@@ -46,11 +46,6 @@ class Settings(BaseSettings):
     SENTINELONE_URL: Optional[str] = None
     SENTINELONE_API_TOKEN: Optional[str] = None
 
-    # HiBob
-    HIBOB_API_URL: str = "https://api.hibob.com"
-    HIBOB_SERVICE_USER_ID: Optional[str] = None
-    HIBOB_SERVICE_TOKEN: Optional[str] = None
-
     # Google Workspace
     GOOGLE_WORKSPACE_DOMAIN: Optional[str] = None
     GOOGLE_SERVICE_ACCOUNT_JSON: Optional[str] = None

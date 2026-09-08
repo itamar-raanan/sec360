@@ -49,6 +49,13 @@ function IntegrationOnly({ integration, children }: { integration: string; child
   return <>{children}</>
 }
 
+function AnyIntegrationOnly({ integrations, children }: { integrations: string[]; children: React.ReactNode }) {
+  const { connected, isLoading } = useConnectedIntegrations()
+  if (isLoading) return <RouteLoader />
+  if (!integrations.some(integration => connected.has(integration))) return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   const navigate = useNavigate()
   const { restoreSession } = useAuthStore()
@@ -80,7 +87,7 @@ export default function App() {
         <Route path="/endpoints" element={<Endpoints />} />
         <Route path="/users" element={<Users />} />
         <Route path="/compliance" element={<Compliance />} />
-        <Route path="/activity" element={<Activity />} />
+        <Route path="/activity" element={<AnyIntegrationOnly integrations={['adfs', 'active_directory', 'google_workspace']}><Activity /></AnyIntegrationOnly>} />
         <Route path="/application-vulnerabilities" element={<IntegrationOnly integration="sentinelone"><ApplicationVulnerabilities /></IntegrationOnly>} />
         <Route path="/dlp-user-policy-search" element={<AnalystOnly><IntegrationOnly integration="symantec_dlp"><DlpUserPolicySearch /></IntegrationOnly></AnalystOnly>} />
         <Route path="/reports" element={<AnalystOnly><Reports /></AnalystOnly>} />

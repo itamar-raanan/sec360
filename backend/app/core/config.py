@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # Frontend URL (used in invite/report email links)
     APP_URL: str = "http://localhost:3000"
 
+    # Shared TLS directory used by the certificate manager and nginx.
+    TLS_CERT_DIR: str = "/var/lib/sec360/tls"
+
     # SMTP — leave empty to disable email (invite links will be logged instead)
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

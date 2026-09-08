@@ -40,7 +40,7 @@ INTEGRATION_PRODUCTS: Final[tuple[dict, ...]] = (
         "category": "productivity",
         "description": "Workspace identities, authentication, and activity events.",
         "capabilities": ["users", "login_events", "oauth_activity"],
-        "features": [],
+        "features": ["activity"],
     },
     {
         "integration_type": "adfs",
@@ -48,7 +48,7 @@ INTEGRATION_PRODUCTS: Final[tuple[dict, ...]] = (
         "category": "directory",
         "description": "Active Directory Federation Services metadata and availability.",
         "capabilities": ["federation_metadata", "service_health"],
-        "features": [],
+        "features": ["activity"],
     },
     {
         "integration_type": "active_directory",
@@ -56,7 +56,7 @@ INTEGRATION_PRODUCTS: Final[tuple[dict, ...]] = (
         "category": "directory",
         "description": "LDAP users, computers, departments, and ownership context.",
         "capabilities": ["users", "endpoints", "departments"],
-        "features": [],
+        "features": ["activity"],
     },
 )
 
@@ -71,10 +71,17 @@ INTEGRATION_TYPES: Final[frozenset[str]] = frozenset(
 
 RETIRED_INTEGRATION_TYPES: Final[tuple[str, ...]] = ("hibob", "cloudsoc")
 
-FEATURE_INTEGRATIONS: Final[dict[str, str]] = {
-    feature: product["integration_type"]
-    for product in INTEGRATION_PRODUCTS
-    for feature in product["features"]
+FEATURE_INTEGRATIONS: Final[dict[str, tuple[str, ...]]] = {
+    feature: tuple(
+        product["integration_type"]
+        for product in INTEGRATION_PRODUCTS
+        if feature in product["features"]
+    )
+    for feature in {
+        feature
+        for product in INTEGRATION_PRODUCTS
+        for feature in product["features"]
+    }
 }
 
 

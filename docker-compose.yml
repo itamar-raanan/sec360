@@ -1,4 +1,26 @@
 services:
+  certificates:
+    image: alpine:3.20
+    restart: "no"
+    user: "0:0"
+    network_mode: none
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        if [ ! -s /certs/server.crt ] || [ ! -s /certs/server.key ]; then
+          cp /seed/server.crt /certs/server.crt
+          cp /seed/server.key /certs/server.key
+        fi
+        chown -R 1000:1000 /certs
+        chmod 700 /certs
+        chmod 644 /certs/server.crt
+        chmod 600 /certs/server.key
+    volumes:
+      - ./ssl:/seed:ro
+      - tls_data:/certs
+
   postgres:
     image: postgres:16
     environment:
@@ -24,9 +46,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      certificates:
+        condition: service_completed_successfully
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ./backend:/app
+      - tls_data:/var/lib/sec360/tls
     restart: unless-stopped
 
   frontend:
@@ -35,10 +60,14 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./ssl:/etc/nginx/ssl:ro
+      - tls_data:/etc/nginx/ssl:ro
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+      certificates:
+        condition: service_completed_successfully
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  tls_data:

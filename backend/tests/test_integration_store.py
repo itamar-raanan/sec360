@@ -37,8 +37,11 @@ async def test_catalog_contains_only_the_default_store_products(
         "adfs",
         "active_directory",
     ]
-    assert response.json()[2]["features"] == ["application_vulnerabilities"]
-    assert response.json()[3]["features"] == ["dlp_policy_search"]
+    products = {product["integration_type"]: product for product in response.json()}
+    assert products["sentinelone"]["features"] == ["application_vulnerabilities"]
+    assert products["symantec_dlp"]["features"] == ["dlp_policy_search"]
+    for integration_type in ("adfs", "active_directory", "google_workspace"):
+        assert products[integration_type]["features"] == ["activity"]
 
 
 async def test_listing_retires_removed_products_and_seeds_the_store(
@@ -106,3 +109,23 @@ async def test_feature_api_is_unavailable_until_its_product_is_connected(
 
     assert response.status_code == 409
     assert "sentinelone" in response.json()["detail"].lower()
+
+
+async def test_activity_accepts_any_connected_identity_product(
+    client: AsyncClient, db_session, admin_user
+):
+    headers = await _admin_headers(client)
+    locked = await client.get("/api/activity", headers=headers)
+    assert locked.status_code == 409
+
+    db_session.add(IntegrationConfig(
+        integration_type="adfs",
+        display_name="ADFS",
+        credentials={"service_url": "https://adfs.test/adfs"},
+        status="connected",
+        is_enabled=True,
+    ))
+    await db_session.commit()
+
+    unlocked = await client.get("/api/activity", headers=headers)
+    assert unlocked.status_code == 200

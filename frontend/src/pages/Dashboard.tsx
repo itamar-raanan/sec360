@@ -134,8 +134,17 @@ export default function Dashboard() {
   const risk = useQuery({ queryKey: ['risk', 'summary'], queryFn: fetchRiskSummary })
   const riskyUsers = useQuery({ queryKey: ['risk', 'users', 'top'], queryFn: () => fetchRiskyUsers({ min_score: 50, limit: 5 }) })
   const riskyEndpoints = useQuery({ queryKey: ['risk', 'endpoints', 'top'], queryFn: () => fetchRiskyEndpoints({ min_score: 75, limit: 5 }) })
-  const suspicious = useQuery({ queryKey: ['activity', 'suspicious'], queryFn: () => fetchSuspiciousActivity(6) })
   const integrations = useQuery({ queryKey: ['integrations'], queryFn: fetchIntegrations })
+  const activityConnected = (integrations.data ?? []).some(item =>
+    item.is_enabled
+    && item.status === 'connected'
+    && ['adfs', 'active_directory', 'google_workspace'].includes(item.integration_type)
+  )
+  const suspicious = useQuery({
+    queryKey: ['activity', 'suspicious'],
+    queryFn: () => fetchSuspiciousActivity(6),
+    enabled: activityConnected,
+  })
 
   const totalEndpoints = endpoints.data?.total ?? 0
   const summary = compliance.data?.summary
@@ -340,8 +349,10 @@ export default function Dashboard() {
           </section>
 
           <section className="ui-command-surface overflow-hidden">
-            <SectionHeading eyebrow="Signals" title="Suspicious activity" action="Open timeline" onAction={() => navigate('/activity?is_suspicious=true')} />
-            {suspicious.data?.length ? suspicious.data.map(event => (
+            <SectionHeading eyebrow="Signals" title="Suspicious activity" action={activityConnected ? 'Open timeline' : undefined} onAction={activityConnected ? () => navigate('/activity?is_suspicious=true') : undefined} />
+            {!activityConnected ? (
+              <EmptyState icon={Plug} title="Activity is locked" description="Connect ADFS, Active Directory, or Google Workspace to enable the activity timeline" size="sm" />
+            ) : suspicious.data?.length ? suspicious.data.map(event => (
               <button key={event.id} onClick={() => event.user?.id ? openPanel('user', event.user.id, event.user.full_name) : navigate('/activity')} className="ui-data-row grid w-full grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 px-5 py-3 text-left">
                 <span className="flex h-7 w-7 items-center justify-center rounded-[8px]" style={{ background: 'rgba(227,84,84,0.09)', color: '#e35454' }}><Activity size={13} /></span>
                 <span className="min-w-0"><span className="block truncate text-[12px] font-medium" style={{ color: 'var(--text-2)' }}>{event.user?.full_name || 'Unattributed activity'}</span><span className="block truncate text-[10px] capitalize" style={{ color: 'var(--text-4)' }}>{event.event_type.replace('_', ' ')} · {event.country || event.ip_address || 'Unknown source'}</span></span>

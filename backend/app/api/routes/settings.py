@@ -13,7 +13,7 @@ import pyotp
 import qrcode
 import qrcode.image.svg
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Request, status, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from pydantic import BaseModel
@@ -105,6 +105,17 @@ class SamlSettingsIn(BaseModel):
     saml_require_mfa: bool = False
     saml_sp_cert: str = ""
     saml_sp_key: str = ""
+
+
+async def _read_upload(upload: UploadFile) -> bytes:
+    from app.services.tls_certificate import MAX_CERTIFICATE_BYTES
+
+    data = await upload.read(MAX_CERTIFICATE_BYTES + 1)
+    if not data:
+        raise HTTPException(400, f"{upload.filename or 'Uploaded file'} is empty")
+    if len(data) > MAX_CERTIFICATE_BYTES:
+        raise HTTPException(413, "Certificate files must be 512 KB or smaller")
+    return data
 
 
 # ─── User management (admin) ─────────────────────────────────────────────────
@@ -429,6 +440,60 @@ async def update_saml_settings(
                        {"saml_enabled": data.saml_enabled})
     logger.info("Admin %s updated SAML settings (enabled=%s)", current.email, data.saml_enabled)
     return {"message": "SAML settings saved"}
+
+
+# ─── HTTPS certificate management (admin) ───────────────────────────────────
+
+@router.get("/tls-certificate")
+async def get_tls_certificate_status(
+    _: AuthUser = Depends(require_role("admin")),
+):
+    from app.services.tls_certificate import certificate_status
+
+    return certificate_status()
+
+
+@router.post("/tls-certificate")
+async def upload_tls_certificate(
+    request: Request,
+    certificate: UploadFile = File(...),
+    private_key: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_role("admin")),
+):
+    from app.services.tls_certificate import install_certificate
+
+    certificate_data = await _read_upload(certificate)
+    private_key_data = await _read_upload(private_key)
+    try:
+        info = install_certificate(certificate_data, private_key_data)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except OSError as exc:
+        logger.error("TLS certificate installation failed: %s", exc, exc_info=True)
+        raise HTTPException(500, "The certificate could not be stored safely") from exc
+
+    await audit_action(
+        "update_tls_certificate",
+        "tls_certificate",
+        info["serial_number"],
+        request,
+        db,
+        current,
+        {
+            "subject": info["subject"],
+            "issuer": info["issuer"],
+            "not_after": info["not_after"],
+            "fingerprint_sha256": info["fingerprint_sha256"],
+        },
+    )
+    logger.info("Admin %s installed HTTPS certificate %s", current.email, info["serial_number"])
+    return {
+        **info,
+        "message": "Certificate installed. HTTPS will reload automatically within 10 seconds.",
+    }
 
 
 # ─── Audit log (admin) ───────────────────────────────────────────────────────

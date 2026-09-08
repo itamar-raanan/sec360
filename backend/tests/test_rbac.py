@@ -47,6 +47,15 @@ async def test_viewer_cannot_access_settings_users(client: AsyncClient, viewer_u
     assert res.status_code == 403
 
 
+async def test_viewer_cannot_access_tls_certificate_settings(client: AsyncClient, viewer_user):
+    tok = await _token(client, "viewer@test.local", "Viewer123!")
+    res = await client.get(
+        "/api/settings/tls-certificate",
+        headers={"Authorization": f"Bearer {tok}"},
+    )
+    assert res.status_code == 403
+
+
 async def test_admin_can_access_settings_users(client: AsyncClient, admin_user):
     tok = await _token(client, "admin@test.local", "Admin123!")
     res = await client.get("/api/settings/users", headers={"Authorization": f"Bearer {tok}"})

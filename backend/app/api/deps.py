@@ -124,6 +124,36 @@ def require_connected_integration(integration_type: str):
     return checker
 
 
+def require_any_connected_integration(*integration_types: str):
+    """Block a shared feature until at least one owning product is connected."""
+    async def checker(
+        _: AuthUser = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> None:
+        from app.models.integration import IntegrationConfig
+
+        connected = (await db.execute(
+            select(IntegrationConfig.integration_type).where(
+                IntegrationConfig.integration_type.in_(integration_types),
+                IntegrationConfig.is_enabled.is_(True),
+                IntegrationConfig.status == "connected",
+            )
+        )).scalars().first()
+        if connected is None:
+            display_names = {
+                "adfs": "ADFS",
+                "active_directory": "Active Directory",
+                "google_workspace": "Google Workspace",
+            }
+            products = ", ".join(display_names.get(item, item) for item in integration_types)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Connect at least one required integration: {products}.",
+            )
+
+    return checker
+
+
 async def audit_action(
     action: str,
     resource_type: str | None,

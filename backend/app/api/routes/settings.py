@@ -6,7 +6,7 @@ import io
 import base64
 import logging
 import secrets
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime, timezone, timedelta
 
 import pyotp
@@ -91,6 +91,7 @@ class SystemSettingsIn(BaseModel):
     min_s1_version: Optional[str] = None
     min_dlp_version: Optional[str] = None
     min_wss_version: Optional[str] = None
+    endpoint_product_tags: Optional[list[Literal["S1", "DLP", "WSS"]]] = None
 
 
 class SamlSettingsIn(BaseModel):
@@ -345,6 +346,19 @@ async def mfa_disable(
 
 
 # ─── System settings (admin) ──────────────────────────────────────────────────
+
+DEFAULT_ENDPOINT_PRODUCT_TAGS = ["S1", "DLP", "WSS"]
+
+
+@router.get("/endpoint-product-tags")
+async def get_endpoint_product_tags(
+    db: AsyncSession = Depends(get_db),
+    _: AuthUser = Depends(get_current_user),
+):
+    """Return the endpoint badge selection to every authenticated role."""
+    cfg = (await db.execute(select(SystemSettings).where(SystemSettings.id == 1))).scalar_one_or_none()
+    tags = cfg.endpoint_product_tags if cfg else DEFAULT_ENDPOINT_PRODUCT_TAGS
+    return {"tags": tags if tags is not None else DEFAULT_ENDPOINT_PRODUCT_TAGS}
 
 @router.get("/system")
 async def get_system_settings(

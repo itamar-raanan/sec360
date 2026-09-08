@@ -58,7 +58,16 @@ interface SystemSettings {
   min_s1_version: string
   min_dlp_version: string
   min_wss_version: string
+  endpoint_product_tags: EndpointProductTag[]
 }
+
+type EndpointProductTag = 'S1' | 'DLP' | 'WSS'
+
+const ENDPOINT_PRODUCT_TAGS: Array<{ tag: EndpointProductTag; label: string; hint: string }> = [
+  { tag: 'S1', label: 'S1', hint: 'Show SentinelOne presence and missing status' },
+  { tag: 'DLP', label: 'DLP', hint: 'Show Symantec DLP presence and missing status' },
+  { tag: 'WSS', label: 'WSS', hint: 'Show Symantec WSS presence and missing status' },
+]
 
 interface AuditEntry {
   id: string
@@ -688,6 +697,7 @@ function AccountTab() {
 // ── Platform settings tab ─────────────────────────────────────────────────────
 
 function PlatformTab() {
+  const queryClient = useQueryClient()
   const { data: cfg, isLoading, refetch } = useQuery<SystemSettings>({
     queryKey: ['system-settings'],
     queryFn: () => apiClient.get('/settings/system').then(r => r.data),
@@ -722,11 +732,21 @@ function PlatformTab() {
   const set = <K extends keyof SystemSettings>(key: K, val: SystemSettings[K]) =>
     setForm(f => f ? { ...f, [key]: val } : f)
 
+  const toggleEndpointProductTag = (tag: EndpointProductTag, enabled: boolean) => {
+    const selected = new Set(form.endpoint_product_tags ?? [])
+    if (enabled) selected.add(tag)
+    else selected.delete(tag)
+    set('endpoint_product_tags', ENDPOINT_PRODUCT_TAGS
+      .map(option => option.tag)
+      .filter(option => selected.has(option)))
+  }
+
   const save = async () => {
     setSaving(true)
     setMsg(null)
     try {
       await apiClient.put('/settings/system', form)
+      await queryClient.invalidateQueries({ queryKey: ['endpoint-product-tags'] })
       setMsg({ type: 'success', msg: 'Settings saved' })
       refetch()
     } catch {
@@ -787,6 +807,18 @@ function PlatformTab() {
             className="bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm w-44 font-mono focus:outline-none focus:border-emerald-500"
           />
         </Field>
+      </Section>
+
+      {/* Endpoint product tags */}
+      <Section title="Endpoint product tags" hint="Choose which product-presence badges appear on every endpoint. This changes presentation only; collection and compliance remain active.">
+        {ENDPOINT_PRODUCT_TAGS.map(({ tag, label, hint }) => (
+          <Field key={tag} label={label} hint={hint}>
+            <Toggle
+              checked={(form.endpoint_product_tags ?? []).includes(tag)}
+              onChange={enabled => toggleEndpointProductTag(tag, enabled)}
+            />
+          </Field>
+        ))}
       </Section>
 
       {/* Endpoint monitoring */}

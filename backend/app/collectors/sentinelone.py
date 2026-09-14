@@ -16,7 +16,11 @@ class SentinelOneCollector(BaseCollector):
     name = "sentinelone"
 
     def __init__(self, credentials: dict = None, db: AsyncSession = None):
-        super().__init__()
+        credentials = credentials or {}
+        self.verify_ssl = str(credentials.get("verify_ssl", "true")).lower() not in {
+            "false", "0", "no", "off",
+        }
+        super().__init__(verify_ssl=self.verify_ssl)
         if credentials:
             self.api_token = credentials.get("api_key", "")
             console_url = credentials.get("console_url", "")
@@ -38,7 +42,7 @@ class SentinelOneCollector(BaseCollector):
         if not self.api_token:
             return {"success": False, "message": "No API token configured"}
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=15.0, verify=self.verify_ssl) as client:
                 resp = await client.get(
                     f"{self.base_url}/web/api/v2.1/agents",
                     headers=self._headers(),
@@ -100,7 +104,7 @@ class SentinelOneCollector(BaseCollector):
     async def _fetch_agents(self) -> list:
         agents = []
         cursor = None
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, verify=self.verify_ssl) as client:
             while True:
                 params: dict[str, Any] = {"limit": 100}
                 if cursor:
@@ -570,7 +574,7 @@ class SentinelOneCollector(BaseCollector):
             async with sem:
                 return ep_id, await self._fetch_apps_for_agent(client, s1_id)
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, verify=self.verify_ssl) as client:
             tasks = [
                 fetch_one(client, s1_id, ep_id)
                 for s1_id, ep_id in id_to_endpoint.items()

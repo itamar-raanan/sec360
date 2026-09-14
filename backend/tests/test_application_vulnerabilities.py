@@ -23,6 +23,20 @@ async def _login(client: AsyncClient) -> dict[str, str]:
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
+async def test_sentinelone_ssl_verification_defaults_on_and_can_be_disabled():
+    default_collector = SentinelOneCollector(credentials={"api_key": "test"})
+    disabled_collector = SentinelOneCollector(credentials={
+        "api_key": "test",
+        "verify_ssl": "false",
+    })
+    try:
+        assert default_collector.verify_ssl is True
+        assert disabled_collector.verify_ssl is False
+    finally:
+        await default_collector.client.aclose()
+        await disabled_collector.client.aclose()
+
+
 def _risk(s1_id: str, *, severity: str = "HIGH", endpoint_id: str = "s1-agent-1") -> dict:
     return {
         "application": "7-Zip 19.00",

@@ -16,6 +16,7 @@ from app.integrations.catalog import (
     INTEGRATION_TYPES,
     RETIRED_INTEGRATION_TYPES,
     catalog_payload,
+    available_features,
 )
 from app.integrations.registry import get_collector_class
 from app.schemas.integration import (
@@ -40,6 +41,8 @@ def _to_response(config: IntegrationConfig) -> IntegrationConfigResponse:
         last_error=config.last_error,
         records_synced=config.records_synced,
         credentials_configured=bool(config.credentials),
+        available_features=available_features(config.integration_type, config.credentials),
+        deployment_type=(config.credentials or {}).get("deployment_type"),
     )
 
 

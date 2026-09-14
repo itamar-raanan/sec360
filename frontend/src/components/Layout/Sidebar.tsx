@@ -24,14 +24,14 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
   const { user, logout } = useAuthStore()
   const { theme, toggle: toggleTheme } = useThemeStore()
   const navigate = useNavigate()
-  const { connected } = useConnectedIntegrations()
+  const { connected, features } = useConnectedIntegrations()
 
   const handleLogout = async () => {
     await logout()
     navigate('/login')
   }
 
-  const visibleItems = visibleNavigation(user?.role, connected)
+  const visibleItems = visibleNavigation(user?.role, connected, features)
 
   return (
     <aside

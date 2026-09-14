@@ -98,6 +98,41 @@ async def test_successful_connection_test_unlocks_product_features(
     await db_session.refresh(config)
     assert config.status == "connected"
 
+    listing = await client.get("/api/integrations", headers=await _admin_headers(client))
+    sentinelone = next(
+        item for item in listing.json() if item["integration_type"] == "sentinelone"
+    )
+    assert sentinelone["available_features"] == ["application_vulnerabilities"]
+    assert sentinelone["deployment_type"] is None
+
+
+async def test_sentinelone_on_prem_does_not_unlock_application_vulnerabilities(
+    client: AsyncClient, db_session, admin_user
+):
+    db_session.add(IntegrationConfig(
+        integration_type="sentinelone",
+        display_name="SentinelOne",
+        credentials={"api_key": "test", "deployment_type": "on_prem"},
+        status="connected",
+        is_enabled=True,
+    ))
+    await db_session.commit()
+    headers = await _admin_headers(client)
+
+    listing = await client.get("/api/integrations", headers=headers)
+    sentinelone = next(
+        item for item in listing.json() if item["integration_type"] == "sentinelone"
+    )
+    assert sentinelone["available_features"] == []
+    assert sentinelone["deployment_type"] == "on_prem"
+
+    feature = await client.get(
+        "/api/application-vulnerabilities/summary",
+        headers=headers,
+    )
+    assert feature.status_code == 409
+    assert "does not provide this feature" in feature.json()["detail"]
+
 
 async def test_feature_api_is_unavailable_until_its_product_is_connected(
     client: AsyncClient, admin_user

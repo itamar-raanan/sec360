@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock
 
 import pytest
 import httpx
@@ -35,6 +36,31 @@ async def test_sentinelone_ssl_verification_defaults_on_and_can_be_disabled():
     finally:
         await default_collector.client.aclose()
         await disabled_collector.client.aclose()
+
+
+async def test_on_prem_collector_skips_application_vulnerability_api(monkeypatch):
+    collector = SentinelOneCollector(credentials={
+        "api_key": "test",
+        "deployment_type": "on_prem",
+    })
+    fetch_risks = AsyncMock()
+    clear_risks = AsyncMock(return_value=0)
+    monkeypatch.setattr(collector, "_fetch_agents", AsyncMock(return_value=[]))
+    monkeypatch.setattr(collector, "_upsert_agents", AsyncMock(return_value=(0, {})))
+    monkeypatch.setattr(collector, "_fetch_application_vulnerabilities", fetch_risks)
+    monkeypatch.setattr(collector, "_upsert_application_vulnerabilities", clear_risks)
+    try:
+        result = await collector.collect()
+    finally:
+        await collector.client.aclose()
+
+    fetch_risks.assert_not_awaited()
+    clear_risks.assert_awaited_once_with([], {})
+    assert result == {
+        "records_synced": 0,
+        "agents_synced": 0,
+        "vulnerabilities_synced": 0,
+    }
 
 
 def _risk(s1_id: str, *, severity: str = "HIGH", endpoint_id: str = "s1-agent-1") -> dict:

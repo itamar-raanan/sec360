@@ -19,8 +19,8 @@ export default function MobileNavigation({ onOpenCmd }: MobileNavigationProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const { user, logout } = useAuthStore()
   const { theme, toggle: toggleTheme } = useThemeStore()
-  const { connected } = useConnectedIntegrations()
-  const items = visibleNavigation(user?.role, connected)
+  const { connected, features } = useConnectedIntegrations()
+  const items = visibleNavigation(user?.role, connected, features)
   const primary = items.filter(item => PRIMARY_PATHS.includes(item.to))
 
   useEffect(() => setOpen(false), [location.pathname])

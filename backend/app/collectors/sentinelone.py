@@ -20,6 +20,8 @@ class SentinelOneCollector(BaseCollector):
         self.verify_ssl = str(credentials.get("verify_ssl", "true")).lower() not in {
             "false", "0", "no", "off",
         }
+        self.deployment_type = str(credentials.get("deployment_type", "cloud")).lower()
+        self.application_vulnerabilities_enabled = self.deployment_type != "on_prem"
         super().__init__(verify_ssl=self.verify_ssl)
         if credentials:
             self.api_token = credentials.get("api_key", "")
@@ -55,6 +57,14 @@ class SentinelOneCollector(BaseCollector):
                 resp.raise_for_status()
                 data = resp.json()
                 total = data.get("pagination", {}).get("totalItems", 0)
+                if not self.application_vulnerabilities_enabled:
+                    return {
+                        "success": True,
+                        "message": (
+                            f"Connected successfully. {total} agents found; "
+                            "application vulnerabilities are disabled for this on-premises deployment."
+                        ),
+                    }
                 risks = await client.get(
                     f"{self.base_url}/web/api/v2.1/application-management/risks",
                     headers=self._headers(),
@@ -90,8 +100,13 @@ class SentinelOneCollector(BaseCollector):
             count, agent_id_map = await self._upsert_agents(agents)
             if agent_id_map:
                 await self._collect_app_agents(agent_id_map)
-            risks = await self._fetch_application_vulnerabilities()
-            vulnerability_count = await self._upsert_application_vulnerabilities(risks, agent_id_map)
+            if self.application_vulnerabilities_enabled:
+                risks = await self._fetch_application_vulnerabilities()
+                vulnerability_count = await self._upsert_application_vulnerabilities(risks, agent_id_map)
+            else:
+                # Remove findings left from a previous cloud configuration.
+                await self._upsert_application_vulnerabilities([], agent_id_map)
+                vulnerability_count = 0
             return {
                 "records_synced": count + vulnerability_count,
                 "agents_synced": count,

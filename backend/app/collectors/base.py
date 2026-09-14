@@ -59,8 +59,8 @@ class BaseCollector(ABC):
     max_retries: int = 3
     base_delay: float = 1.0
 
-    def __init__(self):
-        self.client = httpx.AsyncClient(timeout=30.0)
+    def __init__(self, *, verify_ssl: bool = True):
+        self.client = httpx.AsyncClient(timeout=30.0, verify=verify_ssl)
 
     @abstractmethod
     async def fetch_data(self) -> list[dict[str, Any]]:

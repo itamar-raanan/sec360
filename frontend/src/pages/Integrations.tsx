@@ -116,6 +116,17 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
         required: true,
         group: 'connection',
       },
+      {
+        name: 'verify_ssl',
+        label: 'Verify SSL',
+        type: 'select',
+        defaultValue: 'true',
+        hint: 'Disable only for an on-prem console with an untrusted certificate.',
+        options: [
+          { value: 'true', label: 'Yes (recommended)' },
+          { value: 'false', label: 'No (skip verification)' },
+        ],
+      },
     ],
   },
   symantec_dlp: {

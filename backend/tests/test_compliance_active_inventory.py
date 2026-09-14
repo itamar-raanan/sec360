@@ -17,6 +17,7 @@ async def _seed_inventory(db_session):
     now = datetime.now(timezone.utc)
     current = Endpoint(
         hostname="current-device",
+        os_version="Windows 11 Enterprise",
         last_seen=now - timedelta(days=1),
         is_active=True,
         source="jumpcloud",
@@ -35,6 +36,7 @@ async def _seed_inventory(db_session):
     )
     agent_current = Endpoint(
         hostname="agent-current-device",
+        os_version="Ubuntu Linux 24.04",
         last_seen=now - timedelta(days=90),
         is_active=True,
         source="jumpcloud",
@@ -91,6 +93,27 @@ async def test_compliance_dashboard_only_counts_current_inventory(
         "current-device",
         "agent-current-device",
     }
+
+    multiple_statuses = await client.get(
+        "/api/compliance/endpoints?statuses=compliant,partial", headers=headers
+    )
+    assert multiple_statuses.status_code == 200
+    assert {row["hostname"] for row in multiple_statuses.json()} == {
+        "current-device",
+        "agent-current-device",
+    }
+
+    combined_facets = await client.get(
+        "/api/compliance/endpoints"
+        "?statuses=partial,non_compliant"
+        "&issues=no_dlp,edr_outdated"
+        "&oses=Linux,Android",
+        headers=headers,
+    )
+    assert combined_facets.status_code == 200
+    assert [row["hostname"] for row in combined_facets.json()] == [
+        "agent-current-device"
+    ]
 
 
 async def test_full_evaluation_removes_stale_derived_records(db_session):

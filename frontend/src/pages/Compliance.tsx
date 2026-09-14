@@ -43,6 +43,10 @@ interface ActiveFilter {
   color: string
 }
 
+function filterKey(filter: ActiveFilter) {
+  return `${filter.type}:${filter.value}`
+}
+
 // ─── Colours / labels ────────────────────────────────────────────────────────
 
 const STATUS_COLORS: Record<string, string> = {
@@ -125,37 +129,31 @@ function KpiCard({
 
 // ─── Right panel — endpoint list ──────────────────────────────────────────────
 
-function EndpointList({ filter }: { filter: ActiveFilter | null }) {
+function EndpointList({ filters, onRemoveFilter, onClearFilters }: {
+  filters: ActiveFilter[]
+  onRemoveFilter: (filter: ActiveFilter) => void
+  onClearFilters: () => void
+}) {
   const [search, setSearch] = useState('')
   const { openPanel } = usePanelStore()
 
-  // Reset search when filter changes
-  React.useEffect(() => { setSearch('') }, [filter?.value])
-
   const params = new URLSearchParams({ limit: '200' })
-  if (filter?.type === 'status') params.set('status', filter.value)
-  if (filter?.type === 'issue')  params.set('issue', filter.value)
-  if (filter?.type === 'os')     params.set('os', filter.value)
+  const statuses = filters.filter(filter => filter.type === 'status').map(filter => filter.value)
+  const issues = filters.filter(filter => filter.type === 'issue').map(filter => filter.value)
+  const operatingSystems = filters.filter(filter => filter.type === 'os').map(filter => filter.value)
+  if (statuses.length) params.set('statuses', statuses.join(','))
+  if (issues.length) params.set('issues', issues.join(','))
+  if (operatingSystems.length) params.set('oses', operatingSystems.join(','))
   if (search) params.set('search', search)
 
+  const filterSignature = filters.map(filterKey).sort().join('|')
+
   const { data: endpoints = [], isLoading } = useQuery<ComplianceEndpoint[]>({
-    queryKey: ['compliance-endpoints', filter?.value ?? 'default', search],
-    queryFn: () => {
-      // default: show all non-compliant + partial
-      const p = filter ? params : new URLSearchParams({ limit: '200' })
-      if (!filter) {
-        // no filter → show problematic endpoints only (not compliant)
-        // we'll fetch all and filter client-side, or just use status=non_compliant,partial
-        // API doesn't support OR status, so fetch without status filter but show all
-      }
-      if (search) p.set('search', search)
-      return apiClient.get(`/compliance/endpoints?${p.toString()}`).then(r => r.data)
-    },
+    queryKey: ['compliance-endpoints', filterSignature || 'default', search],
+    queryFn: () => apiClient.get(`/compliance/endpoints?${params.toString()}`).then(r => r.data),
   })
 
-  const displayed = filter
-    ? endpoints
-    : endpoints.filter(e => e.status !== 'compliant')
+  const displayed = filters.length ? endpoints : endpoints.filter(e => e.status !== 'compliant')
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -165,17 +163,33 @@ function EndpointList({ filter }: { filter: ActiveFilter | null }) {
         <div className="flex-shrink-0 px-4 py-3 border-b border-white/[0.06] bg-zinc-950/80">
           <div className="flex items-center justify-between mb-2.5">
             <div className="flex items-center gap-2 min-w-0">
-              {filter ? (
-                <>
-                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: filter.color }} />
-                  <span className="text-sm font-semibold text-white truncate">{filter.label}</span>
-                </>
-              ) : (
-                <span className="text-sm font-semibold text-white">Non-Compliant Endpoints</span>
-              )}
+              <span className="text-sm font-semibold text-white truncate">
+                {filters.length ? 'Filtered endpoints' : 'Non-Compliant Endpoints'}
+              </span>
               <span className="text-xs text-zinc-500 flex-shrink-0">({displayed.length})</span>
             </div>
+            {filters.length > 0 && (
+              <button type="button" onClick={onClearFilters} className="text-[11px] text-zinc-500 transition-colors hover:text-zinc-200">
+                Clear all
+              </button>
+            )}
           </div>
+          {filters.length > 0 && (
+            <div className="mb-2.5 flex flex-wrap gap-1.5">
+              {filters.map(filter => (
+                <button
+                  key={filterKey(filter)}
+                  type="button"
+                  onClick={() => onRemoveFilter(filter)}
+                  className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-white/[0.08] bg-zinc-900 px-2 py-1 text-[10px] text-zinc-300 transition-colors hover:border-white/[0.16]"
+                >
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: filter.color }} />
+                  <span className="truncate">{filter.label}</span>
+                  <X size={10} className="shrink-0 text-zinc-600" />
+                </button>
+              ))}
+            </div>
+          )}
           <div className="relative">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-500" />
             <input
@@ -197,7 +211,7 @@ function EndpointList({ filter }: { filter: ActiveFilter | null }) {
           ) : displayed.length === 0 ? (
             <div className="flex flex-col items-center py-14 text-zinc-600">
               <ShieldCheck size={28} className="mb-2 text-emerald-400/40" />
-              <p className="text-sm">All endpoints are compliant</p>
+              <p className="text-sm">{filters.length ? 'No endpoints match these filters' : 'All endpoints are compliant'}</p>
             </div>
           ) : (
             displayed.map(ep => (
@@ -241,18 +255,21 @@ function EndpointList({ filter }: { filter: ActiveFilter | null }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function Compliance() {
-  const [searchParams] = useSearchParams()
-  const [activeFilter, setActiveFilter] = useState<ActiveFilter | null>(() => {
-    const issue  = searchParams.get('issue')
-    const status = searchParams.get('status')
-    const os     = searchParams.get('os')
-    if (issue  && ISSUE_META[issue])  return { type: 'issue',  value: issue,  label: ISSUE_META[issue].label,  color: ISSUE_META[issue].color }
-    if (status && STATUS_COLORS[status]) {
-      const labelMap: Record<string, string> = { compliant: 'Compliant', partial: 'Partial', non_compliant: 'Non-Compliant' }
-      return { type: 'status', value: status, label: labelMap[status] ?? status, color: STATUS_COLORS[status] }
-    }
-    if (os) return { type: 'os', value: os, label: os, color: STATUS_COLORS.partial }
-    return null
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>(() => {
+    const initial: ActiveFilter[] = []
+    const labelMap: Record<string, string> = { compliant: 'Compliant', partial: 'Partial', non_compliant: 'Non-Compliant' }
+    const statuses = (searchParams.get('statuses') || searchParams.get('status') || '').split(',').filter(Boolean)
+    const issues = (searchParams.get('issues') || searchParams.get('issue') || '').split(',').filter(Boolean)
+    const operatingSystems = (searchParams.get('oses') || searchParams.get('os') || '').split(',').filter(Boolean)
+    statuses.forEach(value => {
+      if (STATUS_COLORS[value]) initial.push({ type: 'status', value, label: labelMap[value] ?? value, color: STATUS_COLORS[value] })
+    })
+    issues.forEach(value => {
+      if (ISSUE_META[value]) initial.push({ type: 'issue', value, label: ISSUE_META[value].label, color: ISSUE_META[value].color })
+    })
+    operatingSystems.forEach(value => initial.push({ type: 'os', value, label: value, color: STATUS_COLORS.partial }))
+    return initial
   })
   const qc = useQueryClient()
 
@@ -271,8 +288,25 @@ export default function Compliance() {
     },
   })
 
-  function toggleFilter(f: ActiveFilter) {
-    setActiveFilter(prev => (prev?.value === f.value && prev?.type === f.type) ? null : f)
+  React.useEffect(() => {
+    const next = new URLSearchParams()
+    const statuses = activeFilters.filter(filter => filter.type === 'status').map(filter => filter.value)
+    const issues = activeFilters.filter(filter => filter.type === 'issue').map(filter => filter.value)
+    const operatingSystems = activeFilters.filter(filter => filter.type === 'os').map(filter => filter.value)
+    if (statuses.length) next.set('statuses', statuses.join(','))
+    if (issues.length) next.set('issues', issues.join(','))
+    if (operatingSystems.length) next.set('oses', operatingSystems.join(','))
+    setSearchParams(next, { replace: true })
+  }, [activeFilters, setSearchParams])
+
+  function toggleFilter(filter: ActiveFilter) {
+    setActiveFilters(current => current.some(item => filterKey(item) === filterKey(filter))
+      ? current.filter(item => filterKey(item) !== filterKey(filter))
+      : [...current, filter])
+  }
+
+  function isFilterActive(type: ActiveFilter['type'], value: string) {
+    return activeFilters.some(filter => filter.type === type && filter.value === value)
   }
 
   if (isLoading) {
@@ -328,7 +362,7 @@ export default function Compliance() {
               sub={`${s.compliant} of ${s.total} compliant`}
               color="text-emerald-300"
               icon={ShieldCheck}
-              active={activeFilter?.value === 'compliant'}
+              active={isFilterActive('status', 'compliant')}
               onClick={() => toggleFilter({ type: 'status', value: 'compliant', label: 'Compliant', color: STATUS_COLORS.compliant })}
             />
             <div className="grid grid-cols-2 gap-2">
@@ -337,7 +371,7 @@ export default function Compliance() {
                 label="Non-Compliant"
                 color="text-red-400"
                 icon={ShieldOff}
-                active={activeFilter?.value === 'non_compliant'}
+                active={isFilterActive('status', 'non_compliant')}
                 onClick={() => toggleFilter({ type: 'status', value: 'non_compliant', label: 'Non-Compliant', color: STATUS_COLORS.non_compliant })}
               />
               <KpiCard
@@ -345,7 +379,7 @@ export default function Compliance() {
                 label="Partial"
                 color="text-yellow-400"
                 icon={ShieldAlert}
-                active={activeFilter?.value === 'partial'}
+                active={isFilterActive('status', 'partial')}
                 onClick={() => toggleFilter({ type: 'status', value: 'partial', label: 'Partial', color: STATUS_COLORS.partial })}
               />
             </div>
@@ -382,7 +416,7 @@ export default function Compliance() {
                     key={key}
                     onClick={() => toggleFilter({ type: 'status', value: key, label, color: STATUS_COLORS[key] })}
                     className={`w-full text-left rounded-lg px-2 py-1.5 transition-colors ${
-                      activeFilter?.value === key ? 'bg-zinc-900 ring-1 ring-inset ring-gray-600' : 'hover:bg-white/[0.04]/60'
+                      isFilterActive('status', key) ? 'bg-zinc-900 ring-1 ring-inset ring-gray-600' : 'hover:bg-white/[0.04]/60'
                     }`}
                   >
                     <div className="flex items-center justify-between">
@@ -411,7 +445,7 @@ export default function Compliance() {
               {Object.entries(ISSUE_META).filter(([key]) => activeProductTags.has(ISSUE_PRODUCT[key])).map(([key, meta]) => {
                 const count = (iss as any)[key] as number ?? 0
                 const pct = s.total > 0 ? count / s.total * 100 : 0
-                const isActive = activeFilter?.type === 'issue' && activeFilter.value === key
+                const isActive = isFilterActive('issue', key)
                 return (
                   <button
                     key={key}
@@ -447,7 +481,7 @@ export default function Compliance() {
                 {osd.map(os => {
                   const pct = os.total > 0 ? Math.round(os.compliant / os.total * 100) : 0
                   const barColor = pct >= 80 ? STATUS_COLORS.compliant : pct >= 50 ? STATUS_COLORS.partial : STATUS_COLORS.non_compliant
-                  const isActive = activeFilter?.type === 'os' && activeFilter.value === os.os
+                  const isActive = isFilterActive('os', os.os)
                   return (
                     <button
                       key={os.os}
@@ -475,12 +509,12 @@ export default function Compliance() {
           )}
 
           {/* Active filter hint */}
-          {activeFilter && (
+          {activeFilters.length > 0 && (
             <button
-              onClick={() => setActiveFilter(null)}
+              onClick={() => setActiveFilters([])}
               className="w-full flex items-center justify-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 py-1 transition-colors"
             >
-              <X size={11} /> Clear filter
+              <X size={11} /> Clear {activeFilters.length} filters
             </button>
           )}
         </div>
@@ -488,7 +522,11 @@ export default function Compliance() {
 
       {/* ── Right panel (endpoint list) ───────────────────────────────── */}
       <div className="compliance-results flex-1 flex overflow-hidden">
-        <EndpointList filter={activeFilter} />
+        <EndpointList
+          filters={activeFilters}
+          onRemoveFilter={toggleFilter}
+          onClearFilters={() => setActiveFilters([])}
+        />
       </div>
     </div>
   )

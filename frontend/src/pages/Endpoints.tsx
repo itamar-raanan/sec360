@@ -670,6 +670,11 @@ export default function Endpoints() {
                             WSS{hasWSS ? '' : ' ✗'}
                           </span>
                         )}
+                        {connected.has('puppet') && ep.puppet_managed && (
+                          <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-xs text-amber-300">
+                            Puppet
+                          </span>
+                        )}
                         {tagList.slice(0, 2).map((tag: string) => (
                           <span key={tag} className="text-xs px-1.5 py-0.5 rounded border border-gray-600/50 text-zinc-500 bg-zinc-900/50">
                             {tag}
@@ -695,6 +700,11 @@ export default function Endpoints() {
                         {connected.has('sentinelone') && productEnabled('S1') && ep.source !== 'sentinelone' && s1LastSeen && (
                           <span className="text-[10px] text-emerald-600 hidden sm:block">
                             S1: {relTime(s1LastSeen)}
+                          </span>
+                        )}
+                        {connected.has('puppet') && ep.puppet_managed && ep.source !== 'puppet' && ep.puppet_last_seen && (
+                          <span className="hidden text-[10px] text-amber-500 sm:block">
+                            Puppet: {relTime(ep.puppet_last_seen)}
                           </span>
                         )}
                       </div>

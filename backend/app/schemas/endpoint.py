@@ -74,6 +74,8 @@ class EndpointResponse(EndpointBase):
     risk_score_note: Optional[str] = None
     tags: Optional[str] = None
     source: Optional[str] = None
+    puppet_managed: bool = False
+    puppet_last_seen: Optional[datetime] = None
     lifecycle_state: str = "active"
     lifecycle_reason: Optional[str] = None
     lifecycle_changed_at: Optional[datetime] = None

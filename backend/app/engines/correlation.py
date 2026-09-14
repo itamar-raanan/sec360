@@ -21,7 +21,7 @@ Design principles
 import logging
 import re
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 logger = logging.getLogger(__name__)
@@ -457,6 +457,15 @@ async def deduplicate_endpoints(db: AsyncSession) -> int:
                         keep.compliance_status = cs
                     else:
                         await db.delete(cs)
+
+                # Keep Puppet inventory membership attached to the canonical
+                # endpoint when correlation merges a duplicate node record.
+                from app.models.puppet import PuppetNode
+                await db.execute(
+                    update(PuppetNode)
+                    .where(PuppetNode.endpoint_id == drop.id)
+                    .values(endpoint_id=keep.id)
+                )
 
                 await db.flush()
                 await db.delete(drop)

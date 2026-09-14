@@ -38,6 +38,7 @@ async def test_catalog_contains_only_the_default_store_products(
         "active_directory",
     ]
     products = {product["integration_type"]: product for product in response.json()}
+    assert products["puppet"]["features"] == ["puppet_facts"]
     assert products["sentinelone"]["features"] == ["application_vulnerabilities"]
     assert products["symantec_dlp"]["features"] == ["dlp_policy_search"]
     for integration_type in ("adfs", "active_directory", "google_workspace"):

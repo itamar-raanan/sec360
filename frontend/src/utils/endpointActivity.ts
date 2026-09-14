@@ -39,6 +39,9 @@ export function connectedLastActivity(
 ): string | null {
   const primary = primaryEndpointActivity(ep, connected, enabledProductTags)
   const observations = primary ? [primary.lastSeen] : []
+  if (connected.has('puppet') && ep.puppet_managed && ep.puppet_last_seen) {
+    observations.push(ep.puppet_last_seen)
+  }
 
   for (const agent of ep.agents ?? []) {
     const sourceConnected = (

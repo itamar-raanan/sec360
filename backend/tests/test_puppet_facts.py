@@ -64,6 +64,11 @@ async def test_puppet_sync_preserves_canonical_source_and_stores_all_facts(
         select(PuppetFact).where(PuppetFact.name == "processors")
     )).scalar_one()
     assert processors.value == {"count": 8}
+    assert processors.value_type == "object"
+    is_virtual = (await db_session.execute(
+        select(PuppetFact).where(PuppetFact.name == "is_virtual")
+    )).scalar_one()
+    assert is_virtual.value_type == "boolean"
 
 
 async def test_puppet_facts_api_is_gated_searchable_and_marks_endpoints(
@@ -112,6 +117,62 @@ async def test_puppet_facts_api_is_gated_searchable_and_marks_endpoints(
     assert facts.status_code == 200
     assert facts.headers["x-total-count"] == "1"
     assert facts.json()[0]["name"] == "kernel"
+
+    favorite = await client.post(
+        "/api/puppet-facts/favorites",
+        headers=headers,
+        json={"fact_name": "kernel"},
+    )
+    assert favorite.status_code == 201
+    favorites = await client.get("/api/puppet-facts/favorites", headers=headers)
+    assert favorites.status_code == 200
+    assert [item["fact_name"] for item in favorites.json()] == ["kernel"]
+
+    favorite_facts = await client.get(
+        "/api/puppet-facts?favorites_only=true&value_types=string&names=kernel,uptime",
+        headers=headers,
+    )
+    assert favorite_facts.status_code == 200
+    assert favorite_facts.headers["x-total-count"] == "1"
+    filtered_summary = await client.get(
+        "/api/puppet-facts/summary?favorites_only=true&names=kernel",
+        headers=headers,
+    )
+    assert filtered_summary.status_code == 200
+    assert filtered_summary.json()["facts"] == 1
+
+    view_payload = {
+        "name": "Linux production",
+        "is_default": True,
+        "definition": {
+            "search": "linux",
+            "certname": "build",
+            "names": ["kernel"],
+            "environment": "production",
+            "value_types": ["string"],
+            "favorites_only": True,
+            "page_size": 25,
+            "sort": "name",
+            "order": "desc",
+        },
+    }
+    created_view = await client.post(
+        "/api/puppet-facts/saved-views", headers=headers, json=view_payload
+    )
+    assert created_view.status_code == 201
+    assert created_view.json()["definition"] == view_payload["definition"]
+    views = await client.get("/api/puppet-facts/saved-views", headers=headers)
+    assert views.status_code == 200
+    assert views.json()[0]["is_default"] is True
+
+    deleted_view = await client.delete(
+        f"/api/puppet-facts/saved-views/{created_view.json()['id']}", headers=headers
+    )
+    assert deleted_view.status_code == 204
+    deleted_favorite = await client.delete(
+        f"/api/puppet-facts/favorites/{favorite.json()['id']}", headers=headers
+    )
+    assert deleted_favorite.status_code == 204
 
     endpoints = await client.get(
         "/api/endpoints",

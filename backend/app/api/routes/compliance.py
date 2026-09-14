@@ -15,6 +15,12 @@ from app.services.product_scope import load_product_tags
 router = APIRouter(prefix="/compliance", tags=["compliance"])
 
 
+def _csv_filter_values(plural: Optional[str], singular: Optional[str]) -> list[str]:
+    """Parse repeated facet values while preserving legacy single-value parameters."""
+    raw = plural or singular or ""
+    return list(dict.fromkeys(value.strip() for value in raw.split(",") if value.strip()))
+
+
 @router.get("/dashboard")
 async def get_compliance_dashboard(
     db: AsyncSession = Depends(get_db),
@@ -237,8 +243,11 @@ async def list_compliance(
 async def list_compliance_endpoints(
     response: Response,
     comp_status: Optional[str] = Query(None, alias="status"),
+    statuses: Optional[str] = Query(None, max_length=200),
     issue: Optional[str] = Query(None),
+    issues: Optional[str] = Query(None, max_length=500),
     os_family: Optional[str] = Query(None, alias="os"),
+    os_families: Optional[str] = Query(None, alias="oses", max_length=300),
     search: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
@@ -259,8 +268,13 @@ async def list_compliance_endpoints(
         .where(current_endpoint_clause())
     )
 
-    if comp_status:
-        query = query.where(ComplianceStatus.status == comp_status)
+    status_values = _csv_filter_values(statuses, comp_status)
+    if status_values:
+        allowed_statuses = {"compliant", "partial", "non_compliant"}
+        selected_statuses = [value for value in status_values if value in allowed_statuses]
+        query = query.where(
+            ComplianceStatus.status.in_(selected_statuses) if selected_statuses else false()
+        )
 
     issue_filters = {}
     if use_s1:
@@ -280,8 +294,14 @@ async def list_compliance_endpoints(
             "no_network_security": ComplianceStatus.wss_installed == False,  # noqa: E712
             "wss_outdated": sa_and(ComplianceStatus.wss_installed == True, ComplianceStatus.wss_version_ok == False),  # noqa: E712
         })
-    if issue:
-        query = query.where(issue_filters.get(issue, false()))
+    issue_values = _csv_filter_values(issues, issue)
+    if issue_values:
+        selected_issue_filters = [
+            issue_filters[value] for value in issue_values if value in issue_filters
+        ]
+        query = query.where(
+            or_(*selected_issue_filters) if selected_issue_filters else false()
+        )
 
     OS_PATTERNS: dict[str, list[str]] = {
         "Windows":    ["%windows%"],
@@ -290,13 +310,17 @@ async def list_compliance_endpoints(
         "iOS/iPadOS": ["%ios%", "%ipad%"],
         "Android":    ["%android%"],
     }
-    if os_family:
-        patterns = OS_PATTERNS.get(os_family)
-        if patterns:
-            query = query.where(or_(*[Endpoint.os_version.ilike(p) for p in patterns]))
-        elif os_family == "Other":
-            all_known = [p for ps in OS_PATTERNS.values() for p in ps]
-            query = query.where(~or_(*[Endpoint.os_version.ilike(p) for p in all_known]))
+    os_values = _csv_filter_values(os_families, os_family)
+    if os_values:
+        os_filters = []
+        all_known = [pattern for patterns in OS_PATTERNS.values() for pattern in patterns]
+        for value in os_values:
+            patterns = OS_PATTERNS.get(value)
+            if patterns:
+                os_filters.append(or_(*[Endpoint.os_version.ilike(pattern) for pattern in patterns]))
+            elif value == "Other":
+                os_filters.append(~or_(*[Endpoint.os_version.ilike(pattern) for pattern in all_known]))
+        query = query.where(or_(*os_filters) if os_filters else false())
 
     if search:
         query = query.where(Endpoint.hostname.ilike(f"%{search}%"))

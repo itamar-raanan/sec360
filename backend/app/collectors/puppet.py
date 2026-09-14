@@ -137,6 +137,20 @@ class PuppetCollector:
     def _parse_datetime(value: Any) -> datetime | None:
         if not isinstance(value, str) or not value:
             return None
+
+    @staticmethod
+    def _value_type(value: Any) -> str:
+        if value is None:
+            return "null"
+        if isinstance(value, bool):
+            return "boolean"
+        if isinstance(value, (int, float)):
+            return "number"
+        if isinstance(value, list):
+            return "array"
+        if isinstance(value, dict):
+            return "object"
+        return "string"
         try:
             return datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError:
@@ -280,6 +294,7 @@ class PuppetCollector:
                 index_elements=[table.c.certname, table.c.name],
                 set_={
                     "value": statement.excluded.value,
+                    "value_type": statement.excluded.value_type,
                     "environment": statement.excluded.environment,
                     "synced_at": statement.excluded.synced_at,
                 },
@@ -299,6 +314,7 @@ class PuppetCollector:
                 "certname": certname,
                 "name": name,
                 "value": raw.get("value"),
+                "value_type": self._value_type(raw.get("value")),
                 "environment": raw.get("environment"),
                 "synced_at": synced_at,
             })

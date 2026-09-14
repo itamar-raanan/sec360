@@ -20,5 +20,14 @@ export function useConnectedIntegrations() {
     [query.data],
   )
 
-  return { ...query, connected }
+  const features = useMemo(
+    () => new Set(
+      (query.data ?? [])
+        .filter(item => item.is_enabled && item.status === 'connected')
+        .flatMap(item => item.available_features ?? []),
+    ),
+    [query.data],
+  )
+
+  return { ...query, connected, features }
 }

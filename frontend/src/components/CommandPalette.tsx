@@ -24,6 +24,7 @@ interface NavCommand {
   keywords?: string[]
   requiredIntegration?: string
   requiredAnyIntegration?: string[]
+  requiredFeature?: string
   requiredProductTag?: EndpointProductTag
 }
 
@@ -65,7 +66,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const [selected, setSelected] = useState(0)
   const navigate = useNavigate()
   const { openPanel } = usePanelStore()
-  const { connected } = useConnectedIntegrations()
+  const { connected, features } = useConnectedIntegrations()
   const { enabled: productEnabled } = useEndpointProductTags()
   const inputRef = useRef<HTMLInputElement>(null)
   const debouncedQuery = useDebounce(query, 200)
@@ -76,7 +77,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { kind: 'nav', id: 'users',        label: 'Users',         description: 'User risk and activity',         icon: Users,           action: () => navigate('/users'),         keywords: ['people', 'accounts', 'identities'] },
     { kind: 'nav', id: 'compliance',   label: 'Compliance',    description: 'Device compliance status',       icon: CheckCircle,     action: () => navigate('/compliance'),    keywords: ['status', 'policy'] },
     { kind: 'nav', id: 'activity',     label: 'Activity',      description: 'Security event feed',            icon: Activity,        action: () => navigate('/activity'),      keywords: ['events', 'logs', 'timeline'], requiredAnyIntegration: ['adfs', 'active_directory', 'google_workspace'] },
-    { kind: 'nav', id: 'application-vulnerabilities', label: 'Applications Vulnerabilities', description: 'SentinelOne software CVEs and exposure', icon: Bug, action: () => navigate('/application-vulnerabilities'), keywords: ['cve', 'cvss', 'software', 'patch', 'sentinelone'], requiredIntegration: 'sentinelone' },
+    { kind: 'nav', id: 'application-vulnerabilities', label: 'Applications Vulnerabilities', description: 'SentinelOne software CVEs and exposure', icon: Bug, action: () => navigate('/application-vulnerabilities'), keywords: ['cve', 'cvss', 'software', 'patch', 'sentinelone'], requiredFeature: 'application_vulnerabilities' },
     { kind: 'nav', id: 'dlp-policy-search', label: 'DLP User Policy Search', description: 'Find user exclusions across DLP policies', icon: Database, action: () => navigate('/dlp-user-policy-search'), keywords: ['symantec', 'exclusion', 'sender', 'recipient'], requiredIntegration: 'symantec_dlp' },
     { kind: 'nav', id: 'reports',      label: 'Reports',       description: 'Generate and export reports',    icon: FileText,        action: () => navigate('/reports'),       keywords: ['export', 'pdf', 'csv'] },
     { kind: 'nav', id: 'security',     label: 'Security',      description: 'Users, roles & audit log',       icon: Lock,            action: () => navigate('/security'),      keywords: ['audit', 'users', 'access'] },
@@ -91,7 +92,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { kind: 'nav', id: 'missing-dlp', label: 'Endpoints missing DLP', description: 'Find devices without Symantec DLP coverage', icon: Database, action: () => navigate('/compliance?issue=no_dlp'), keywords: ['symantec', 'dlp', 'agent', 'coverage'], requiredProductTag: 'DLP' },
     { kind: 'nav', id: 'missing-wss', label: 'Endpoints missing WSS', description: 'Find devices outside web security enforcement', icon: Wifi, action: () => navigate('/compliance?issue=no_network_security'), keywords: ['symantec', 'web', 'proxy', 'coverage'], requiredProductTag: 'WSS' },
     { kind: 'nav', id: 'unassigned-endpoints', label: 'Unassigned endpoints', description: 'Find devices without a correlated owner', icon: UserX, action: () => navigate('/endpoints?owner=unassigned'), keywords: ['owner', 'correlation', 'orphan'] },
-    { kind: 'nav', id: 'critical-app-vulnerabilities', label: 'Critical application vulnerabilities', description: 'Open critical SentinelOne software findings', icon: Bug, action: () => navigate('/application-vulnerabilities?severity=CRITICAL'), keywords: ['cve', 'critical', 'software', 'patch'], requiredIntegration: 'sentinelone' },
+    { kind: 'nav', id: 'critical-app-vulnerabilities', label: 'Critical application vulnerabilities', description: 'Open critical SentinelOne software findings', icon: Bug, action: () => navigate('/application-vulnerabilities?severity=CRITICAL'), keywords: ['cve', 'critical', 'software', 'patch'], requiredFeature: 'application_vulnerabilities' },
     { kind: 'nav', id: 'suspicious-activity', label: 'Suspicious activity', description: 'Open the filtered security event timeline', icon: Activity, action: () => navigate('/activity?is_suspicious=true'), keywords: ['events', 'alerts', 'anomalies'], requiredAnyIntegration: ['adfs', 'active_directory', 'google_workspace'] },
   ], [navigate])
 
@@ -115,12 +116,16 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     ).filter(command =>
       !command.requiredAnyIntegration || command.requiredAnyIntegration.some(type => connected.has(type))
     ).filter(command =>
+      !command.requiredFeature || features.has(command.requiredFeature)
+    ).filter(command =>
       !command.requiredProductTag || productEnabled(command.requiredProductTag)
     )
     const availableQuick = quickCommands.filter(command =>
       !command.requiredIntegration || connected.has(command.requiredIntegration)
     ).filter(command =>
       !command.requiredAnyIntegration || command.requiredAnyIntegration.some(type => connected.has(type))
+    ).filter(command =>
+      !command.requiredFeature || features.has(command.requiredFeature)
     ).filter(command =>
       !command.requiredProductTag || productEnabled(command.requiredProductTag)
     )
@@ -153,7 +158,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     }))
 
     return [...navMatches, ...epResults, ...userResults]
-  }, [query, searchData, navCommands, quickCommands, connected, productEnabled])
+  }, [query, searchData, navCommands, quickCommands, connected, features, productEnabled])
 
   useEffect(() => {
     if (open) {

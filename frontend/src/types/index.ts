@@ -227,6 +227,8 @@ export interface IntegrationConfig {
   last_error: string | null
   records_synced: string | null
   credentials_configured: boolean
+  available_features: string[]
+  deployment_type: 'cloud' | 'on_prem' | null
 }
 
 export interface IntegrationCredentials {
@@ -234,6 +236,7 @@ export interface IntegrationCredentials {
   api_key?: string
   // SentinelOne
   console_url?: string
+  deployment_type?: 'cloud' | 'on_prem'
   // Symantec DLP
   db_host?: string
   db_port?: number

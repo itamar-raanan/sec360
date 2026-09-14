@@ -87,3 +87,17 @@ FEATURE_INTEGRATIONS: Final[dict[str, tuple[str, ...]]] = {
 
 def catalog_payload() -> list[dict]:
     return [dict(product) for product in INTEGRATION_PRODUCTS]
+
+
+def available_features(integration_type: str, credentials: dict | None = None) -> list[str]:
+    """Return features supported by this product's configured deployment."""
+    product = next(
+        (item for item in INTEGRATION_PRODUCTS if item["integration_type"] == integration_type),
+        None,
+    )
+    features = list(product["features"]) if product else []
+    if integration_type == "sentinelone":
+        deployment = str((credentials or {}).get("deployment_type", "cloud")).lower()
+        if deployment == "on_prem":
+            return [item for item in features if item != "application_vulnerabilities"]
+    return features

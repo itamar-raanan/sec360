@@ -100,7 +100,7 @@ def require_role(required_role: str):
     return checker
 
 
-def require_connected_integration(integration_type: str):
+def require_connected_integration(integration_type: str, *, feature: str | None = None):
     """Block an integration-owned feature until its product is connected."""
     async def checker(
         _: AuthUser = Depends(get_current_user),
@@ -120,6 +120,14 @@ def require_connected_integration(integration_type: str):
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Connect the {integration_type} integration to use this feature.",
             )
+        if feature:
+            from app.integrations.catalog import available_features
+
+            if feature not in available_features(integration_type, integration.credentials):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"The configured {integration_type} deployment does not provide this feature.",
+                )
 
     return checker
 

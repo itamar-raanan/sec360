@@ -101,6 +101,17 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
     docsHint: 'Management Console → Settings → Users → API Token',
     fields: [
       {
+        name: 'deployment_type',
+        label: 'Deployment',
+        type: 'select',
+        defaultValue: 'cloud',
+        hint: 'On-premises mode skips Application Vulnerabilities, which is not available there.',
+        options: [
+          { value: 'cloud', label: 'Cloud' },
+          { value: 'on_prem', label: 'On-premises' },
+        ],
+      },
+      {
         name: 'console_url',
         label: 'Console URL',
         type: 'url',
@@ -353,6 +364,19 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
   },
 }
 
+const FEATURE_LABELS: Record<string, string> = {
+  application_vulnerabilities: 'Applications Vulnerabilities',
+  dlp_policy_search: 'DLP User Policy Search',
+  activity: 'Activity',
+}
+
+function availableUnlocks(config: IntegrationConfig, catalog: CatalogEntry | null) {
+  if (config.available_features) {
+    return config.available_features.map(feature => FEATURE_LABELS[feature] ?? feature)
+  }
+  return catalog?.unlocks ?? []
+}
+
 // ─── Category definitions ─────────────────────────────────────────────────────
 
 type CategoryDef = {
@@ -565,7 +589,7 @@ function IntegrationCard({
   const color = catalog?.color ?? '#6366f1'
   const description = catalog?.description ?? config.display_name
   const produces = catalog?.dataProduces ?? []
-  const unlocks = catalog?.unlocks ?? []
+  const unlocks = availableUnlocks(config, catalog)
   const category = catalog?.category ?? 'custom'
 
   const categoryLabel = CATEGORIES.find((c) => c.id === category)?.label ?? category
@@ -663,11 +687,11 @@ function IntegrationPanel({
 
   useEffect(() => {
     if (configType) {
-      setFormValues({})
+      setFormValues(config?.deployment_type ? { deployment_type: config.deployment_type } : {})
       setTestResult(null)
       setView(initialView)
     }
-  }, [configType, initialView])
+  }, [configType, config?.deployment_type, initialView])
 
   const catalog = config ? getCatalogEntry(config.integration_type) : null
   const isCustom = config?.integration_type.startsWith('custom_') ?? false
@@ -677,7 +701,7 @@ function IntegrationPanel({
   const color = catalog?.color ?? '#6366f1'
   const description = catalog?.description ?? config?.display_name ?? ''
   const produces = catalog?.dataProduces ?? []
-  const unlocks = catalog?.unlocks ?? []
+  const unlocks = config ? availableUnlocks(config, catalog) : []
   const category = catalog?.category ?? 'custom'
   const categoryLabel = CATEGORIES.find((c) => c.id === category)?.label ?? category
   const fields = catalog?.fields ?? []
@@ -856,6 +880,18 @@ function IntegrationPanel({
                             {config.status === 'connected' ? 'Feature unlocked' : 'Available after connection'}
                           </p>
                           <p className="mt-1 text-xs text-zinc-500">{unlocks.join(', ')}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {config.integration_type === 'sentinelone' && config.available_features?.includes('application_vulnerabilities') === false && (
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-4">
+                      <div className="flex items-start gap-3">
+                        <ShieldCheck size={15} className="mt-0.5 flex-shrink-0 text-amber-400" />
+                        <div>
+                          <p className="text-xs font-semibold text-amber-300">On-premises mode</p>
+                          <p className="mt-1 text-xs text-zinc-500">Endpoint and agent data will sync. Applications Vulnerabilities is disabled for this deployment.</p>
                         </div>
                       </div>
                     </div>
@@ -1401,7 +1437,7 @@ export default function Integrations() {
   const unlockedFeatureCount = new Set(
     integrations
       .filter(item => item.status === 'connected' && item.is_enabled)
-      .flatMap(item => getCatalogEntry(item.integration_type)?.unlocks ?? [])
+      .flatMap(item => item.available_features ?? [])
   ).size
 
   return (

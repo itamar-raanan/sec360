@@ -18,7 +18,10 @@ from app.models.user import AuthUser
 router = APIRouter(
     prefix="/application-vulnerabilities",
     tags=["application-vulnerabilities"],
-    dependencies=[Depends(require_connected_integration("sentinelone"))],
+    dependencies=[Depends(require_connected_integration(
+        "sentinelone",
+        feature="application_vulnerabilities",
+    ))],
 )
 
 

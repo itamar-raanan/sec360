@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional, Dict, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class IntegrationCredentials(BaseModel):
@@ -42,6 +42,8 @@ class IntegrationConfigResponse(BaseModel):
     last_error: Optional[str] = None
     records_synced: Optional[str] = None
     credentials_configured: bool = False  # True if credentials exist (don't return raw creds)
+    available_features: list[str] = Field(default_factory=list)
+    deployment_type: Optional[str] = None
 
 
 class SyncResult(BaseModel):

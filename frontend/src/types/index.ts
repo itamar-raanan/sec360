@@ -66,6 +66,8 @@ export interface Endpoint {
   last_reboot: string | null
   location: string | null
   source: string | null
+  puppet_managed: boolean
+  puppet_last_seen: string | null
   lifecycle_state: 'active' | 'stale' | 'ignored' | 'decommissioned'
   lifecycle_reason: string | null
   lifecycle_changed_at: string | null

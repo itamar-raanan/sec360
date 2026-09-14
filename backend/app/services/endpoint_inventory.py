@@ -14,6 +14,7 @@ def current_endpoint_clause(*, now: datetime | None = None):
     """
     from app.models.agent import SecurityAgent
     from app.models.endpoint import Endpoint
+    from app.models.puppet import PuppetNode
 
     reference_time = now or datetime.now(timezone.utc)
     cutoff = reference_time - timedelta(days=ENDPOINT_ACTIVITY_WINDOW_DAYS)
@@ -21,8 +22,12 @@ def current_endpoint_clause(*, now: datetime | None = None):
         SecurityAgent.endpoint_id == Endpoint.id,
         SecurityAgent.last_seen >= cutoff,
     )
+    recent_puppet_node = exists().where(
+        PuppetNode.endpoint_id == Endpoint.id,
+        PuppetNode.synced_at >= cutoff,
+    )
     return (
         Endpoint.is_active.is_(True)
         & (Endpoint.lifecycle_state == "active")
-        & or_(Endpoint.last_seen >= cutoff, recent_agent)
+        & or_(Endpoint.last_seen >= cutoff, recent_agent, recent_puppet_node)
     )

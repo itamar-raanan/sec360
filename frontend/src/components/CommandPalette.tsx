@@ -7,6 +7,7 @@ import {
   Lock, ShieldOff, Wifi, UserX, Radar,
   Database,
   Bug,
+  Braces,
 } from 'lucide-react'
 import apiClient from '../api/client'
 import { usePanelStore } from '../store/panels'
@@ -78,6 +79,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { kind: 'nav', id: 'compliance',   label: 'Compliance',    description: 'Device compliance status',       icon: CheckCircle,     action: () => navigate('/compliance'),    keywords: ['status', 'policy'] },
     { kind: 'nav', id: 'activity',     label: 'Activity',      description: 'Security event feed',            icon: Activity,        action: () => navigate('/activity'),      keywords: ['events', 'logs', 'timeline'], requiredAnyIntegration: ['adfs', 'active_directory', 'google_workspace'] },
     { kind: 'nav', id: 'application-vulnerabilities', label: 'Applications Vulnerabilities', description: 'SentinelOne software CVEs and exposure', icon: Bug, action: () => navigate('/application-vulnerabilities'), keywords: ['cve', 'cvss', 'software', 'patch', 'sentinelone'], requiredFeature: 'application_vulnerabilities' },
+    { kind: 'nav', id: 'puppet-facts', label: 'Puppet Facts', description: 'Search PuppetDB facts across managed nodes', icon: Braces, action: () => navigate('/puppet-facts'), keywords: ['puppet', 'facts', 'facter', 'nodes', 'configuration'], requiredFeature: 'puppet_facts' },
     { kind: 'nav', id: 'dlp-policy-search', label: 'DLP User Policy Search', description: 'Find user exclusions across DLP policies', icon: Database, action: () => navigate('/dlp-user-policy-search'), keywords: ['symantec', 'exclusion', 'sender', 'recipient'], requiredIntegration: 'symantec_dlp' },
     { kind: 'nav', id: 'reports',      label: 'Reports',       description: 'Generate and export reports',    icon: FileText,        action: () => navigate('/reports'),       keywords: ['export', 'pdf', 'csv'] },
     { kind: 'nav', id: 'security',     label: 'Security',      description: 'Users, roles & audit log',       icon: Lock,            action: () => navigate('/security'),      keywords: ['audit', 'users', 'access'] },

@@ -7,6 +7,7 @@ from app.models.application import Application, ApplicationVulnerability
 from app.models.audit import AuditLog
 from app.models.integration import IntegrationConfig
 from app.models.note import Note
+from app.models.puppet import PuppetFact, PuppetNode
 
 __all__ = [
     "User",
@@ -20,4 +21,6 @@ __all__ = [
     "AuditLog",
     "IntegrationConfig",
     "Note",
+    "PuppetFact",
+    "PuppetNode",
 ]

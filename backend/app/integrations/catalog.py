@@ -15,8 +15,8 @@ INTEGRATION_PRODUCTS: Final[tuple[dict, ...]] = (
         "display_name": "Puppet",
         "category": "infrastructure",
         "description": "PuppetDB node inventory, operating systems, and freshness.",
-        "capabilities": ["endpoints", "os_inventory"],
-        "features": [],
+        "capabilities": ["endpoints", "os_inventory", "facts"],
+        "features": ["puppet_facts"],
     },
     {
         "integration_type": "sentinelone",

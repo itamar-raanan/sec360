@@ -1,6 +1,7 @@
 import {
   Activity,
   Bug,
+  Braces,
   CheckCircle,
   Database,
   FileText,
@@ -35,6 +36,7 @@ export const NAV_ITEMS: NavigationItem[] = [
   { to: '/compliance', icon: CheckCircle, label: 'Compliance', minRole: 'viewer', group: 'Monitor' },
   { to: '/activity', icon: Activity, label: 'Activity', minRole: 'viewer', group: 'Monitor', requiredAnyIntegration: ['adfs', 'active_directory', 'google_workspace'] },
   { to: '/application-vulnerabilities', icon: Bug, label: 'App Vulnerabilities', shortLabel: 'Vulnerabilities', minRole: 'viewer', group: 'Analyze', requiredFeature: 'application_vulnerabilities' },
+  { to: '/puppet-facts', icon: Braces, label: 'Puppet Facts', minRole: 'analyst', group: 'Analyze', requiredFeature: 'puppet_facts' },
   { to: '/dlp-user-policy-search', icon: Database, label: 'DLP Policy Search', minRole: 'analyst', group: 'Analyze', requiredIntegration: 'symantec_dlp' },
   { to: '/reports', icon: FileText, label: 'Reports', minRole: 'analyst', group: 'Manage' },
   { to: '/integrations', icon: Plug, label: 'Integration Store', shortLabel: 'Integrations', minRole: 'admin', group: 'Manage' },

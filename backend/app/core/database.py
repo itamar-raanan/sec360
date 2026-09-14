@@ -39,7 +39,7 @@ async def get_db() -> AsyncSession:
 async def init_db():
     """Create all tables and apply incremental schema patches."""
     async with engine.begin() as conn:
-        from app.models import user, endpoint, agent, activity, compliance, application, audit, system_settings, report, note  # noqa
+        from app.models import user, endpoint, agent, activity, compliance, application, audit, system_settings, report, note, puppet  # noqa
         await conn.run_sync(Base.metadata.create_all)
         # Incremental patches — safe to run repeatedly
         from sqlalchemy import text
@@ -133,6 +133,39 @@ async def init_db():
             "DELETE FROM integration_configs WHERE integration_type IN ('hibob', 'cloudsoc')",
             "UPDATE users SET sources = sources - 'hibob' WHERE sources ? 'hibob'",
             "DELETE FROM activity_events WHERE details->>'app' = 'cloudsoc'",
+            # Puppet inventory and searchable facts.
+            """
+            CREATE TABLE IF NOT EXISTS puppet_nodes (
+                certname VARCHAR(500) PRIMARY KEY,
+                endpoint_id UUID REFERENCES endpoints(id) ON DELETE SET NULL,
+                environment VARCHAR(255),
+                latest_report_status VARCHAR(100),
+                report_timestamp TIMESTAMPTZ,
+                catalog_timestamp TIMESTAMPTZ,
+                facts_timestamp TIMESTAMPTZ,
+                synced_at TIMESTAMPTZ NOT NULL
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_puppet_nodes_endpoint_id ON puppet_nodes (endpoint_id)",
+            "CREATE INDEX IF NOT EXISTS ix_puppet_nodes_environment ON puppet_nodes (environment)",
+            "CREATE INDEX IF NOT EXISTS ix_puppet_nodes_latest_report_status ON puppet_nodes (latest_report_status)",
+            "CREATE INDEX IF NOT EXISTS ix_puppet_nodes_synced_at ON puppet_nodes (synced_at)",
+            """
+            CREATE TABLE IF NOT EXISTS puppet_facts (
+                id UUID PRIMARY KEY,
+                certname VARCHAR(500) NOT NULL REFERENCES puppet_nodes(certname) ON DELETE CASCADE,
+                name VARCHAR(500) NOT NULL,
+                value JSONB NOT NULL,
+                environment VARCHAR(255),
+                synced_at TIMESTAMPTZ NOT NULL,
+                CONSTRAINT uq_puppet_fact_certname_name UNIQUE (certname, name)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_puppet_facts_certname ON puppet_facts (certname)",
+            "CREATE INDEX IF NOT EXISTS ix_puppet_facts_name ON puppet_facts (name)",
+            "CREATE INDEX IF NOT EXISTS ix_puppet_facts_environment ON puppet_facts (environment)",
+            "CREATE INDEX IF NOT EXISTS ix_puppet_facts_synced_at ON puppet_facts (synced_at)",
+            "CREATE INDEX IF NOT EXISTS ix_puppet_facts_name_certname ON puppet_facts (name, certname)",
             # GlobalProtect retirement — remove stale records and schema fields.
             "DELETE FROM security_agents WHERE product_name::text = 'globalprotect'",
             "ALTER TABLE compliance_statuses DROP COLUMN IF EXISTS gp_version_ok",

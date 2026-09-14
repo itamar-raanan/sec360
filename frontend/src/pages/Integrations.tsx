@@ -207,7 +207,8 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
     description: 'Infrastructure configuration management via PuppetDB REST API',
     color: '#f59e0b',
     icon: GitBranch,
-    dataProduces: ['Endpoints', 'OS Info', 'Last Seen'],
+    dataProduces: ['Endpoints', 'OS Info', 'Last Seen', 'Facts'],
+    unlocks: ['Puppet Facts'],
     docsHint: 'Requires PuppetDB API access (v4). Token auth is optional.',
     fields: [
       {
@@ -368,6 +369,7 @@ const FEATURE_LABELS: Record<string, string> = {
   application_vulnerabilities: 'Applications Vulnerabilities',
   dlp_policy_search: 'DLP User Policy Search',
   activity: 'Activity',
+  puppet_facts: 'Puppet Facts',
 }
 
 function availableUnlocks(config: IntegrationConfig, catalog: CatalogEntry | null) {

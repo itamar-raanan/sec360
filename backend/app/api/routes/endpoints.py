@@ -99,7 +99,24 @@ async def list_endpoints(
         query.order_by(Endpoint.risk_score.desc()).limit(limit).offset(offset)
     )
     endpoints = result.scalars().all()
-    return [EndpointResponse.model_validate(e) for e in endpoints]
+    endpoint_ids = [endpoint.id for endpoint in endpoints]
+    puppet_activity = {}
+    if endpoint_ids:
+        from app.models.puppet import PuppetNode
+        puppet_activity = dict((await db.execute(
+            select(PuppetNode.endpoint_id, func.max(PuppetNode.synced_at))
+            .where(PuppetNode.endpoint_id.in_(endpoint_ids))
+            .group_by(PuppetNode.endpoint_id)
+        )).all())
+    return [
+        EndpointResponse.model_validate(endpoint).model_copy(
+            update={
+                "puppet_managed": endpoint.id in puppet_activity,
+                "puppet_last_seen": puppet_activity.get(endpoint.id),
+            }
+        )
+        for endpoint in endpoints
+    ]
 
 
 @router.get("/{endpoint_id}", response_model=EndpointDetail)
@@ -122,6 +139,13 @@ async def get_endpoint(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Endpoint not found")
 
     detail = EndpointDetail.model_validate(endpoint)
+
+    from app.models.puppet import PuppetNode
+    puppet_last_seen = (await db.execute(
+        select(func.max(PuppetNode.synced_at)).where(PuppetNode.endpoint_id == endpoint.id)
+    )).scalar_one_or_none()
+    detail.puppet_managed = puppet_last_seen is not None
+    detail.puppet_last_seen = puppet_last_seen
 
     # Build per-product agent breakdown
     for agent in endpoint.agents:

@@ -12,6 +12,7 @@ const PAGE_TITLES: Record<string, { title: string; desc: string }> = {
   '/compliance':   { title: 'Compliance',    desc: 'Control coverage and exceptions' },
   '/activity':     { title: 'Activity',      desc: 'Security event timeline' },
   '/application-vulnerabilities': { title: 'Applications Vulnerabilities', desc: 'SentinelOne software exposure and CVEs' },
+  '/puppet-facts': { title: 'Puppet Facts', desc: 'Searchable PuppetDB node facts' },
   '/dlp-user-policy-search': { title: 'DLP User Policy Search', desc: 'User exclusions across Symantec DLP policies' },
   '/reports':      { title: 'Reports',       desc: 'Generated reports and exports' },
   '/integrations': { title: 'Integrations',  desc: 'Connected platforms and APIs' },

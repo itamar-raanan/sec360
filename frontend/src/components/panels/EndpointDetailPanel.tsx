@@ -337,6 +337,9 @@ export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
     ...(connected.has('sentinelone') && productEnabled('WSS')
       ? [{ label: 'WSS', color: 'text-orange-500', val: ep.symantec_wss?.last_seen ?? null, fallback: ep.symantec_wss?.installed ? 'No data' : 'Not installed' }]
       : []),
+    ...(connected.has('puppet') && ep.puppet_managed && ep.source !== 'puppet'
+      ? [{ label: 'Puppet', color: 'text-amber-500', val: ep.puppet_last_seen }]
+      : []),
   ]
 
   return (
@@ -349,6 +352,11 @@ export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
           {ep.source && ep.source !== 'jumpcloud' && (
             <span className="text-[10px] px-1.5 py-0.5 rounded border border-gray-600/40 text-zinc-500 flex-shrink-0">
               {ep.source}
+            </span>
+          )}
+          {connected.has('puppet') && ep.puppet_managed && ep.source !== 'puppet' && (
+            <span className="flex-shrink-0 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-300">
+              Puppet
             </span>
           )}
         </div>

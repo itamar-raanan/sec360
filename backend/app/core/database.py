@@ -166,6 +166,35 @@ async def init_db():
             "CREATE INDEX IF NOT EXISTS ix_puppet_facts_environment ON puppet_facts (environment)",
             "CREATE INDEX IF NOT EXISTS ix_puppet_facts_synced_at ON puppet_facts (synced_at)",
             "CREATE INDEX IF NOT EXISTS ix_puppet_facts_name_certname ON puppet_facts (name, certname)",
+            "ALTER TABLE puppet_facts ADD COLUMN IF NOT EXISTS value_type VARCHAR(20)",
+            "UPDATE puppet_facts SET value_type = COALESCE(jsonb_typeof(value), 'null') WHERE value_type IS NULL",
+            "ALTER TABLE puppet_facts ALTER COLUMN value_type SET DEFAULT 'string'",
+            "ALTER TABLE puppet_facts ALTER COLUMN value_type SET NOT NULL",
+            "CREATE INDEX IF NOT EXISTS ix_puppet_facts_value_type ON puppet_facts (value_type)",
+            """
+            CREATE TABLE IF NOT EXISTS puppet_fact_favorites (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+                fact_name VARCHAR(500) NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL,
+                CONSTRAINT uq_puppet_fact_favorite_user_name UNIQUE (user_id, fact_name)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_puppet_fact_favorites_user_id ON puppet_fact_favorites (user_id)",
+            "CREATE INDEX IF NOT EXISTS ix_puppet_fact_favorites_fact_name ON puppet_fact_favorites (fact_name)",
+            """
+            CREATE TABLE IF NOT EXISTS puppet_fact_saved_views (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+                name VARCHAR(120) NOT NULL,
+                definition JSONB NOT NULL,
+                is_default BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL,
+                CONSTRAINT uq_puppet_fact_saved_view_user_name UNIQUE (user_id, name)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_puppet_fact_saved_views_user_id ON puppet_fact_saved_views (user_id)",
             # GlobalProtect retirement — remove stale records and schema fields.
             "DELETE FROM security_agents WHERE product_name::text = 'globalprotect'",
             "ALTER TABLE compliance_statuses DROP COLUMN IF EXISTS gp_version_ok",

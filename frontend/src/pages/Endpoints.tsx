@@ -15,6 +15,8 @@ import FilterBar, { type FilterGroup } from '../components/shared/FilterBar'
 import { usePanelStore } from '../store/panels'
 import type { Endpoint } from '../types'
 import { useEndpointProductTags } from '../hooks/useEndpointProductTags'
+import { useConnectedIntegrations } from '../hooks/useConnectedIntegrations'
+import { connectedLastActivity, primaryEndpointActivity } from '../utils/endpointActivity'
 
 interface AuthUserDetail {
   id: string
@@ -272,6 +274,7 @@ export default function Endpoints() {
     queryFn: async () => (await apiClient.get('/endpoints?limit=2000&active_only=false')).data,
   })
   const { tags: enabledProductTags, enabled: productEnabled } = useEndpointProductTags()
+  const { connected } = useConnectedIntegrations()
 
   // Compute facet counts from raw (unfiltered) data
   const facetCounts = useMemo(() => {
@@ -409,12 +412,14 @@ export default function Endpoints() {
         const rb = COMPLIANCE_RANK[b.compliance_status?.status ?? ''] ?? 3
         return ra - rb
       }
-      const ta = a.last_seen ? new Date(a.last_seen).getTime() : -Infinity
-      const tb = b.last_seen ? new Date(b.last_seen).getTime() : -Infinity
+      const aLastActivity = connectedLastActivity(a, connected, enabledProductTags)
+      const bLastActivity = connectedLastActivity(b, connected, enabledProductTags)
+      const ta = aLastActivity ? new Date(aLastActivity).getTime() : -Infinity
+      const tb = bLastActivity ? new Date(bLastActivity).getTime() : -Infinity
       return ta - tb
     })
     return sortDir === 'asc' ? list : list.reverse()
-  }, [raw, filters, sortField, sortDir, enabledProductTags])
+  }, [raw, filters, sortField, sortDir, enabledProductTags, connected])
 
   const selectedEndpoints = endpoints.filter(ep => selectedIds.has(ep.id))
 
@@ -597,10 +602,11 @@ export default function Endpoints() {
                 const hasWSS     = agents.some(a => a.product_name === 'symantec_wss')
                 const s1Agent    = agents.find(a => a.product_name === 'sentinelone')
                 const s1LastSeen = s1Agent?.last_seen ?? null
+                const primaryActivity = primaryEndpointActivity(ep, connected, enabledProductTags)
                 const tagList    = ep.tags
                   ? String(ep.tags).split(',').map((t: string) => t.trim()).filter(Boolean)
                   : []
-                const isInactive = !ep.last_seen && !s1LastSeen
+                const isInactive = connectedLastActivity(ep, connected, enabledProductTags) === null
 
                 const isSelected = selectedIds.has(ep.id)
                 return (
@@ -681,12 +687,12 @@ export default function Endpoints() {
                         <ChevronRight className="w-4 h-4 text-zinc-600" />
                       </div>
                       <div className="flex flex-col items-end gap-0.5">
-                        {ep.last_seen && (
+                        {primaryActivity && (
                           <span className="text-[10px] text-zinc-600 hidden sm:block">
-                            JC: {relTime(ep.last_seen)}
+                            {primaryActivity.shortLabel}: {relTime(primaryActivity.lastSeen)}
                           </span>
                         )}
-                        {s1LastSeen && (
+                        {connected.has('sentinelone') && productEnabled('S1') && ep.source !== 'sentinelone' && s1LastSeen && (
                           <span className="text-[10px] text-emerald-600 hidden sm:block">
                             S1: {relTime(s1LastSeen)}
                           </span>

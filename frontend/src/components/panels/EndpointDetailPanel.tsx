@@ -15,6 +15,8 @@ import NoteBox from '../shared/NoteBox'
 import { useAuthStore } from '../../store/auth'
 import type { Endpoint } from '../../types'
 import { useEndpointProductTags } from '../../hooks/useEndpointProductTags'
+import { useConnectedIntegrations } from '../../hooks/useConnectedIntegrations'
+import { primaryEndpointActivity } from '../../utils/endpointActivity'
 
 interface AgentDetail {
   installed: boolean
@@ -298,6 +300,7 @@ function AgentBlock({ label, detail, simple = false, showStateGroup = false }: {
 export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
   const { user } = useAuthStore()
   const { enabled: productEnabled, tags: activeProductTags } = useEndpointProductTags()
+  const { connected } = useConnectedIntegrations()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
 
   const { data: ep, isLoading, error } = useQuery<EndpointDetail>({
@@ -320,6 +323,21 @@ export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
     : []
 
   const cs = ep.compliance_status
+  const primaryActivity = primaryEndpointActivity(ep, connected, activeProductTags)
+  const lastActivitySources = [
+    ...(primaryActivity
+      ? [{ label: primaryActivity.label, color: 'text-emerald-500', val: primaryActivity.lastSeen }]
+      : []),
+    ...(connected.has('sentinelone') && productEnabled('S1') && ep.source !== 'sentinelone'
+      ? [{ label: 'SentinelOne', color: 'text-emerald-500', val: ep.sentinelone?.last_seen ?? null, fallback: ep.sentinelone?.installed ? 'No data' : 'Not installed' }]
+      : []),
+    ...(connected.has('symantec_dlp') && productEnabled('DLP') && ep.source !== 'symantec'
+      ? [{ label: 'DLP', color: 'text-yellow-600', val: ep.symantec_dlp?.last_seen ?? null, fallback: ep.symantec_dlp?.installed ? 'No data' : 'Not installed' }]
+      : []),
+    ...(connected.has('sentinelone') && productEnabled('WSS')
+      ? [{ label: 'WSS', color: 'text-orange-500', val: ep.symantec_wss?.last_seen ?? null, fallback: ep.symantec_wss?.installed ? 'No data' : 'Not installed' }]
+      : []),
+  ]
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -414,12 +432,7 @@ export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
             <div className="space-y-1.5">
               <SectionHeader>Last Activity</SectionHeader>
               <div className="bg-zinc-900/70 rounded-xl border border-white/[0.08]/50 divide-y divide-gray-700/40">
-                {[
-                  { label: 'JumpCloud',   color: 'text-emerald-500', val: ep.last_seen },
-                  ...(productEnabled('S1') ? [{ label: 'SentinelOne', color: 'text-emerald-500', val: ep.sentinelone?.last_seen ?? null, fallback: ep.sentinelone?.installed ? 'No data' : 'Not installed' }] : []),
-                  ...(productEnabled('DLP') ? [{ label: 'DLP', color: 'text-yellow-600', val: ep.symantec_dlp?.last_seen ?? null, fallback: ep.symantec_dlp?.installed ? 'No data' : 'Not installed' }] : []),
-                  ...(productEnabled('WSS') ? [{ label: 'WSS', color: 'text-orange-500', val: ep.symantec_wss?.last_seen ?? null, fallback: ep.symantec_wss?.installed ? 'No data' : 'Not installed' }] : []),
-                ].map(({ label, color, val, fallback }) => (
+                {lastActivitySources.map(({ label, color, val, fallback }) => (
                   <div key={label} className="flex items-center gap-3 px-4 py-2.5">
                     <Clock className={`w-3.5 h-3.5 ${color} flex-shrink-0`} />
                     <span className="text-xs text-zinc-500 w-24 flex-shrink-0">{label}</span>
@@ -428,6 +441,11 @@ export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
                     </span>
                   </div>
                 ))}
+                {lastActivitySources.length === 0 && (
+                  <div className="px-4 py-3 text-xs text-zinc-600">
+                    No connected integration activity
+                  </div>
+                )}
               </div>
             </div>
 

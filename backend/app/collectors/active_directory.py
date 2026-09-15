@@ -27,6 +27,7 @@ class ActiveDirectoryCollector:
     name = "active_directory"
 
     def __init__(self, credentials: dict, db: AsyncSession):
+        self.credentials_mode = str(credentials.get("import_mode", "live"))
         self.ldap_host = credentials.get("ldap_host", "")
         self.ldap_port = int(credentials.get("ldap_port") or 389)
         self.base_dn = credentials.get("base_dn", "")
@@ -56,6 +57,8 @@ class ActiveDirectoryCollector:
         return conn
 
     async def test_connection(self) -> dict:
+        if self.credentials_mode == "manual":
+            return {"success": True, "message": "Manual CSV import mode is configured."}
         if not self.ldap_host:
             return {"success": False, "message": "No LDAP host configured"}
         if not self.bind_dn or not self.bind_password:
@@ -85,6 +88,8 @@ class ActiveDirectoryCollector:
             return {"success": False, "message": f"LDAP error: {str(e)}"}
 
     async def collect(self) -> dict:
+        if self.credentials_mode == "manual":
+            return {"records_synced": 0, "manual": True}
         if not self.ldap_host or not self.base_dn or not self.bind_dn:
             return {"records_synced": 0, "error": "LDAP host, base DN, and bind DN are required"}
 
@@ -142,7 +147,7 @@ class ActiveDirectoryCollector:
         return users_raw, computers_raw
 
     async def _upsert_users(self, raw_list: list[dict]) -> int:
-        from sqlalchemy import select
+        from sqlalchemy import func, select
         from app.models.user import User
 
         count = 0
@@ -155,11 +160,14 @@ class ActiveDirectoryCollector:
             if not email:
                 email = sam  # fallback — won't be a valid email but keeps the record
 
-            result = await self.db.execute(select(User).where(User.email == email))
+            result = await self.db.execute(
+                select(User).where(func.lower(User.email) == email.lower())
+            )
             user = result.scalars().first()
 
             display_name = raw.get("displayName") or sam or email
             department = raw.get("department")
+            job_title = raw.get("title")
 
             if not user:
                 user = User(
@@ -169,6 +177,8 @@ class ActiveDirectoryCollector:
                     employment_status="active",
                     mfa_enabled=False,
                     suspended=False,
+                    job_title=job_title or None,
+                    sources={"active_directory": {"sAMAccountName": sam}},
                 )
                 self.db.add(user)
             else:
@@ -176,6 +186,11 @@ class ActiveDirectoryCollector:
                     user.full_name = display_name
                 if department:
                     user.department = department
+                if job_title:
+                    user.job_title = job_title
+                sources = dict(user.sources or {})
+                sources["active_directory"] = {"sAMAccountName": sam}
+                user.sources = sources
                 user.employment_status = "active"
                 user.suspended = False
 
@@ -185,7 +200,7 @@ class ActiveDirectoryCollector:
         return count
 
     async def _upsert_computers(self, raw_list: list[dict]) -> int:
-        from sqlalchemy import select
+        from sqlalchemy import func, select
         from app.models.endpoint import Endpoint
 
         count = 0
@@ -204,7 +219,7 @@ class ActiveDirectoryCollector:
             last_seen = _ad_timestamp_to_datetime(raw.get("lastLogonTimestamp"))
 
             result = await self.db.execute(
-                select(Endpoint).where(Endpoint.hostname == short_hostname)
+                select(Endpoint).where(func.lower(Endpoint.hostname) == short_hostname.lower())
             )
             endpoint = result.scalars().first()
 

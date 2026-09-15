@@ -42,3 +42,16 @@ export const createCustomIntegration = async (body: {
 export const deleteIntegration = async (type: string): Promise<void> => {
   await apiClient.delete(`/integrations/${type}`)
 }
+
+export const importActiveDirectoryCsv = async (file: File): Promise<{
+  success: boolean
+  message: string
+  users: number
+  endpoints: number
+  rejected_rows: number
+}> => {
+  const body = new FormData()
+  body.append('file', file)
+  const { data } = await apiClient.post('/integrations/active_directory/import', body)
+  return data
+}

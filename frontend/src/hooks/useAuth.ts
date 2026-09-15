@@ -6,8 +6,8 @@ export function useAuth() {
   const location = useLocation()
   const { user, isAuthenticated, login, logout, setAuth, restoreSession } = useAuthStore()
 
-  const handleLogin = async (email: string, password: string, totpCode?: string) => {
-    const result = await login(email, password, totpCode)
+  const handleLogin = async (email: string, password: string, totpCode?: string, method: 'local' | 'radius' = 'local') => {
+    const result = await login(email, password, totpCode, method)
     if (!result.mfa_required) {
       const from = (location.state as { from?: { pathname?: string } })?.from?.pathname || '/dashboard'
       navigate(from, { replace: true })
@@ -23,7 +23,7 @@ export function useAuth() {
   return {
     user,
     isAuthenticated,
-    login: handleLogin as (email: string, password: string, totpCode?: string) => Promise<import('../store/auth').LoginResult>,
+    login: handleLogin as (email: string, password: string, totpCode?: string, method?: 'local' | 'radius') => Promise<import('../store/auth').LoginResult>,
     logout: handleLogout,
     setAuth,
     restoreSession,

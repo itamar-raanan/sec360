@@ -105,6 +105,9 @@ async def init_db():
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS saml_sp_key             TEXT          DEFAULT ''",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS saml_allowed_emails      TEXT          DEFAULT ''",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS saml_require_mfa        BOOLEAN       DEFAULT FALSE",
+            # RADIUS authentication. The JSON payload is encrypted by the ORM.
+            "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS radius_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS radius_config JSONB",
             # Symantec WSS compliance fields (safe for upgraded installations)
             "ALTER TABLE compliance_statuses ADD COLUMN IF NOT EXISTS wss_installed  BOOLEAN DEFAULT FALSE",
             "ALTER TABLE compliance_statuses ADD COLUMN IF NOT EXISTS wss_version_ok BOOLEAN DEFAULT FALSE",

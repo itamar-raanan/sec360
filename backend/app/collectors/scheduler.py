@@ -27,6 +27,11 @@ async def _get_integration_config(integration_type: str):
             return None, None
         if not config.is_enabled or not config.credentials:
             return None, None
+        if (
+            integration_type == "active_directory"
+            and config.credentials.get("import_mode") == "manual"
+        ):
+            return config.id, None
         return config.id, config.credentials
 
 

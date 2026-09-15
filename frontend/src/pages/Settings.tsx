@@ -1069,6 +1069,14 @@ interface SamlSettings {
   saml_require_mfa: boolean
   saml_sp_cert: string
   has_sp_key: boolean
+  radius_enabled: boolean
+  radius_host: string
+  radius_port: number
+  radius_nas_identifier: string
+  radius_timeout_seconds: number
+  radius_username_format: 'email' | 'local_part'
+  radius_require_mfa: boolean
+  has_radius_shared_secret: boolean
 }
 
 function parseIdpMetadata(xml: string): { entityId: string; ssoUrl: string; cert: string } {
@@ -1097,7 +1105,7 @@ function SsoTab() {
     queryFn: () => apiClient.get('/settings/saml').then(r => r.data),
   })
 
-  const [form, setForm] = useState<(SamlSettings & { saml_sp_key: string }) | null>(null)
+  const [form, setForm] = useState<(SamlSettings & { saml_sp_key: string; radius_shared_secret: string }) | null>(null)
   const [msg, setMsg] = useState<{ type: 'error' | 'success'; msg: string } | null>(null)
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -1137,6 +1145,14 @@ function SsoTab() {
         saml_allowed_emails: remote.saml_allowed_emails ?? '',
         saml_require_mfa:    remote.saml_require_mfa    ?? false,
         saml_sp_key: '',
+        radius_enabled: remote.radius_enabled ?? false,
+        radius_host: remote.radius_host ?? '',
+        radius_port: remote.radius_port ?? 1812,
+        radius_nas_identifier: remote.radius_nas_identifier ?? 'SEC360',
+        radius_timeout_seconds: remote.radius_timeout_seconds ?? 5,
+        radius_username_format: remote.radius_username_format ?? 'email',
+        radius_require_mfa: remote.radius_require_mfa ?? false,
+        radius_shared_secret: '',
       })
     }
   }, [remote])
@@ -1176,11 +1192,11 @@ function SsoTab() {
     setMsg(null)
     try {
       await apiClient.put('/settings/saml', form)
-      setMsg({ type: 'success', msg: 'SSO settings saved' })
+      setMsg({ type: 'success', msg: 'Authentication settings saved' })
       refetch()
     } catch (e: unknown) {
       const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setMsg({ type: 'error', msg: detail ?? 'Failed to save SSO settings' })
+      setMsg({ type: 'error', msg: detail ?? 'Failed to save authentication settings' })
     } finally {
       setSaving(false)
     }
@@ -1190,7 +1206,7 @@ function SsoTab() {
     <div className="space-y-5 max-w-2xl">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-white">Single Sign-On (SAML 2.0)</h2>
+          <h2 className="text-base font-semibold text-white">SSO &amp; RADIUS Authentication</h2>
           <p className="text-xs text-zinc-500 mt-0.5">{provider.description}</p>
         </div>
         {msg && <Alert type={msg.type} msg={msg.msg} />}
@@ -1380,12 +1396,49 @@ function SsoTab() {
         {provider.setupSteps.map((step, index) => <p key={step}>{index + 1}. {step}</p>)}
       </div>
 
+      <Section title="RADIUS Authentication" hint="Authenticate existing SEC360 accounts through a RADIUS server. The server must register this SEC360 host as a RADIUS client using the same shared secret.">
+        <Field label="Enable RADIUS login" hint="Adds a separate Sign in with RADIUS action to the login page">
+          <Toggle checked={form.radius_enabled} onChange={value => set('radius_enabled', value)} />
+        </Field>
+        <Field label="RADIUS server" hint="DNS name or IP address reachable from the backend container">
+          <input type="text" value={form.radius_host} onChange={event => set('radius_host', event.target.value)} placeholder="radius.corp.example.com" className="bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm w-80 max-w-full focus:outline-none focus:border-emerald-500" />
+        </Field>
+        <Field label="Authentication port" hint="Standard RADIUS authentication uses UDP 1812">
+          <input type="number" min={1} max={65535} value={form.radius_port} onChange={event => set('radius_port', Number(event.target.value))} className="bg-zinc-950 border border-white/[0.08] text-white rounded-lg px-3 py-1.5 text-sm w-32 focus:outline-none focus:border-emerald-500" />
+        </Field>
+        <Field label="Shared secret" hint={remote?.has_radius_shared_secret ? 'A secret is saved. Leave blank to keep it unchanged.' : 'Must exactly match the secret configured for this RADIUS client.'}>
+          <div className="flex items-center gap-2">
+            <input type="password" autoComplete="new-password" value={form.radius_shared_secret} onChange={event => set('radius_shared_secret', event.target.value)} placeholder={remote?.has_radius_shared_secret ? 'Secret already saved' : 'Enter shared secret'} className="bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm w-80 max-w-full focus:outline-none focus:border-emerald-500" />
+            {remote?.has_radius_shared_secret && <span className="inline-flex items-center gap-1 text-xs text-emerald-300"><KeyRound size={11} /> Saved</span>}
+          </div>
+        </Field>
+        <Field label="NAS identifier" hint="Sent as NAS-Identifier in each Access-Request">
+          <input type="text" maxLength={253} value={form.radius_nas_identifier} onChange={event => set('radius_nas_identifier', event.target.value)} placeholder="SEC360" className="bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm w-80 max-w-full focus:outline-none focus:border-emerald-500" />
+        </Field>
+        <Field label="Username sent to RADIUS" hint="Users always enter their SEC360 account email on the login page">
+          <select value={form.radius_username_format} onChange={event => set('radius_username_format', event.target.value as 'email' | 'local_part')} className="bg-zinc-950 border border-white/[0.08] text-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500">
+            <option value="email">Full email address</option>
+            <option value="local_part">Text before @</option>
+          </select>
+        </Field>
+        <Field label="Timeout" hint="How long each login waits for the RADIUS server">
+          <div className="flex items-center gap-2"><input type="number" min={1} max={30} value={form.radius_timeout_seconds} onChange={event => set('radius_timeout_seconds', Number(event.target.value))} className="bg-zinc-950 border border-white/[0.08] text-white rounded-lg px-3 py-1.5 text-sm w-20 focus:outline-none focus:border-emerald-500" /><span className="text-xs text-zinc-500">seconds</span></div>
+        </Field>
+        <Field label="Require SEC360 2FA after RADIUS" hint="Only enable after every RADIUS user has enrolled an authenticator in SEC360">
+          <Toggle checked={form.radius_require_mfa} onChange={value => set('radius_require_mfa', value)} />
+        </Field>
+      </Section>
+
+      <div className="rounded-xl border border-amber-500/15 bg-amber-500/[0.05] p-4 text-xs leading-5 text-zinc-500">
+        RADIUS uses PAP inside the RADIUS protocol. Keep traffic on a trusted network or protected tunnel, register the backend server IP as the RADIUS client, and allow outbound UDP traffic to the configured authentication port.
+      </div>
+
       <button
         onClick={save}
         disabled={saving}
         className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-900 text-white text-sm font-semibold px-5 py-2.5 rounded-lg pressable"
       >
-        <Save size={14} /> {saving ? 'Saving…' : 'Save SSO settings'}
+        <Save size={14} /> {saving ? 'Saving…' : 'Save authentication settings'}
       </button>
     </div>
   )
@@ -1607,7 +1660,7 @@ export default function Settings() {
     { id: 'users', label: 'Users & Access', icon: Users, adminOnly: true },
     { id: 'account', label: 'My Account', icon: User, adminOnly: false },
     { id: 'platform', label: 'Platform', icon: Settings2, adminOnly: true },
-    { id: 'sso', label: 'SSO', icon: KeyRound, adminOnly: true },
+    { id: 'sso', label: 'Authentication', icon: KeyRound, adminOnly: true },
     { id: 'certificate', label: 'HTTPS Certificate', icon: FileKey2, adminOnly: true },
     { id: 'audit', label: 'Audit Log', icon: ClipboardList, adminOnly: true },
   ]

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Navigate, useSearchParams, useLocation } from 'react-router-dom'
-import { Eye, EyeOff, AlertCircle, Smartphone, ShieldCheck, ArrowRight } from 'lucide-react'
+import { Eye, EyeOff, AlertCircle, Smartphone, ShieldCheck, ArrowRight, RadioTower } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import AuthLeftPanel from '../components/AuthLeftPanel'
 
@@ -22,18 +22,25 @@ export default function Login() {
   const [totpCode, setTotpCode] = useState('')
   const [showPw, setShowPw]   = useState(false)
   const [loading, setLoading] = useState(false)
+  const [authMethod, setAuthMethod] = useState<'local' | 'radius'>('local')
   const [error, setError]     = useState(() => SSO_ERRORS[searchParams.get('sso_error') ?? ''] ?? '')
   const [sso, setSso] = useState<{ enabled: boolean; provider: string; providerLabel: string } | null>(null)
+  const [radiusEnabled, setRadiusEnabled] = useState(false)
 
   useEffect(() => {
-    fetch('/api/auth/saml/status')
-      .then(r => r.json())
-      .then(d => setSso({
-        enabled: d.enabled === true,
-        provider: typeof d.provider === 'string' ? d.provider : 'generic',
-        providerLabel: typeof d.provider_label === 'string' ? d.provider_label : 'SSO',
-      }))
-      .catch(() => setSso({ enabled: false, provider: 'generic', providerLabel: 'SSO' }))
+    Promise.allSettled([
+      fetch('/api/auth/saml/status').then(response => response.json()),
+      fetch('/api/auth/radius/status').then(response => response.json()),
+    ]).then(([samlResult, radiusResult]) => {
+      const saml = samlResult.status === 'fulfilled' ? samlResult.value : {}
+      const radius = radiusResult.status === 'fulfilled' ? radiusResult.value : {}
+      setSso({
+        enabled: saml.enabled === true,
+        provider: typeof saml.provider === 'string' ? saml.provider : 'generic',
+        providerLabel: typeof saml.provider_label === 'string' ? saml.provider_label : 'SSO',
+      })
+      setRadiusEnabled(radius.enabled === true)
+    })
   }, [])
 
   if (isAuthenticated) return <Navigate to={from} replace />
@@ -59,11 +66,31 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      const result = await login(email, password)
+      setAuthMethod('local')
+      const result = await login(email, password, undefined, 'local')
       if (result.mfa_required) setStep('totp')
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       setError(msg || 'Invalid email or password')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleRadius = async () => {
+    if (!email || !password) {
+      setError('Enter your SEC360 email and RADIUS password first.')
+      return
+    }
+    setError('')
+    setLoading(true)
+    setAuthMethod('radius')
+    try {
+      const result = await login(email, password, undefined, 'radius')
+      if (result.mfa_required) setStep('totp')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setError(msg || 'RADIUS authentication failed')
     } finally {
       setLoading(false)
     }
@@ -74,7 +101,7 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      await login(email, password, totpCode)
+      await login(email, password, totpCode, authMethod)
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       setError(msg || 'Invalid 2FA code')
@@ -199,7 +226,7 @@ export default function Login() {
                 </button>
               </form>
 
-              {sso?.enabled && (
+              {(sso?.enabled || radiusEnabled) && (
                 <>
                   <div className="flex items-center gap-3 my-5">
                     <div className="flex-1 h-px" style={{ background: 'var(--shimmer-a)' }} />
@@ -207,7 +234,7 @@ export default function Login() {
                     <div className="flex-1 h-px" style={{ background: 'var(--shimmer-a)' }} />
                   </div>
 
-                  <button
+                  {sso?.enabled && <button
                     type="button"
                     onClick={() => { window.location.href = '/api/auth/saml/login' }}
                     disabled={loading}
@@ -225,7 +252,18 @@ export default function Login() {
                       </svg>
                     ) : <ShieldCheck size={15} />}
                     Continue with {sso.providerLabel}
-                  </button>
+                  </button>}
+                  {radiusEnabled && (
+                    <button
+                      type="button"
+                      onClick={handleRadius}
+                      disabled={loading}
+                      className="mt-2.5 flex w-full items-center justify-center gap-2.5 rounded-lg px-4 py-3.5 font-medium text-white pressable disabled:cursor-not-allowed disabled:opacity-50"
+                      style={{ fontSize: 15, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-mid)', transition: 'border-color 120ms ease, background 120ms ease' }}
+                    >
+                      <RadioTower size={15} /> Sign in with RADIUS
+                    </button>
+                  )}
                 </>
               )}
             </div>

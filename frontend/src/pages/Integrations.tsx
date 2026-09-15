@@ -710,12 +710,21 @@ function AdManualImport({ onResult }: { onResult: (result: { success: boolean; m
   const queryClient = useQueryClient()
   const [file, setFile] = useState<File | null>(null)
   const [copied, setCopied] = useState(false)
+  const [progress, setProgress] = useState<number | null>(null)
+  const [feedback, setFeedback] = useState<{ success: boolean; message: string } | null>(null)
   const inputRef = React.useRef<HTMLInputElement>(null)
   const mutation = useMutation({
-    mutationFn: () => importActiveDirectoryCsv(file!),
+    mutationFn: () => importActiveDirectoryCsv(file!, setProgress),
+    onMutate: () => {
+      setProgress(0)
+      setFeedback(null)
+    },
     onSuccess: result => {
-      onResult({ success: true, message: `${result.message}${result.rejected_rows ? ` ${result.rejected_rows} rows were rejected.` : ''}` })
+      const message = `${result.message}${result.rejected_rows ? ` ${result.rejected_rows} rows were rejected.` : ''}`
+      setFeedback({ success: true, message })
+      onResult({ success: true, message })
       setFile(null)
+      setProgress(null)
       if (inputRef.current) inputRef.current.value = ''
       void queryClient.invalidateQueries({ queryKey: ['integrations'] })
       void queryClient.invalidateQueries({ queryKey: ['users'] })
@@ -725,9 +734,30 @@ function AdManualImport({ onResult }: { onResult: (result: { success: boolean; m
     },
     onError: (error: unknown) => {
       const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      onResult({ success: false, message: detail ?? 'The Active Directory CSV could not be imported.' })
+      const status = (error as { response?: { status?: number } })?.response?.status
+      const message = detail
+        ?? (status === 413 ? 'The CSV is too large. Upload a file no larger than 20 MB.' : null)
+        ?? 'The Active Directory CSV could not be imported. Check the backend logs for details.'
+      setProgress(null)
+      setFeedback({ success: false, message })
+      onResult({ success: false, message })
     },
   })
+
+  const selectFile = (selected: File | null) => {
+    setFeedback(null)
+    setProgress(null)
+    mutation.reset()
+    if (selected && selected.size > 20 * 1024 * 1024) {
+      const message = 'The CSV is too large. Upload a file no larger than 20 MB.'
+      setFile(null)
+      setFeedback({ success: false, message })
+      onResult({ success: false, message })
+      if (inputRef.current) inputRef.current.value = ''
+      return
+    }
+    setFile(selected)
+  }
 
   const copyScript = async () => {
     await navigator.clipboard.writeText(AD_EXPORT_SCRIPT)
@@ -756,7 +786,7 @@ function AdManualImport({ onResult }: { onResult: (result: { success: boolean; m
       <div>
         <label className="mb-1.5 block text-xs font-medium text-zinc-400">Active Directory CSV</label>
         <p className="mb-2 text-xs text-zinc-600">Required columns: First Name, Last Name, E-mail. SEC360 uses the text before @ as the endpoint username. UTF-8 CSV, up to 20 MB and 100,000 rows.</p>
-        <input ref={inputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={event => setFile(event.target.files?.[0] ?? null)} />
+        <input ref={inputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={event => selectFile(event.target.files?.[0] ?? null)} />
         <button type="button" onClick={() => inputRef.current?.click()} className="flex w-full items-center justify-between rounded-lg border border-dashed border-white/[0.12] bg-[var(--surface-2)] px-4 py-3 text-left transition-colors hover:border-sky-500/40">
           <span className="flex min-w-0 items-center gap-2.5"><Upload size={15} className="shrink-0 text-sky-400" /><span className="truncate text-xs text-zinc-300">{file?.name ?? 'Choose sec360-ad-users.csv'}</span></span>
           <span className="text-[10px] uppercase tracking-wide text-zinc-600">Browse</span>
@@ -764,8 +794,16 @@ function AdManualImport({ onResult }: { onResult: (result: { success: boolean; m
       </div>
       <button type="button" disabled={!file || mutation.isPending} onClick={() => mutation.mutate()} className="flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white pressable disabled:cursor-not-allowed disabled:opacity-40">
         {mutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-        {mutation.isPending ? 'Importing snapshot…' : 'Upload and import'}
+        {mutation.isPending
+          ? progress !== null && progress < 100 ? `Uploading ${progress}%…` : 'Processing users…'
+          : 'Upload and import'}
       </button>
+      {feedback && (
+        <div className={`flex items-start gap-2 rounded-lg border p-3 text-xs ${feedback.success ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : 'border-red-500/20 bg-red-500/10 text-red-400'}`} role="status">
+          {feedback.success ? <CheckCircle2 size={13} className="mt-0.5 shrink-0" /> : <XCircle size={13} className="mt-0.5 shrink-0" />}
+          <span>{feedback.message}</span>
+        </div>
+      )}
     </div>
   )
 }

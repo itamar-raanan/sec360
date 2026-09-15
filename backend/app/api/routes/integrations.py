@@ -156,6 +156,12 @@ async def import_active_directory_csv(
 
     from app.collectors.active_directory import ActiveDirectoryCollector
 
+    logger.info(
+        "Starting manual Active Directory import: file=%s valid_users=%d rejected_rows=%d",
+        file.filename,
+        len(users),
+        rejected,
+    )
     collector = ActiveDirectoryCollector({"import_mode": "manual"}, db)
     user_count = await collector._upsert_users(users)
     linked_endpoints = await collector.link_users_to_endpoints(
@@ -191,6 +197,12 @@ async def import_active_directory_csv(
             "linked_endpoints": linked_endpoints,
             "rejected_rows": rejected,
         },
+    )
+    logger.info(
+        "Completed manual Active Directory import: users=%d linked_endpoints=%d rejected_rows=%d",
+        user_count,
+        linked_endpoints,
+        rejected,
     )
     return {
         "success": True,

@@ -158,9 +158,9 @@ async def import_active_directory_csv(
 
     collector = ActiveDirectoryCollector({"import_mode": "manual"}, db)
     user_count = await collector._upsert_users(users)
-    from app.engines.correlation import match_user_to_endpoint
-
-    linked_endpoints = await match_user_to_endpoint(db)
+    linked_endpoints = await collector.link_users_to_endpoints(
+        [user["mail"] for user in users]
+    )
     config = (await db.execute(
         select(IntegrationConfig).where(IntegrationConfig.integration_type == "active_directory")
     )).scalar_one_or_none()

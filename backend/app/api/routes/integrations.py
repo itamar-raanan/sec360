@@ -1,8 +1,10 @@
+import csv
+import io
 import logging
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, select
 
@@ -43,6 +45,7 @@ def _to_response(config: IntegrationConfig) -> IntegrationConfigResponse:
         credentials_configured=bool(config.credentials),
         available_features=available_features(config.integration_type, config.credentials),
         deployment_type=(config.credentials or {}).get("deployment_type"),
+        connection_mode=(config.credentials or {}).get("import_mode"),
     )
 
 
@@ -87,6 +90,125 @@ async def integration_catalog(
 ):
     """Return the authoritative built-in product store."""
     return catalog_payload()
+
+
+@router.post("/active_directory/import")
+async def import_active_directory_csv(
+    request: Request,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_role("admin")),
+):
+    """Import the documented combined AD user/computer CSV snapshot."""
+    if not (file.filename or "").lower().endswith(".csv"):
+        raise HTTPException(400, "Upload a .csv file exported with the provided PowerShell script")
+    content = await file.read(20 * 1024 * 1024 + 1)
+    if not content:
+        raise HTTPException(400, "The uploaded CSV is empty")
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(413, "Active Directory CSV files must be 20 MB or smaller")
+    try:
+        decoded = content.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(400, "The CSV must use UTF-8 encoding") from exc
+
+    reader = csv.DictReader(io.StringIO(decoded))
+    normalized_headers = {str(header or "").strip().lower() for header in (reader.fieldnames or [])}
+    if "object_type" not in normalized_headers:
+        raise HTTPException(400, "Missing required object_type column")
+
+    users: list[dict] = []
+    computers: list[dict] = []
+    seen_users: set[str] = set()
+    seen_computers: set[str] = set()
+    rejected = 0
+    try:
+        for index, source_row in enumerate(reader, start=2):
+            if index > 100_001:
+                raise HTTPException(413, "The CSV cannot contain more than 100,000 records")
+            if None in source_row or any(not isinstance(value, str) for value in source_row.values() if value is not None):
+                rejected += 1
+                continue
+            row = {str(key).strip().lower(): (value or "").strip() for key, value in source_row.items()}
+            object_type = row.get("object_type", "").lower()
+            if object_type == "user":
+                identity = (row.get("mail") or row.get("samaccountname") or "").lower()
+                if not identity or identity in seen_users:
+                    rejected += 1
+                    continue
+                seen_users.add(identity)
+                users.append({
+                    "sAMAccountName": row.get("samaccountname", ""),
+                    "mail": row.get("mail", ""),
+                    "displayName": row.get("displayname", ""),
+                    "department": row.get("department", ""),
+                    "title": row.get("title", ""),
+                    "userAccountControl": row.get("useraccountcontrol", ""),
+                })
+            elif object_type == "computer":
+                identity = (row.get("dnshostname") or row.get("name") or "").split(".", 1)[0].lower()
+                if not identity or identity in seen_computers:
+                    rejected += 1
+                    continue
+                seen_computers.add(identity)
+                computers.append({
+                    "name": row.get("name", ""),
+                    "operatingSystem": row.get("operatingsystem", ""),
+                    "operatingSystemVersion": row.get("operatingsystemversion", ""),
+                    "dNSHostName": row.get("dnshostname", ""),
+                    "lastLogonTimestamp": row.get("lastlogontimestamp", ""),
+                })
+            elif any(row.values()):
+                rejected += 1
+    except csv.Error as exc:
+        raise HTTPException(400, f"The CSV is malformed near line {reader.line_num}") from exc
+
+    if not users and not computers:
+        raise HTTPException(400, "The CSV contains no user or computer records")
+
+    from app.collectors.active_directory import ActiveDirectoryCollector
+
+    collector = ActiveDirectoryCollector({"import_mode": "manual"}, db)
+    user_count = await collector._upsert_users(users)
+    endpoint_count = await collector._upsert_computers(computers)
+    config = (await db.execute(
+        select(IntegrationConfig).where(IntegrationConfig.integration_type == "active_directory")
+    )).scalar_one_or_none()
+    if not config:
+        config = IntegrationConfig(
+            integration_type="active_directory",
+            display_name="Active Directory",
+        )
+        db.add(config)
+    current_credentials = config.credentials or {}
+    config.credentials = {**current_credentials, "import_mode": "manual"}
+    config.is_enabled = True
+    config.status = "connected"
+    config.last_sync = datetime.now(timezone.utc)
+    config.last_error = None
+    config.records_synced = str(user_count + endpoint_count)
+    await db.flush()
+    await audit_action(
+        "import_active_directory",
+        "integration",
+        "active_directory",
+        request,
+        db,
+        current,
+        {
+            "filename": file.filename,
+            "users": user_count,
+            "endpoints": endpoint_count,
+            "rejected_rows": rejected,
+        },
+    )
+    return {
+        "success": True,
+        "message": f"Imported {user_count} users and {endpoint_count} computers.",
+        "users": user_count,
+        "endpoints": endpoint_count,
+        "rejected_rows": rejected,
+    }
 
 
 @router.put("/{integration_type}", response_model=IntegrationConfigResponse)

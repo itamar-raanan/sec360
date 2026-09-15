@@ -9,7 +9,7 @@ interface AuthState {
   isAuthenticated: boolean
   /** true while the initial /auth/me check is in-flight — prevents premature redirects on refresh */
   sessionLoading: boolean
-  login: (email: string, password: string, totpCode?: string) => Promise<LoginResult>
+  login: (email: string, password: string, totpCode?: string, method?: 'local' | 'radius') => Promise<LoginResult>
   logout: () => Promise<void>
   setAuth: (user: AuthUser) => void
   restoreSession: () => Promise<void>
@@ -26,8 +26,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user, isAuthenticated: true, sessionLoading: false })
   },
 
-  login: async (email, password, totpCode?) => {
-    const res = await apiClient.post('/auth/login', {
+  login: async (email, password, totpCode?, method = 'local') => {
+    const res = await apiClient.post(method === 'radius' ? '/auth/radius/login' : '/auth/login', {
       email,
       password,
       totp_code: totpCode ?? null,

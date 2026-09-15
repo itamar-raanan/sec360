@@ -29,6 +29,9 @@ import {
   Activity,
   Package,
   ChevronRight,
+  Upload,
+  FileText,
+  Copy,
 } from 'lucide-react'
 import {
   fetchIntegrations,
@@ -38,6 +41,7 @@ import {
   deleteIntegrationCredentials,
   createCustomIntegration,
   deleteIntegration,
+  importActiveDirectoryCsv,
 } from '../api/integrations'
 import type { IntegrationConfig } from '../types'
 import { useConfirm } from '../components/shared/ConfirmDialog'
@@ -54,6 +58,7 @@ type FieldDef = {
   options?: { value: string; label: string }[]
   defaultValue?: string
   group?: string
+  showWhen?: { field: string; value: string }
 }
 
 type CatalogEntry = {
@@ -241,13 +246,23 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
   active_directory: {
     label: 'Active Directory',
     category: 'directory',
-    description: 'Microsoft Active Directory — sync users and computers via LDAP',
+    description: 'Microsoft Active Directory — sync users and computers through live LDAP or an offline CSV snapshot',
     color: '#0ea5e9',
     icon: Building2,
     dataProduces: ['Users', 'Endpoints', 'Departments'],
     unlocks: ['Activity'],
-    docsHint: 'Requires a service account with read access to your AD tree',
+    docsHint: 'Choose live LDAP synchronization or upload an offline CSV snapshot.',
     fields: [
+      {
+        name: 'import_mode',
+        label: 'Data source',
+        type: 'select',
+        defaultValue: 'live',
+        options: [
+          { value: 'live', label: 'Live LDAP synchronization' },
+          { value: 'manual', label: 'Manual CSV upload' },
+        ],
+      },
       {
         name: 'ldap_host',
         label: 'LDAP Host',
@@ -255,6 +270,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
         placeholder: 'dc01.corp.example.com',
         required: true,
         group: 'server',
+        showWhen: { field: 'import_mode', value: 'live' },
       },
       {
         name: 'ldap_port',
@@ -263,6 +279,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
         placeholder: '389',
         defaultValue: '389',
         group: 'server',
+        showWhen: { field: 'import_mode', value: 'live' },
       },
       {
         name: 'use_ssl',
@@ -273,6 +290,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
           { value: 'false', label: 'No (LDAP port 389)' },
           { value: 'true', label: 'Yes (LDAPS port 636)' },
         ],
+        showWhen: { field: 'import_mode', value: 'live' },
       },
       {
         name: 'base_dn',
@@ -281,6 +299,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
         placeholder: 'DC=corp,DC=example,DC=com',
         hint: 'Root distinguished name for searches',
         required: true,
+        showWhen: { field: 'import_mode', value: 'live' },
       },
       {
         name: 'bind_dn',
@@ -289,6 +308,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
         placeholder: 'CN=svc-sec360,OU=ServiceAccounts,DC=corp,DC=example,DC=com',
         hint: 'Service account distinguished name',
         required: true,
+        showWhen: { field: 'import_mode', value: 'live' },
       },
       {
         name: 'bind_password',
@@ -296,6 +316,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
         type: 'password',
         placeholder: 'Service account password',
         required: true,
+        showWhen: { field: 'import_mode', value: 'live' },
       },
     ],
   },
@@ -438,17 +459,22 @@ function DynamicForm({
     'w-full bg-[var(--surface-0)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-[var(--accent)] transition-colors'
   const labelClass = 'block text-xs font-medium text-zinc-400 mb-1.5'
 
+  const visibleFields = fields.filter(field => (
+    !field.showWhen
+    || (values[field.showWhen.field] ?? fields.find(item => item.name === field.showWhen?.field)?.defaultValue ?? '') === field.showWhen.value
+  ))
+
   // Group fields
   const rendered: React.ReactNode[] = []
   const seen = new Set<string>()
 
-  for (const field of fields) {
+  for (const field of visibleFields) {
     if (seen.has(field.name)) continue
     seen.add(field.name)
 
     const groupId = field.group
     if (groupId) {
-      const groupFields = fields.filter((f) => f.group === groupId)
+      const groupFields = visibleFields.filter((f) => f.group === groupId)
       // Only render the group once
       const allGroupSeen = groupFields.every((f) => seen.has(f.name))
       if (!allGroupSeen) {
@@ -669,6 +695,87 @@ function IntegrationCard({
   )
 }
 
+const AD_EXPORT_SCRIPT = `$properties = @(
+  'mail','displayName','department','title','userAccountControl'
+)
+$users = Get-ADUser -Filter {Enabled -eq $true} -Properties $properties | ForEach-Object {
+  [pscustomobject]@{
+    object_type='user'; sAMAccountName=$_.sAMAccountName; mail=$_.mail
+    displayName=$_.displayName; department=$_.department; title=$_.title
+    userAccountControl=$_.userAccountControl; name=''; operatingSystem=''
+    operatingSystemVersion=''; dNSHostName=''; lastLogonTimestamp=''
+  }
+}
+$computers = Get-ADComputer -Filter * -Properties operatingSystem,operatingSystemVersion,dNSHostName,lastLogonTimestamp | ForEach-Object {
+  [pscustomobject]@{
+    object_type='computer'; sAMAccountName=''; mail=''; displayName=''
+    department=''; title=''; userAccountControl=''; name=$_.Name
+    operatingSystem=$_.operatingSystem; operatingSystemVersion=$_.operatingSystemVersion
+    dNSHostName=$_.dNSHostName; lastLogonTimestamp=[string]$_.lastLogonTimestamp
+  }
+}
+@($users) + @($computers) | Export-Csv -Path .\\sec360-ad-export.csv -NoTypeInformation -Encoding UTF8`
+
+function AdManualImport({ onResult }: { onResult: (result: { success: boolean; message: string }) => void }) {
+  const queryClient = useQueryClient()
+  const [file, setFile] = useState<File | null>(null)
+  const [copied, setCopied] = useState(false)
+  const inputRef = React.useRef<HTMLInputElement>(null)
+  const mutation = useMutation({
+    mutationFn: () => importActiveDirectoryCsv(file!),
+    onSuccess: result => {
+      onResult({ success: true, message: `${result.message}${result.rejected_rows ? ` ${result.rejected_rows} rows were rejected.` : ''}` })
+      setFile(null)
+      if (inputRef.current) inputRef.current.value = ''
+      void queryClient.invalidateQueries({ queryKey: ['integrations'] })
+    },
+    onError: (error: unknown) => {
+      const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      onResult({ success: false, message: detail ?? 'The Active Directory CSV could not be imported.' })
+    },
+  })
+
+  const copyScript = async () => {
+    await navigator.clipboard.writeText(AD_EXPORT_SCRIPT)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1800)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.06] p-4">
+        <div className="flex items-start gap-3">
+          <FileText size={17} className="mt-0.5 shrink-0 text-sky-400" />
+          <div>
+            <p className="text-sm font-semibold text-zinc-200">Export from a domain-joined Windows machine</p>
+            <p className="mt-1 text-xs leading-5 text-zinc-500">Open PowerShell as a user allowed to read AD, install the ActiveDirectory module if needed, and run this script. It exports enabled users and all computer objects in the exact SEC360 format.</p>
+          </div>
+        </div>
+        <div className="relative mt-3">
+          <pre className="max-h-64 overflow-auto rounded-lg border border-white/[0.07] bg-zinc-950 p-3 pr-10 text-[10px] leading-5 text-zinc-400">{AD_EXPORT_SCRIPT}</pre>
+          <button type="button" onClick={copyScript} className="absolute right-2 top-2 rounded-md border border-white/[0.08] bg-zinc-900 p-1.5 text-zinc-400 hover:text-white" aria-label="Copy PowerShell export script">
+            {copied ? <CheckCircle2 size={13} className="text-emerald-400" /> : <Copy size={13} />}
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-zinc-400">Active Directory CSV</label>
+        <p className="mb-2 text-xs text-zinc-600">UTF-8 CSV, up to 20 MB and 100,000 rows. A successful upload switches AD to manual mode.</p>
+        <input ref={inputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={event => setFile(event.target.files?.[0] ?? null)} />
+        <button type="button" onClick={() => inputRef.current?.click()} className="flex w-full items-center justify-between rounded-lg border border-dashed border-white/[0.12] bg-[var(--surface-2)] px-4 py-3 text-left transition-colors hover:border-sky-500/40">
+          <span className="flex min-w-0 items-center gap-2.5"><Upload size={15} className="shrink-0 text-sky-400" /><span className="truncate text-xs text-zinc-300">{file?.name ?? 'Choose sec360-ad-export.csv'}</span></span>
+          <span className="text-[10px] uppercase tracking-wide text-zinc-600">Browse</span>
+        </button>
+      </div>
+      <button type="button" disabled={!file || mutation.isPending} onClick={() => mutation.mutate()} className="flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white pressable disabled:cursor-not-allowed disabled:opacity-40">
+        {mutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+        {mutation.isPending ? 'Importing snapshot…' : 'Upload and import'}
+      </button>
+    </div>
+  )
+}
+
 // ─── IntegrationPanel ─────────────────────────────────────────────────────────
 
 function IntegrationPanel({
@@ -689,11 +796,14 @@ function IntegrationPanel({
 
   useEffect(() => {
     if (configType) {
-      setFormValues(config?.deployment_type ? { deployment_type: config.deployment_type } : {})
+      setFormValues({
+        ...(config?.deployment_type ? { deployment_type: config.deployment_type } : {}),
+        ...(config?.connection_mode ? { import_mode: config.connection_mode } : {}),
+      })
       setTestResult(null)
       setView(initialView)
     }
-  }, [configType, config?.deployment_type, initialView])
+  }, [configType, config?.connection_mode, config?.deployment_type, initialView])
 
   const catalog = config ? getCatalogEntry(config.integration_type) : null
   const isCustom = config?.integration_type.startsWith('custom_') ?? false
@@ -707,6 +817,8 @@ function IntegrationPanel({
   const category = catalog?.category ?? 'custom'
   const categoryLabel = CATEGORIES.find((c) => c.id === category)?.label ?? category
   const fields = catalog?.fields ?? []
+  const adManualMode = config?.integration_type === 'active_directory'
+    && (formValues.import_mode ?? config.connection_mode ?? 'live') === 'manual'
 
   const saveMutation = useMutation({
     mutationFn: (creds: Record<string, unknown>) =>
@@ -757,6 +869,7 @@ function IntegrationPanel({
     const creds: Record<string, unknown> = {}
     // Merge defaults with form values
     fields.forEach((f) => {
+      if (f.showWhen && (formValues[f.showWhen.field] ?? fields.find(item => item.name === f.showWhen?.field)?.defaultValue ?? '') !== f.showWhen.value) return
       const val = formValues[f.name] ?? f.defaultValue ?? ''
       if (val !== '') {
         if (f.type === 'number') {
@@ -924,31 +1037,20 @@ function IntegrationPanel({
                     <div className="space-y-2">
                       <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">Actions</p>
 
-                      <button
-                        onClick={() => testMutation.mutate()}
-                        disabled={testMutation.isPending}
-                        className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] hover:border-[var(--accent)]/50 text-sm text-zinc-300 hover:text-white transition-colors disabled:opacity-50"
-                      >
-                        {testMutation.isPending ? (
-                          <Loader2 size={14} className="animate-spin text-zinc-400" />
-                        ) : (
-                          <Settings2 size={14} className="text-zinc-400" />
-                        )}
-                        Test Connection
-                      </button>
-
-                      <button
-                        onClick={() => syncMutation.mutate()}
-                        disabled={syncMutation.isPending}
-                        className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--accent)]/10 border border-[var(--accent)]/30 hover:bg-[var(--accent)]/20 text-sm text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50"
-                      >
-                        {syncMutation.isPending ? (
-                          <Loader2 size={14} className="animate-spin" />
-                        ) : (
-                          <RefreshCw size={14} />
-                        )}
-                        {syncMutation.isPending ? 'Syncing...' : 'Sync Now'}
-                      </button>
+                      {adManualMode ? (
+                        <button type="button" onClick={() => setView('config')} className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-sky-500/10 border border-sky-500/25 text-sm text-sky-300 hover:bg-sky-500/15">
+                          <Upload size={14} /> Upload a new AD snapshot
+                        </button>
+                      ) : (
+                        <>
+                          <button onClick={() => testMutation.mutate()} disabled={testMutation.isPending} className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] hover:border-[var(--accent)]/50 text-sm text-zinc-300 hover:text-white transition-colors disabled:opacity-50">
+                            {testMutation.isPending ? <Loader2 size={14} className="animate-spin text-zinc-400" /> : <Settings2 size={14} className="text-zinc-400" />} Test Connection
+                          </button>
+                          <button onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending} className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--accent)]/10 border border-[var(--accent)]/30 hover:bg-[var(--accent)]/20 text-sm text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50">
+                            {syncMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncMutation.isPending ? 'Syncing...' : 'Sync Now'}
+                          </button>
+                        </>
+                      )}
 
                       <button
                         onClick={async () => {
@@ -1020,7 +1122,7 @@ function IntegrationPanel({
                     </div>
                   )}
 
-                  {config.credentials_configured && (
+                  {config.credentials_configured && !adManualMode && (
                     <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-300">
                       Credentials are already configured. Re-enter all fields to update them.
                     </div>
@@ -1036,15 +1138,17 @@ function IntegrationPanel({
                     <p className="text-zinc-500 text-sm">No configurable fields for this integration.</p>
                   )}
 
+                  {adManualMode && <AdManualImport onResult={setTestResult} />}
+
                   <div className="flex items-center gap-3 pt-2">
-                    <button
+                    {!adManualMode && <button
                       type="submit"
                       disabled={saveMutation.isPending}
                       className="flex items-center gap-2 px-4 py-2.5 bg-[var(--accent)] hover:bg-emerald-400 disabled:bg-emerald-900 disabled:cursor-not-allowed text-black text-sm font-semibold rounded-lg pressable transition-colors"
                     >
                       {saveMutation.isPending && <Loader2 size={14} className="animate-spin" />}
                       Save & Enable
-                    </button>
+                    </button>}
                     <button
                       type="button"
                       onClick={() => setView('status')}

@@ -16,7 +16,7 @@ import qrcode.image.svg
 from fastapi import APIRouter, Depends, File, HTTPException, Request, status, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.api.deps import get_db, get_current_user, require_role, audit_action
 from app.core.security import hash_password, verify_password
@@ -114,6 +114,14 @@ class SamlSettingsIn(BaseModel):
     saml_require_mfa: bool = False
     saml_sp_cert: str = ""
     saml_sp_key: str = ""
+    radius_enabled: bool = False
+    radius_host: str = ""
+    radius_port: int = Field(default=1812, ge=1, le=65535)
+    radius_shared_secret: str = ""
+    radius_nas_identifier: str = Field(default="SEC360", max_length=253)
+    radius_timeout_seconds: int = Field(default=5, ge=1, le=30)
+    radius_username_format: Literal["email", "local_part"] = "email"
+    radius_require_mfa: bool = False
 
 
 async def _read_upload(upload: UploadFile) -> bytes:
@@ -438,6 +446,7 @@ async def get_saml_settings(
         cfg = SystemSettings(id=1)
         db.add(cfg)
         await db.flush()
+    radius = cfg.radius_config or {}
     return {
         "saml_provider": cfg.saml_provider or "google",
         "saml_enabled": cfg.saml_enabled,
@@ -451,6 +460,14 @@ async def get_saml_settings(
         "saml_require_mfa": cfg.saml_require_mfa if hasattr(cfg, "saml_require_mfa") else False,
         "saml_sp_cert": cfg.saml_sp_cert or "",
         "has_sp_key": bool(cfg.saml_sp_key),
+        "radius_enabled": cfg.radius_enabled,
+        "radius_host": radius.get("host", ""),
+        "radius_port": radius.get("port", 1812),
+        "radius_nas_identifier": radius.get("nas_identifier", "SEC360"),
+        "radius_timeout_seconds": radius.get("timeout_seconds", 5),
+        "radius_username_format": radius.get("username_format", "email"),
+        "radius_require_mfa": radius.get("require_mfa", False),
+        "has_radius_shared_secret": bool(radius.get("shared_secret")),
     }
 
 
@@ -483,16 +500,37 @@ async def update_saml_settings(
     if data.saml_sp_key:
         cfg.saml_sp_key = data.saml_sp_key.strip()
 
+    current_radius = cfg.radius_config or {}
+    shared_secret = data.radius_shared_secret or current_radius.get("shared_secret", "")
+    if data.radius_enabled and (not data.radius_host.strip() or not shared_secret):
+        raise HTTPException(400, "RADIUS server and shared secret are required when RADIUS is enabled")
+    cfg.radius_enabled = data.radius_enabled
+    cfg.radius_config = {
+        "host": data.radius_host.strip(),
+        "port": data.radius_port,
+        "shared_secret": shared_secret,
+        "nas_identifier": data.radius_nas_identifier.strip() or "SEC360",
+        "timeout_seconds": data.radius_timeout_seconds,
+        "username_format": data.radius_username_format,
+        "require_mfa": data.radius_require_mfa,
+    }
+
     await db.flush()
     await audit_action("update_saml_settings", "system_settings", "1", request, db, current,
-                       {"saml_enabled": data.saml_enabled, "saml_provider": data.saml_provider})
+                       {
+                           "saml_enabled": data.saml_enabled,
+                           "saml_provider": data.saml_provider,
+                           "radius_enabled": data.radius_enabled,
+                           "radius_host": data.radius_host.strip(),
+                       })
     logger.info(
-        "Admin %s updated SAML settings (provider=%s, enabled=%s)",
+        "Admin %s updated authentication settings (SAML provider=%s, SAML enabled=%s, RADIUS enabled=%s)",
         current.email,
         data.saml_provider,
         data.saml_enabled,
+        data.radius_enabled,
     )
-    return {"message": "SAML settings saved"}
+    return {"message": "Authentication settings saved"}
 
 
 # ─── HTTPS certificate management (admin) ───────────────────────────────────

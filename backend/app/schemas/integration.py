@@ -44,6 +44,7 @@ class IntegrationConfigResponse(BaseModel):
     credentials_configured: bool = False  # True if credentials exist (don't return raw creds)
     available_features: list[str] = Field(default_factory=list)
     deployment_type: Optional[str] = None
+    connection_mode: Optional[str] = None
 
 
 class SyncResult(BaseModel):

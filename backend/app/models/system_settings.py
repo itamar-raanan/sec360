@@ -1,6 +1,7 @@
 from sqlalchemy import Integer, Boolean, Float, String, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column
 from app.core.database import Base
+from app.core.encryption import EncryptedJSON
 
 
 class SystemSettings(Base):
@@ -59,3 +60,8 @@ class SystemSettings(Base):
     saml_sp_key: Mapped[str] = mapped_column(Text, default="")
     saml_allowed_emails: Mapped[str] = mapped_column(Text, default="")
     saml_require_mfa: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # RADIUS authentication. Connection details and the shared secret are
+    # encrypted together using CREDENTIALS_ENCRYPTION_KEY.
+    radius_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    radius_config: Mapped[dict | None] = mapped_column(EncryptedJSON, nullable=True)

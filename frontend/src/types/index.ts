@@ -231,6 +231,7 @@ export interface IntegrationConfig {
   credentials_configured: boolean
   available_features: string[]
   deployment_type: 'cloud' | 'on_prem' | null
+  connection_mode: 'live' | 'manual' | null
 }
 
 export interface IntegrationCredentials {

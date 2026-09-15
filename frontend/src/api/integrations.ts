@@ -50,6 +50,8 @@ export const importActiveDirectoryCsv = async (
   success: boolean
   message: string
   users: number
+  enabled_users: number
+  disabled_users: number
   linked_endpoints: number
   rejected_rows: number
 }> => {

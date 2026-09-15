@@ -99,9 +99,20 @@ async def test_agent_filter_and_exclusions_update_coverage(
     )
     assert missing_status.status == "compliant"
 
+    filtered = await client.get(
+        "/api/compliance/endpoints?agents=puppet:missing", headers=headers
+    )
+    assert filtered.status_code == 200
+    assert filtered.json() == []
+
+    endpoint_detail = await client.get(f"/api/endpoints/{missing.id}", headers=headers)
+    assert endpoint_detail.status_code == 200
+    assert endpoint_detail.json()["excluded_agents"] == ["puppet"]
+    assert endpoint_detail.json()["compliance_exclusion_reason"] == "Temporary Puppet migration"
+
     dashboard = await client.get("/api/compliance/dashboard", headers=headers)
     puppet = dashboard.json()["agent_coverage"][0]
-    assert puppet["missing"] == 1  # factual presence is unchanged
+    assert puppet["missing"] == 0
     assert puppet["excluded"] == 1
     assert puppet["in_scope"] == 1
 

@@ -112,6 +112,18 @@ async def init_db():
             "ALTER TABLE compliance_statuses ADD COLUMN IF NOT EXISTS wss_installed  BOOLEAN DEFAULT FALSE",
             "ALTER TABLE compliance_statuses ADD COLUMN IF NOT EXISTS wss_version_ok BOOLEAN DEFAULT FALSE",
             "ALTER TABLE compliance_statuses ADD COLUMN IF NOT EXISTS agent_presence JSONB NOT NULL DEFAULT '{}'::jsonb",
+            """
+            UPDATE compliance_statuses cs
+            SET agent_presence = jsonb_build_object(
+                'sentinelone', COALESCE(cs.edr_installed, FALSE),
+                'symantec_dlp', COALESCE(cs.dlp_installed, FALSE),
+                'symantec_wss', COALESCE(cs.wss_installed, FALSE),
+                'puppet', EXISTS (
+                    SELECT 1 FROM puppet_nodes pn WHERE pn.endpoint_id = cs.endpoint_id
+                )
+            )
+            WHERE cs.agent_presence = '{}'::jsonb
+            """,
             # Durable full-endpoint and per-agent compliance exceptions.
             """
             CREATE TABLE IF NOT EXISTS compliance_exclusions (

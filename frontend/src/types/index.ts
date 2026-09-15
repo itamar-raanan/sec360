@@ -86,6 +86,11 @@ export interface Endpoint {
   tags?: string | null
   agents?: SecurityAgent[]
   compliance_status?: ComplianceStatus | null
+  compliance_excluded?: boolean
+  excluded_agents?: string[]
+  compliance_exclusion_reason?: string | null
+  compliance_exclusion_changed_at?: string | null
+  compliance_exclusion_changed_by?: string | null
   created_at: string
   updated_at: string
 }

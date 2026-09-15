@@ -131,6 +131,7 @@ async def get_endpoint(
             selectinload(Endpoint.owner),
             selectinload(Endpoint.agents),
             selectinload(Endpoint.compliance_status),
+            selectinload(Endpoint.compliance_exclusions),
         )
         .where(Endpoint.id == endpoint_id)
     )
@@ -139,6 +140,16 @@ async def get_endpoint(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Endpoint not found")
 
     detail = EndpointDetail.model_validate(endpoint)
+
+    exclusions = list(endpoint.compliance_exclusions or [])
+    full_exclusion = next((item for item in exclusions if item.agent_key == "*"), None)
+    agent_exclusions = [item for item in exclusions if item.agent_key != "*"]
+    newest_exclusion = max(exclusions, key=lambda item: item.created_at) if exclusions else None
+    detail.compliance_excluded = full_exclusion is not None
+    detail.excluded_agents = [item.agent_key for item in agent_exclusions]
+    detail.compliance_exclusion_reason = newest_exclusion.reason if newest_exclusion else None
+    detail.compliance_exclusion_changed_at = newest_exclusion.created_at if newest_exclusion else None
+    detail.compliance_exclusion_changed_by = newest_exclusion.created_by if newest_exclusion else None
 
     from app.models.puppet import PuppetNode
     puppet_last_seen = (await db.execute(

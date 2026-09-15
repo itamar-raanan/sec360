@@ -5,7 +5,7 @@ import {
   Monitor, CheckCircle, XCircle, AlertTriangle,
   User, Mail, Clock, Cpu, Wifi, Building2,
   Shield, ShieldOff, Hash, Tag,
-  Sliders, X, Check, LayoutList, Server, Lock,
+  Sliders, X, Check, LayoutList, Server, Lock, ChevronDown, RefreshCw,
 } from 'lucide-react'
 import apiClient from '../../api/client'
 import RiskBadge from '../shared/RiskBadge'
@@ -155,6 +155,150 @@ function RiskOverrideSection({ endpointId, current, note }: {
                 <X size={11} /> Clear override
               </button>
             )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface ComplianceAgentOption {
+  key: string
+  label: string
+  description: string
+}
+
+function ComplianceScopeControl({ endpoint }: { endpoint: EndpointDetail }) {
+  const qc = useQueryClient()
+  const [open, setOpen] = useState(false)
+  const [excludeAll, setExcludeAll] = useState(Boolean(endpoint.compliance_excluded))
+  const [excludedAgents, setExcludedAgents] = useState<string[]>(endpoint.excluded_agents ?? [])
+  const [reason, setReason] = useState(endpoint.compliance_exclusion_reason ?? '')
+  const { data } = useQuery<{ agent_coverage: ComplianceAgentOption[] }>({
+    queryKey: ['compliance-dashboard'],
+    queryFn: () => apiClient.get('/compliance/dashboard').then(response => response.data),
+  })
+  const agents = data?.agent_coverage ?? []
+  const hasExclusion = excludeAll || excludedAgents.length > 0
+  const persistedExclusion = Boolean(endpoint.compliance_excluded) || Boolean(endpoint.excluded_agents?.length)
+
+  const mutation = useMutation({
+    mutationFn: (payload: { exclude_all: boolean; excluded_agents: string[]; reason: string | null }) =>
+      apiClient.put(`/compliance/endpoints/${endpoint.id}/exclusions`, payload),
+    onSuccess: async (_response, payload) => {
+      setExcludeAll(payload.exclude_all)
+      setExcludedAgents(payload.excluded_agents)
+      setReason(payload.reason ?? '')
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['endpoint-detail', endpoint.id] }),
+        qc.invalidateQueries({ queryKey: ['endpoints-all'] }),
+        qc.invalidateQueries({ queryKey: ['compliance-dashboard'] }),
+        qc.invalidateQueries({ queryKey: ['compliance-endpoints'] }),
+      ])
+      setOpen(false)
+    },
+  })
+  const error = (mutation.error as any)?.response?.data?.detail || (mutation.error as Error | null)?.message
+
+  function toggleAgent(key: string) {
+    setExcludedAgents(current => current.includes(key)
+      ? current.filter(item => item !== key)
+      : [...current, key])
+  }
+
+  function save() {
+    mutation.mutate({
+      exclude_all: excludeAll,
+      excluded_agents: excludeAll ? [] : excludedAgents,
+      reason: hasExclusion ? reason.trim() : null,
+    })
+  }
+
+  return (
+    <div className={`overflow-hidden rounded-xl border ${persistedExclusion ? 'border-amber-500/30 bg-amber-500/[0.06]' : 'border-white/[0.09] bg-zinc-900/60'}`}>
+      <button
+        type="button"
+        onClick={() => setOpen(current => !current)}
+        className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-white/[0.035] active:scale-[0.99]"
+        aria-expanded={open}
+      >
+        <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${persistedExclusion ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/10 text-emerald-300'}`}>
+          {persistedExclusion ? <ShieldOff size={15} /> : <Shield size={15} />}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-xs font-semibold text-zinc-200">Compliance scope</span>
+          <span className={`mt-0.5 block truncate text-[11px] ${persistedExclusion ? 'text-amber-300/80' : 'text-zinc-500'}`}>
+            {endpoint.compliance_excluded
+              ? 'Endpoint excluded from compliance'
+              : endpoint.excluded_agents?.length
+                ? `${endpoint.excluded_agents.length} agent requirement${endpoint.excluded_agents.length === 1 ? '' : 's'} excluded`
+                : 'Included in all connected-agent checks'}
+          </span>
+        </span>
+        <span className="text-[10px] font-medium text-zinc-500">Manage</span>
+        <ChevronDown size={13} className={`text-zinc-500 transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="space-y-3 border-t border-white/[0.07] px-3.5 py-3.5">
+          <label className={`flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 ${excludeAll ? 'border-amber-500/30 bg-amber-500/[0.08]' : 'border-white/[0.07]'}`}>
+            <input type="checkbox" checked={excludeAll} onChange={event => setExcludeAll(event.target.checked)} className="mt-0.5 accent-amber-500" />
+            <span>
+              <span className="block text-xs font-medium text-zinc-200">Exclude endpoint completely</span>
+              <span className="mt-0.5 block text-[10px] leading-4 text-zinc-500">Remove it from compliance coverage and compliance-based risk.</span>
+            </span>
+          </label>
+
+          {agents.length > 0 && (
+            <div className={excludeAll ? 'pointer-events-none opacity-40' : ''}>
+              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Specific agent exceptions</div>
+              <div className="divide-y divide-white/[0.05] rounded-lg border border-white/[0.07]">
+                {agents.map(agent => (
+                  <label key={agent.key} className="flex cursor-pointer items-center gap-2.5 px-3 py-2">
+                    <input type="checkbox" checked={excludedAgents.includes(agent.key)} onChange={() => toggleAgent(agent.key)} className="accent-amber-500" />
+                    <span className="min-w-0 flex-1 truncate text-xs text-zinc-300">{agent.label}</span>
+                    <span className={`text-[10px] ${endpoint.compliance_status?.agent_presence?.[agent.key] ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {endpoint.compliance_status?.agent_presence?.[agent.key] ? 'Present' : 'Missing'}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <label htmlFor={`compliance-reason-${endpoint.id}`} className="mb-1 block text-[10px] font-medium text-zinc-500">
+              Reason {hasExclusion && <span className="text-red-400">*</span>}
+            </label>
+            <textarea
+              id={`compliance-reason-${endpoint.id}`}
+              rows={2}
+              value={reason}
+              onChange={event => setReason(event.target.value)}
+              placeholder="Why is this exception approved?"
+              className="w-full resize-none rounded-lg border border-white/[0.08] bg-zinc-950 px-3 py-2 text-xs text-zinc-200 placeholder:text-zinc-700 focus:border-emerald-500 focus:outline-none"
+            />
+          </div>
+          {error && <div className="rounded-lg border border-red-500/20 bg-red-500/[0.08] px-3 py-2 text-[11px] text-red-300">{error}</div>}
+
+          <div className="flex items-center justify-between gap-2 pt-0.5">
+            <button
+              type="button"
+              onClick={() => mutation.mutate({ exclude_all: false, excluded_agents: [], reason: null })}
+              disabled={!persistedExclusion || mutation.isPending}
+              className="text-[11px] text-zinc-500 hover:text-zinc-200 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              Remove exclusions
+            </button>
+            <button
+              type="button"
+              onClick={save}
+              disabled={mutation.isPending || (hasExclusion && !reason.trim())}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-[11px] font-semibold text-zinc-950 hover:bg-emerald-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {mutation.isPending ? <RefreshCw size={11} className="animate-spin" /> : <Check size={11} />}
+              Save scope
+            </button>
           </div>
         </div>
       )}
@@ -392,6 +536,10 @@ export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
 
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+        {(user?.role === 'admin' || user?.role === 'analyst') && (
+          <ComplianceScopeControl endpoint={ep} />
+        )}
 
         {/* ── OVERVIEW TAB ── */}
         {activeTab === 'overview' && (

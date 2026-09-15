@@ -27,6 +27,16 @@ interface AuthUserDetail {
 
 interface ComplianceAgentOption { key: string; label: string }
 
+function endpointHasComplianceAgent(ep: Endpoint, key: string) {
+  const evaluated = ep.compliance_status?.agent_presence?.[key]
+  if (evaluated !== undefined) return evaluated
+  if (key === 'puppet') return ep.puppet_managed
+  const products: Record<string, string> = {
+    sentinelone: 'sentinelone', symantec_dlp: 'symantec', symantec_wss: 'symantec_wss',
+  }
+  return ep.agents?.some(agent => agent.product_name === products[key]) ?? false
+}
+
 const relTime = (iso: string) => formatDistanceToNow(new Date(iso), { addSuffix: true })
 
 const RISK_SCORE_RANGES: Record<string, [number, number]> = {
@@ -281,17 +291,10 @@ export default function Endpoints() {
     queryKey: ['compliance-dashboard'],
     queryFn: () => apiClient.get('/compliance/dashboard').then(r => r.data),
   })
-  const complianceAgents = complianceAgentConfig?.agent_coverage ?? []
-
-  const hasComplianceAgent = (ep: Endpoint, key: string) => {
-    const evaluated = ep.compliance_status?.agent_presence?.[key]
-    if (evaluated !== undefined) return evaluated
-    if (key === 'puppet') return ep.puppet_managed
-    const products: Record<string, string> = {
-      sentinelone: 'sentinelone', symantec_dlp: 'symantec', symantec_wss: 'symantec_wss',
-    }
-    return ep.agents?.some(agent => agent.product_name === products[key]) ?? false
-  }
+  const complianceAgents = useMemo(
+    () => complianceAgentConfig?.agent_coverage ?? [],
+    [complianceAgentConfig?.agent_coverage],
+  )
 
   // Compute facet counts from raw (unfiltered) data
   const facetCounts = useMemo(() => {
@@ -322,7 +325,7 @@ export default function Endpoints() {
       // agents
       const agents = ep.agents ?? []
       complianceAgents.forEach(item => {
-        agent[`${item.key}:${hasComplianceAgent(ep, item.key) ? 'has' : 'missing'}`]++
+        agent[`${item.key}:${endpointHasComplianceAgent(ep, item.key) ? 'has' : 'missing'}`]++
       })
       if (agents.some(a => a.status === 'inactive')) agent.disabled_agent++
       // agent status
@@ -384,7 +387,7 @@ export default function Endpoints() {
           return activeAgentFilters.some(value => {
             if (value === 'disabled_agent') return hasDisabledAgent
             const [key, state] = value.split(':')
-            const present = hasComplianceAgent(ep, key)
+            const present = endpointHasComplianceAgent(ep, key)
             return state === 'has' ? present : !present
           })
         })

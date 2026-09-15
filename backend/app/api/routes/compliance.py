@@ -109,22 +109,22 @@ async def get_compliance_dashboard(
     agent_exclusions = {(row.endpoint_id, row.agent_key) for row in agent_exclusion_rows}
     agent_coverage = []
     for agent in required_agents:
-        has_count = sum(bool((presence or {}).get(agent.key)) for _, presence in presence_rows)
         excluded_count = sum((endpoint_id, agent.key) in agent_exclusions for endpoint_id, _ in presence_rows)
-        scoped_has_count = sum(
+        has_count = sum(
             bool((presence or {}).get(agent.key)) and (endpoint_id, agent.key) not in agent_exclusions
             for endpoint_id, presence in presence_rows
         )
         in_scope = max(total - excluded_count, 0)
+        missing_count = max(in_scope - has_count, 0)
         agent_coverage.append({
             "key": agent.key,
             "label": agent.label,
             "description": agent.description,
             "has": has_count,
-            "missing": max(total - has_count, 0),
+            "missing": missing_count,
             "excluded": excluded_count,
             "in_scope": in_scope,
-            "coverage_pct": round(scoped_has_count / in_scope * 100, 1) if in_scope else 0.0,
+            "coverage_pct": round(has_count / in_scope * 100, 1) if in_scope else 0.0,
         })
 
     if total == 0:
@@ -414,7 +414,8 @@ async def list_compliance_endpoints(
             continue
         expected = presence_state == "has"
         query = query.where(
-            ComplianceStatus.agent_presence[agent_key].as_boolean() == expected  # noqa: E712
+            ComplianceStatus.agent_presence[agent_key].as_boolean() == expected,  # noqa: E712
+            ~_has_exclusion(agent_key),
         )
 
     OS_PATTERNS: dict[str, list[str]] = {

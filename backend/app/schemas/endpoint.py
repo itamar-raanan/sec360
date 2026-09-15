@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class EndpointBase(BaseModel):
@@ -49,6 +49,7 @@ class ComplianceSummary(BaseModel):
     wss_version_ok: bool = False
     disk_encrypted: Optional[bool] = None
     device_control_enabled: Optional[bool] = None
+    agent_presence: dict[str, bool] = Field(default_factory=dict)
     last_evaluated: datetime
 
 
@@ -84,6 +85,11 @@ class EndpointResponse(EndpointBase):
     owner: Optional[OwnerSummary] = None
     agents: list[AgentSummary] = []
     compliance_status: Optional[ComplianceSummary] = None
+    compliance_excluded: bool = False
+    excluded_agents: list[str] = Field(default_factory=list)
+    compliance_exclusion_reason: Optional[str] = None
+    compliance_exclusion_changed_at: Optional[datetime] = None
+    compliance_exclusion_changed_by: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

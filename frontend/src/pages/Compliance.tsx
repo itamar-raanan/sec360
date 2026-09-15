@@ -119,6 +119,16 @@ function AgentPill({ label, present, excluded }: { label: string; present: boole
   )
 }
 
+function visibleControlFailures(endpoint: ComplianceEndpoint, agents: AgentCoverage[]) {
+  const agentAbsenceLabels = new Set(agents.flatMap(agent => {
+    if (agent.key === 'sentinelone') return ['No EDR']
+    if (agent.key === 'symantec_dlp') return ['No DLP']
+    if (agent.key === 'symantec_wss') return ['No Symantec WSS', 'No WSS']
+    return [`No ${agent.label}`]
+  }))
+  return endpoint.failures.filter(failure => !agentAbsenceLabels.has(failure))
+}
+
 function ExclusionDialog({ endpoint, agents, onClose }: {
   endpoint: ComplianceEndpoint
   agents: AgentCoverage[]
@@ -139,7 +149,7 @@ function ExclusionDialog({ endpoint, agents, onClose }: {
       await Promise.all([
         qc.invalidateQueries({ queryKey: ['compliance-dashboard'] }),
         qc.invalidateQueries({ queryKey: ['compliance-endpoints'] }),
-        qc.invalidateQueries({ queryKey: ['endpoints'] }),
+        qc.invalidateQueries({ queryKey: ['endpoints-all'] }),
       ])
       onClose()
     },
@@ -372,7 +382,9 @@ function EndpointList({ filters, agents, onRemoveFilter, onClearFilters }: {
               <p className="text-sm">{filters.length ? 'No endpoints match these filters' : 'All endpoints are compliant'}</p>
             </div>
           ) : (
-            displayed.map(ep => (
+            displayed.map(ep => {
+              const controlFailures = visibleControlFailures(ep, agents)
+              return (
               <div
                 key={ep.endpoint_id}
                 className="group flex w-full items-start gap-3 px-4 py-3 text-left"
@@ -400,9 +412,9 @@ function EndpointList({ filters, agents, onRemoveFilter, onClearFilters }: {
                     }
                     {ep.os_version && <span className="text-xs text-zinc-700">· {ep.os_version.slice(0, 30)}</span>}
                   </div>
-                  {ep.failures.length > 0 && (
+                  {controlFailures.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1.5">
-                      {ep.failures.map(f => <FailurePill key={f} label={f} />)}
+                      {controlFailures.map(f => <FailurePill key={f} label={f} />)}
                     </div>
                   )}
                   {agents.length > 0 && (
@@ -432,7 +444,8 @@ function EndpointList({ filters, agents, onRemoveFilter, onClearFilters }: {
                 )}
                 <ChevronRight size={13} className="mt-1.5 flex-shrink-0 text-zinc-600 transition-colors group-hover:text-emerald-400" />
               </div>
-            ))
+              )
+            })
           )}
         </div>
       </div>
@@ -497,9 +510,18 @@ export default function Compliance() {
   }, [activeFilters, setSearchParams])
 
   function toggleFilter(filter: ActiveFilter) {
-    setActiveFilters(current => current.some(item => filterKey(item) === filterKey(filter))
-      ? current.filter(item => filterKey(item) !== filterKey(filter))
-      : [...current, filter])
+    setActiveFilters(current => {
+      const isActive = current.some(item => filterKey(item) === filterKey(filter))
+      if (isActive) return current.filter(item => filterKey(item) !== filterKey(filter))
+      if (filter.type === 'agent') {
+        const agentKey = filter.value.split(':')[0]
+        return [
+          ...current.filter(item => item.type !== 'agent' || item.value.split(':')[0] !== agentKey),
+          filter,
+        ]
+      }
+      return [...current, filter]
+    })
   }
 
   function isFilterActive(type: ActiveFilter['type'], value: string) {

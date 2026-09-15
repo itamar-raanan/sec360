@@ -19,7 +19,7 @@ def risk_level(score: float) -> str:
 async def user_risk_score(user_id: str, db: AsyncSession) -> dict:
     from app.models.user import User
     from app.models.activity import ActivityEvent
-    from app.models.compliance import ComplianceStatus
+    from app.models.compliance import ComplianceExclusion, ComplianceStatus
     from app.models.endpoint import Endpoint
 
     result = await db.execute(select(User).where(User.id == user_id))
@@ -67,7 +67,13 @@ async def user_risk_score(user_id: str, db: AsyncSession) -> dict:
             select(ComplianceStatus).where(ComplianceStatus.endpoint_id == ep.id)
         )
         cs = cs_result.scalar_one_or_none()
-        if cs and cs.status == "non_compliant":
+        fully_excluded = bool(await db.scalar(
+            select(ComplianceExclusion.id).where(
+                ComplianceExclusion.endpoint_id == ep.id,
+                ComplianceExclusion.agent_key == "*",
+            ).limit(1)
+        ))
+        if cs and not fully_excluded and cs.status == "non_compliant":
             score += 25
             factors.append("non_compliant_device")
             break
@@ -90,9 +96,9 @@ async def user_risk_score(user_id: str, db: AsyncSession) -> dict:
 
 async def endpoint_risk_score(endpoint_id: str, db: AsyncSession) -> dict:
     from app.models.endpoint import Endpoint
-    from app.models.compliance import ComplianceStatus
+    from app.models.compliance import ComplianceExclusion, ComplianceStatus
     from app.models.system_settings import SystemSettings
-    from app.services.product_scope import normalize_product_tags
+    from app.services.compliance_agents import load_required_compliance_agents
 
     result = await db.execute(select(Endpoint).where(Endpoint.id == endpoint_id))
     endpoint = result.scalars().first()
@@ -112,38 +118,60 @@ async def endpoint_risk_score(endpoint_id: str, db: AsyncSession) -> dict:
     w_no_wss     = cfg.risk_weight_no_wss      if cfg else 15.0
     w_wss_ver    = cfg.risk_weight_wss_version if cfg else 10.0
     w_no_user    = cfg.risk_weight_no_user     if cfg else 10.0
-    active_products = set(normalize_product_tags(cfg.endpoint_product_tags if cfg else None))
+    required_agents = await load_required_compliance_agents(db)
+    required_keys = {agent.key for agent in required_agents}
+    excluded_keys = set((await db.execute(
+        select(ComplianceExclusion.agent_key).where(
+            ComplianceExclusion.endpoint_id == endpoint.id
+        )
+    )).scalars().all())
 
     score = 0.0
     factors = []
+
+    if "*" in excluded_keys:
+        if not endpoint.owner_user_id:
+            score += w_no_user
+            factors.append("no_user_assigned")
+        return {"score": min(score, 100), "level": risk_level(score), "factors": factors}
 
     if not cs:
         score += 50
         factors.append("no_compliance_data")
         return {"score": min(score, 100), "level": risk_level(score), "factors": factors}
 
-    if "S1" in active_products and not cs.edr_installed:
+    if "sentinelone" in required_keys and "sentinelone" not in excluded_keys and not cs.edr_installed:
         score += w_no_edr
         factors.append("no_edr")
 
-    elif "S1" in active_products and not cs.edr_version_ok:
+    elif "sentinelone" in required_keys and "sentinelone" not in excluded_keys and not cs.edr_version_ok:
         score += w_edr_ver
         factors.append("edr_outdated")
 
-    if "DLP" in active_products and not cs.dlp_installed:
+    if "symantec_dlp" in required_keys and "symantec_dlp" not in excluded_keys and not cs.dlp_installed:
         score += w_no_dlp
         factors.append("no_dlp")
 
-    elif "DLP" in active_products and not cs.dlp_version_ok:
+    elif "symantec_dlp" in required_keys and "symantec_dlp" not in excluded_keys and not cs.dlp_version_ok:
         score += w_dlp_ver
         factors.append("dlp_outdated")
 
-    if "WSS" in active_products and not cs.wss_installed:
+    if "symantec_wss" in required_keys and "symantec_wss" not in excluded_keys and not cs.wss_installed:
         score += w_no_wss
         factors.append("no_wss")
-    elif "WSS" in active_products and not cs.wss_version_ok:
+    elif "symantec_wss" in required_keys and "symantec_wss" not in excluded_keys and not cs.wss_version_ok:
         score += w_wss_ver
         factors.append("wss_outdated")
+
+    for agent in required_agents:
+        if agent.key in {"sentinelone", "symantec_dlp", "symantec_wss"}:
+            continue
+        if agent.key not in excluded_keys and not (cs.agent_presence or {}).get(agent.key, False):
+            # Generic connected agents currently use the network-agent absence
+            # weight; this keeps their coverage meaningful in risk without
+            # inventing a hidden per-product setting.
+            score += w_no_wss
+            factors.append(f"missing_{agent.key}")
 
     if not endpoint.owner_user_id:
         score += w_no_user

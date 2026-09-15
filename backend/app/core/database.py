@@ -111,6 +111,21 @@ async def init_db():
             # Symantec WSS compliance fields (safe for upgraded installations)
             "ALTER TABLE compliance_statuses ADD COLUMN IF NOT EXISTS wss_installed  BOOLEAN DEFAULT FALSE",
             "ALTER TABLE compliance_statuses ADD COLUMN IF NOT EXISTS wss_version_ok BOOLEAN DEFAULT FALSE",
+            "ALTER TABLE compliance_statuses ADD COLUMN IF NOT EXISTS agent_presence JSONB NOT NULL DEFAULT '{}'::jsonb",
+            # Durable full-endpoint and per-agent compliance exceptions.
+            """
+            CREATE TABLE IF NOT EXISTS compliance_exclusions (
+                id UUID PRIMARY KEY,
+                endpoint_id UUID NOT NULL REFERENCES endpoints(id) ON DELETE CASCADE,
+                agent_key VARCHAR(64) NOT NULL,
+                reason TEXT NOT NULL,
+                created_by VARCHAR(255) NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL,
+                CONSTRAINT uq_compliance_exclusion_endpoint_agent UNIQUE (endpoint_id, agent_key)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_compliance_exclusions_endpoint_id ON compliance_exclusions (endpoint_id)",
+            "CREATE INDEX IF NOT EXISTS ix_compliance_exclusions_agent_key ON compliance_exclusions (agent_key)",
             # S1 enrichment on security_agents
             "ALTER TABLE security_agents ADD COLUMN IF NOT EXISTS disk_encrypted         BOOLEAN       DEFAULT NULL",
             "ALTER TABLE security_agents ADD COLUMN IF NOT EXISTS encryption_status      VARCHAR(50)   DEFAULT NULL",

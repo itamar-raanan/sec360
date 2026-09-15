@@ -8,6 +8,7 @@ from app.engines.compliance import run_full_compliance
 from app.models.agent import SecurityAgent
 from app.models.compliance import ComplianceStatus
 from app.models.endpoint import Endpoint
+from app.models.integration import IntegrationConfig
 
 
 pytestmark = pytest.mark.asyncio
@@ -52,6 +53,14 @@ async def _seed_inventory(db_session):
         last_seen=now - timedelta(days=2),
     ))
     db_session.add_all([
+        IntegrationConfig(
+            integration_type="sentinelone", display_name="SentinelOne",
+            credentials={}, is_enabled=True, status="connected",
+        ),
+        IntegrationConfig(
+            integration_type="symantec_dlp", display_name="Symantec DLP",
+            credentials={}, is_enabled=True, status="connected",
+        ),
         ComplianceStatus(endpoint_id=current.id, status="compliant", edr_installed=True, dlp_installed=True),
         ComplianceStatus(endpoint_id=removed.id, status="non_compliant"),
         ComplianceStatus(endpoint_id=stale.id, status="non_compliant"),

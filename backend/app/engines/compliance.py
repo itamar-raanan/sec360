@@ -4,7 +4,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, func, select
 
 from app.services.endpoint_inventory import current_endpoint_clause
-from app.services.product_scope import normalize_product_tags
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +29,13 @@ def _version_ok(installed: str | None, minimum: str | None) -> bool:
         return True   # unparseable → don't penalise
 
 
-async def evaluate_endpoint(endpoint_id, db: AsyncSession):
-    """Evaluate compliance for a single endpoint (EDR + DLP checks only)."""
+async def evaluate_endpoint(endpoint_id, db: AsyncSession, required_agents=None):
+    """Evaluate compliance for a single endpoint and its connected agents."""
     from app.models.endpoint import Endpoint
     from app.models.agent import SecurityAgent
-    from app.models.compliance import ComplianceStatus
+    from app.models.compliance import ComplianceExclusion, ComplianceStatus
     from app.models.system_settings import SystemSettings
+    from app.services.compliance_agents import endpoint_agent_presence, load_required_compliance_agents
 
     result = await db.execute(
         select(Endpoint).where(
@@ -51,16 +51,27 @@ async def evaluate_endpoint(endpoint_id, db: AsyncSession):
         select(SecurityAgent).where(SecurityAgent.endpoint_id == endpoint_id)
     )
     agents = agents_result.scalars().all()
+    if required_agents is None:
+        required_agents = await load_required_compliance_agents(db)
+    agent_presence = await endpoint_agent_presence(
+        endpoint_id, agents, required_agents, db
+    )
+    excluded_agent_keys = set((await db.execute(
+        select(ComplianceExclusion.agent_key).where(
+            ComplianceExclusion.endpoint_id == endpoint_id,
+            ComplianceExclusion.agent_key != "*",
+        )
+    )).scalars().all())
 
     # Load min-version thresholds from settings (row id=1)
     cfg = (await db.execute(select(SystemSettings).where(SystemSettings.id == 1))).scalar_one_or_none()
     min_s1_ver  = (cfg.min_s1_version  or "").strip() if cfg else ""
     min_dlp_ver = (cfg.min_dlp_version or "").strip() if cfg else ""
     min_wss_ver = (cfg.min_wss_version or "").strip() if cfg else ""
-    active_products = set(normalize_product_tags(cfg.endpoint_product_tags if cfg else None))
-    use_s1 = "S1" in active_products
-    use_dlp = "DLP" in active_products
-    use_wss = "WSS" in active_products
+    required_keys = {agent.key for agent in required_agents}
+    use_s1 = "sentinelone" in required_keys and "sentinelone" not in excluded_agent_keys
+    use_dlp = "symantec_dlp" in required_keys and "symantec_dlp" not in excluded_agent_keys
+    use_wss = "symantec_wss" in required_keys and "symantec_wss" not in excluded_agent_keys
 
     # ── SentinelOne EDR ──────────────────────────────────────────────────────
     s1_agent = next((a for a in agents if a.product_name == "sentinelone"), None)
@@ -106,6 +117,13 @@ async def evaluate_endpoint(endpoint_id, db: AsyncSession):
         checks.append(disk_encrypted)
     if use_s1 and device_control_enabled is not None:
         checks.append(device_control_enabled)
+    # Agent products without legacy/version-specific columns contribute their
+    # factual presence as an independent compliance requirement.
+    for agent in required_agents:
+        if agent.key in {"sentinelone", "symantec_dlp", "symantec_wss"}:
+            continue
+        if agent.key not in excluded_agent_keys:
+            checks.append(agent_presence.get(agent.key, False))
 
     passed = sum(checks)
     if passed == len(checks):
@@ -132,6 +150,7 @@ async def evaluate_endpoint(endpoint_id, db: AsyncSession):
         cs.wss_version_ok         = wss_version_ok
         cs.disk_encrypted         = disk_encrypted
         cs.device_control_enabled = device_control_enabled
+        cs.agent_presence         = agent_presence
         cs.status                 = status
         cs.last_evaluated         = now
     else:
@@ -145,6 +164,7 @@ async def evaluate_endpoint(endpoint_id, db: AsyncSession):
             wss_version_ok        = wss_version_ok,
             disk_encrypted        = disk_encrypted,
             device_control_enabled= device_control_enabled,
+            agent_presence         = agent_presence,
             status                = status,
             last_evaluated        = now,
         )
@@ -158,6 +178,9 @@ async def run_full_compliance(db: AsyncSession) -> dict:
     from app.models.endpoint import Endpoint
     from app.models.compliance import ComplianceStatus
 
+    from app.services.compliance_agents import load_required_compliance_agents
+
+    required_agents = await load_required_compliance_agents(db)
     active_endpoint_ids = select(Endpoint.id).where(current_endpoint_clause())
     stale_count = await db.scalar(
         select(func.count()).select_from(ComplianceStatus).where(
@@ -177,7 +200,7 @@ async def run_full_compliance(db: AsyncSession) -> dict:
     evaluated = 0
     for eid in endpoint_ids:
         try:
-            await evaluate_endpoint(eid, db)
+            await evaluate_endpoint(eid, db, required_agents=required_agents)
             evaluated += 1
         except Exception as e:
             logger.error(f"Compliance: Failed to evaluate endpoint {eid}: {e}")

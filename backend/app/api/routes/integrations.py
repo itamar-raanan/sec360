@@ -358,6 +358,15 @@ async def sync_integration(
         count = result.get("records_synced", 0)
         config.records_synced = str(count)
         await db.flush()
+        # Agent integrations change the compliance requirement set. Rebuild
+        # posture immediately so "Sync now" is reflected without waiting for
+        # the scheduled post-collection cycle.
+        if integration_type in {"sentinelone", "symantec_dlp", "puppet"}:
+            from app.engines.compliance import run_full_compliance
+            from app.engines.risk import update_all_risk_scores
+
+            await run_full_compliance(db)
+            await update_all_risk_scores(db)
         await audit_action("sync_integration", "integration", integration_type, request, db, current, {"success": True, "records_synced": count})
         return SyncResult(
             success=True,

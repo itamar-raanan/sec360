@@ -33,6 +33,17 @@ export interface ComplianceDashboardData {
     not_encrypted: number; no_device_control: number
     no_disk_encryption?: number; no_network_security?: number
   }
+  excluded_total: number
+  agent_coverage: Array<{
+    key: string
+    label: string
+    description: string
+    has: number
+    missing: number
+    excluded: number
+    in_scope: number
+    coverage_pct: number
+  }>
 }
 
 export async function fetchComplianceDashboard(): Promise<ComplianceDashboardData> {

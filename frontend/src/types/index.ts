@@ -101,6 +101,7 @@ export interface ComplianceStatus {
   wss_version_ok: boolean
   disk_encrypted: boolean | null
   device_control_enabled: boolean | null
+  agent_presence: Record<string, boolean>
   status: ComplianceStatusValue
   last_evaluated: string
 }

@@ -47,3 +47,6 @@ class Endpoint(Base):
     owner: Mapped["User | None"] = relationship(back_populates="endpoints")  # noqa: F821
     agents: Mapped[list["SecurityAgent"]] = relationship(back_populates="endpoint")  # noqa: F821
     compliance_status: Mapped["ComplianceStatus | None"] = relationship(back_populates="endpoint")  # noqa: F821
+    compliance_exclusions: Mapped[list["ComplianceExclusion"]] = relationship(  # noqa: F821
+        back_populates="endpoint", cascade="all, delete-orphan"
+    )

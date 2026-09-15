@@ -43,7 +43,10 @@ export const deleteIntegration = async (type: string): Promise<void> => {
   await apiClient.delete(`/integrations/${type}`)
 }
 
-export const importActiveDirectoryCsv = async (file: File): Promise<{
+export const importActiveDirectoryCsv = async (
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<{
   success: boolean
   message: string
   users: number
@@ -52,6 +55,12 @@ export const importActiveDirectoryCsv = async (file: File): Promise<{
 }> => {
   const body = new FormData()
   body.append('file', file)
-  const { data } = await apiClient.post('/integrations/active_directory/import', body)
+  const { data } = await apiClient.post('/integrations/active_directory/import', body, {
+    onUploadProgress: event => {
+      if (event.total && onProgress) {
+        onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)))
+      }
+    },
+  })
   return data
 }

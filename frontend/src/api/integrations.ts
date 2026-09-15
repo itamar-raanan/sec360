@@ -53,9 +53,10 @@ export const importActiveDirectoryCsv = async (
   linked_endpoints: number
   rejected_rows: number
 }> => {
-  const body = new FormData()
-  body.append('file', file)
-  const { data } = await apiClient.post('/integrations/active_directory/import', body, {
+  // The shared client defaults to application/json. postForm explicitly sets
+  // multipart/form-data and lets Axios/browser attach the required boundary,
+  // otherwise FastAPI reports the file field as missing (HTTP 422).
+  const { data } = await apiClient.postForm('/integrations/active_directory/import', { file }, {
     onUploadProgress: event => {
       if (event.total && onProgress) {
         onProgress(Math.min(100, Math.round((event.loaded / event.total) * 100)))

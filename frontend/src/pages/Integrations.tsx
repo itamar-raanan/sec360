@@ -246,7 +246,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
   active_directory: {
     label: 'Active Directory',
     category: 'directory',
-    description: 'Microsoft Active Directory — sync users and computers through live LDAP or an offline CSV snapshot',
+    description: 'Microsoft Active Directory — live LDAP inventory or a minimal offline user CSV',
     color: '#0ea5e9',
     icon: Building2,
     dataProduces: ['Users', 'Endpoints', 'Departments'],
@@ -695,26 +695,16 @@ function IntegrationCard({
   )
 }
 
-const AD_EXPORT_SCRIPT = `$properties = @(
-  'mail','displayName','department','title','userAccountControl'
-)
-$users = Get-ADUser -Filter {Enabled -eq $true} -Properties $properties | ForEach-Object {
-  [pscustomobject]@{
-    object_type='user'; sAMAccountName=$_.sAMAccountName; mail=$_.mail
-    displayName=$_.displayName; department=$_.department; title=$_.title
-    userAccountControl=$_.userAccountControl; name=''; operatingSystem=''
-    operatingSystemVersion=''; dNSHostName=''; lastLogonTimestamp=''
+const AD_EXPORT_SCRIPT = `$properties = @('GivenName','Surname','mail')
+$users = Get-ADUser -Filter {Enabled -eq $true} -Properties $properties |
+  Where-Object { $_.mail } | ForEach-Object {
+    [pscustomobject]@{
+      'First Name' = $_.GivenName
+      'Last Name'  = $_.Surname
+      'E-mail'     = $_.mail
+    }
   }
-}
-$computers = Get-ADComputer -Filter * -Properties operatingSystem,operatingSystemVersion,dNSHostName,lastLogonTimestamp | ForEach-Object {
-  [pscustomobject]@{
-    object_type='computer'; sAMAccountName=''; mail=''; displayName=''
-    department=''; title=''; userAccountControl=''; name=$_.Name
-    operatingSystem=$_.operatingSystem; operatingSystemVersion=$_.operatingSystemVersion
-    dNSHostName=$_.dNSHostName; lastLogonTimestamp=[string]$_.lastLogonTimestamp
-  }
-}
-@($users) + @($computers) | Export-Csv -Path .\\sec360-ad-export.csv -NoTypeInformation -Encoding UTF8`
+$users | Export-Csv -Path .\\sec360-ad-users.csv -NoTypeInformation -Encoding UTF8`
 
 function AdManualImport({ onResult }: { onResult: (result: { success: boolean; message: string }) => void }) {
   const queryClient = useQueryClient()
@@ -728,6 +718,10 @@ function AdManualImport({ onResult }: { onResult: (result: { success: boolean; m
       setFile(null)
       if (inputRef.current) inputRef.current.value = ''
       void queryClient.invalidateQueries({ queryKey: ['integrations'] })
+      void queryClient.invalidateQueries({ queryKey: ['users'] })
+      void queryClient.invalidateQueries({ queryKey: ['users-all'] })
+      void queryClient.invalidateQueries({ queryKey: ['endpoints'] })
+      void queryClient.invalidateQueries({ queryKey: ['endpoints-all'] })
     },
     onError: (error: unknown) => {
       const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
@@ -748,7 +742,7 @@ function AdManualImport({ onResult }: { onResult: (result: { success: boolean; m
           <FileText size={17} className="mt-0.5 shrink-0 text-sky-400" />
           <div>
             <p className="text-sm font-semibold text-zinc-200">Export from a domain-joined Windows machine</p>
-            <p className="mt-1 text-xs leading-5 text-zinc-500">Open PowerShell as a user allowed to read AD, install the ActiveDirectory module if needed, and run this script. It exports enabled users and all computer objects in the exact SEC360 format.</p>
+            <p className="mt-1 text-xs leading-5 text-zinc-500">Open PowerShell as a user allowed to read AD, install the ActiveDirectory module if needed, and run this script. It exports enabled users with exactly First Name, Last Name, and E-mail.</p>
           </div>
         </div>
         <div className="relative mt-3">
@@ -761,10 +755,10 @@ function AdManualImport({ onResult }: { onResult: (result: { success: boolean; m
 
       <div>
         <label className="mb-1.5 block text-xs font-medium text-zinc-400">Active Directory CSV</label>
-        <p className="mb-2 text-xs text-zinc-600">UTF-8 CSV, up to 20 MB and 100,000 rows. A successful upload switches AD to manual mode.</p>
+        <p className="mb-2 text-xs text-zinc-600">Required columns: First Name, Last Name, E-mail. SEC360 uses the text before @ as the endpoint username. UTF-8 CSV, up to 20 MB and 100,000 rows.</p>
         <input ref={inputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={event => setFile(event.target.files?.[0] ?? null)} />
         <button type="button" onClick={() => inputRef.current?.click()} className="flex w-full items-center justify-between rounded-lg border border-dashed border-white/[0.12] bg-[var(--surface-2)] px-4 py-3 text-left transition-colors hover:border-sky-500/40">
-          <span className="flex min-w-0 items-center gap-2.5"><Upload size={15} className="shrink-0 text-sky-400" /><span className="truncate text-xs text-zinc-300">{file?.name ?? 'Choose sec360-ad-export.csv'}</span></span>
+          <span className="flex min-w-0 items-center gap-2.5"><Upload size={15} className="shrink-0 text-sky-400" /><span className="truncate text-xs text-zinc-300">{file?.name ?? 'Choose sec360-ad-users.csv'}</span></span>
           <span className="text-[10px] uppercase tracking-wide text-zinc-600">Browse</span>
         </button>
       </div>

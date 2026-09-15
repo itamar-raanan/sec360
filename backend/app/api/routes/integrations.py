@@ -99,7 +99,7 @@ async def import_active_directory_csv(
     db: AsyncSession = Depends(get_db),
     current: AuthUser = Depends(require_role("admin")),
 ):
-    """Import the documented combined AD user/computer CSV snapshot."""
+    """Import the documented minimal AD user CSV snapshot."""
     if not (file.filename or "").lower().endswith(".csv"):
         raise HTTPException(400, "Upload a .csv file exported with the provided PowerShell script")
     content = await file.read(20 * 1024 * 1024 + 1)
@@ -114,13 +114,13 @@ async def import_active_directory_csv(
 
     reader = csv.DictReader(io.StringIO(decoded))
     normalized_headers = {str(header or "").strip().lower() for header in (reader.fieldnames or [])}
-    if "object_type" not in normalized_headers:
-        raise HTTPException(400, "Missing required object_type column")
+    required_headers = {"first name", "last name", "e-mail"}
+    missing_headers = sorted(required_headers - normalized_headers)
+    if missing_headers:
+        raise HTTPException(400, f"Missing required columns: {', '.join(missing_headers)}")
 
     users: list[dict] = []
-    computers: list[dict] = []
     seen_users: set[str] = set()
-    seen_computers: set[str] = set()
     rejected = 0
     try:
         for index, source_row in enumerate(reader, start=2):
@@ -130,47 +130,37 @@ async def import_active_directory_csv(
                 rejected += 1
                 continue
             row = {str(key).strip().lower(): (value or "").strip() for key, value in source_row.items()}
-            object_type = row.get("object_type", "").lower()
-            if object_type == "user":
-                identity = (row.get("mail") or row.get("samaccountname") or "").lower()
-                if not identity or identity in seen_users:
-                    rejected += 1
-                    continue
-                seen_users.add(identity)
-                users.append({
-                    "sAMAccountName": row.get("samaccountname", ""),
-                    "mail": row.get("mail", ""),
-                    "displayName": row.get("displayname", ""),
-                    "department": row.get("department", ""),
-                    "title": row.get("title", ""),
-                    "userAccountControl": row.get("useraccountcontrol", ""),
-                })
-            elif object_type == "computer":
-                identity = (row.get("dnshostname") or row.get("name") or "").split(".", 1)[0].lower()
-                if not identity or identity in seen_computers:
-                    rejected += 1
-                    continue
-                seen_computers.add(identity)
-                computers.append({
-                    "name": row.get("name", ""),
-                    "operatingSystem": row.get("operatingsystem", ""),
-                    "operatingSystemVersion": row.get("operatingsystemversion", ""),
-                    "dNSHostName": row.get("dnshostname", ""),
-                    "lastLogonTimestamp": row.get("lastlogontimestamp", ""),
-                })
-            elif any(row.values()):
+            email = row.get("e-mail", "").lower()
+            if not email or "@" not in email or email in seen_users:
                 rejected += 1
+                continue
+            first_name = row.get("first name", "")
+            last_name = row.get("last name", "")
+            if not first_name and not last_name:
+                rejected += 1
+                continue
+            seen_users.add(email)
+            users.append({
+                "sAMAccountName": email.split("@", 1)[0],
+                "mail": email,
+                "displayName": " ".join(part for part in (first_name, last_name) if part),
+                "department": "",
+                "title": "",
+                "userAccountControl": "",
+            })
     except csv.Error as exc:
         raise HTTPException(400, f"The CSV is malformed near line {reader.line_num}") from exc
 
-    if not users and not computers:
-        raise HTTPException(400, "The CSV contains no user or computer records")
+    if not users:
+        raise HTTPException(400, "The CSV contains no valid users")
 
     from app.collectors.active_directory import ActiveDirectoryCollector
 
     collector = ActiveDirectoryCollector({"import_mode": "manual"}, db)
     user_count = await collector._upsert_users(users)
-    endpoint_count = await collector._upsert_computers(computers)
+    from app.engines.correlation import match_user_to_endpoint
+
+    linked_endpoints = await match_user_to_endpoint(db)
     config = (await db.execute(
         select(IntegrationConfig).where(IntegrationConfig.integration_type == "active_directory")
     )).scalar_one_or_none()
@@ -186,7 +176,7 @@ async def import_active_directory_csv(
     config.status = "connected"
     config.last_sync = datetime.now(timezone.utc)
     config.last_error = None
-    config.records_synced = str(user_count + endpoint_count)
+    config.records_synced = str(user_count)
     await db.flush()
     await audit_action(
         "import_active_directory",
@@ -198,15 +188,15 @@ async def import_active_directory_csv(
         {
             "filename": file.filename,
             "users": user_count,
-            "endpoints": endpoint_count,
+            "linked_endpoints": linked_endpoints,
             "rejected_rows": rejected,
         },
     )
     return {
         "success": True,
-        "message": f"Imported {user_count} users and {endpoint_count} computers.",
+        "message": f"Imported {user_count} users and linked {linked_endpoints} endpoints.",
         "users": user_count,
-        "endpoints": endpoint_count,
+        "linked_endpoints": linked_endpoints,
         "rejected_rows": rejected,
     }
 

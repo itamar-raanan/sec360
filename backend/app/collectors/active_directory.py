@@ -150,21 +150,32 @@ class ActiveDirectoryCollector:
         from sqlalchemy import func, select
         from app.models.user import User
 
-        count = 0
+        # Resolve all existing rows in bounded batches instead of issuing one
+        # SELECT per CSV row. This keeps large manual imports from appearing to
+        # hang and also makes live LDAP synchronization substantially faster.
+        prepared: dict[str, dict] = {}
         for raw in raw_list:
-            email = raw.get("mail", "")
-            sam = raw.get("sAMAccountName", "")
+            email = str(raw.get("mail", "")).strip()
+            sam = str(raw.get("sAMAccountName", "")).strip()
             if not email and not sam:
                 continue
-            # Use email if present, otherwise construct a placeholder
             if not email:
-                email = sam  # fallback — won't be a valid email but keeps the record
+                email = sam
+            prepared[email.lower()] = {**raw, "mail": email, "sAMAccountName": sam}
 
+        existing_by_email: dict[str, User] = {}
+        email_keys = list(prepared)
+        for offset in range(0, len(email_keys), 500):
             result = await self.db.execute(
-                select(User).where(func.lower(User.email) == email.lower())
+                select(User).where(func.lower(User.email).in_(email_keys[offset:offset + 500]))
             )
-            user = result.scalars().first()
+            for existing in result.scalars().all():
+                existing_by_email[existing.email.lower()] = existing
 
+        for email_key, raw in prepared.items():
+            email = raw["mail"]
+            sam = raw["sAMAccountName"]
+            user = existing_by_email.get(email_key)
             display_name = raw.get("displayName") or sam or email
             department = raw.get("department")
             job_title = raw.get("title")
@@ -194,10 +205,51 @@ class ActiveDirectoryCollector:
                 user.employment_status = "active"
                 user.suspended = False
 
-            count += 1
+        await self.db.flush()
+        return len(prepared)
+
+    async def link_users_to_endpoints(self, emails: list[str]) -> int:
+        """Link imported users by exact email-prefix ↔ endpoint-username match."""
+        from sqlalchemy import func, select
+        from app.engines.correlation import normalize_username
+        from app.models.endpoint import Endpoint
+        from app.models.user import User
+
+        email_keys = sorted({email.strip().lower() for email in emails if email.strip()})
+        imported_users: list[User] = []
+        for offset in range(0, len(email_keys), 500):
+            result = await self.db.execute(
+                select(User).where(func.lower(User.email).in_(email_keys[offset:offset + 500]))
+            )
+            imported_users.extend(result.scalars().all())
+
+        # A local part can exist in more than one email domain. Do not make an
+        # ambiguous ownership assignment in that case.
+        users_by_prefix: dict[str, User | None] = {}
+        for user in imported_users:
+            prefix = user.email.split("@", 1)[0].strip().lower()
+            if not prefix:
+                continue
+            users_by_prefix[prefix] = user if prefix not in users_by_prefix else None
+
+        if not users_by_prefix:
+            return 0
+
+        endpoints = (await self.db.execute(
+            select(Endpoint).where(
+                Endpoint.username.is_not(None),
+                Endpoint.lifecycle_state.notin_(("ignored", "decommissioned")),
+            )
+        )).scalars().all()
+        linked = 0
+        for endpoint in endpoints:
+            user = users_by_prefix.get(normalize_username(endpoint.username or ""))
+            if user is not None and endpoint.owner_user_id != user.id:
+                endpoint.owner_user_id = user.id
+                linked += 1
 
         await self.db.flush()
-        return count
+        return linked
 
     async def _upsert_computers(self, raw_list: list[dict]) -> int:
         from sqlalchemy import func, select

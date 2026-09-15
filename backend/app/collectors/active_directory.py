@@ -179,17 +179,19 @@ class ActiveDirectoryCollector:
             display_name = raw.get("displayName") or sam or email
             department = raw.get("department")
             job_title = raw.get("title")
+            is_enabled = raw.get("enabled") is not False
+            ad_source = {"sAMAccountName": sam, "enabled": is_enabled}
 
             if not user:
                 user = User(
                     full_name=display_name,
                     email=email,
                     department=department,
-                    employment_status="active",
+                    employment_status="active" if is_enabled else "inactive",
                     mfa_enabled=False,
                     suspended=False,
                     job_title=job_title or None,
-                    sources={"active_directory": {"sAMAccountName": sam}},
+                    sources={"active_directory": ad_source},
                 )
                 self.db.add(user)
             else:
@@ -200,9 +202,9 @@ class ActiveDirectoryCollector:
                 if job_title:
                     user.job_title = job_title
                 sources = dict(user.sources or {})
-                sources["active_directory"] = {"sAMAccountName": sam}
+                sources["active_directory"] = ad_source
                 user.sources = sources
-                user.employment_status = "active"
+                user.employment_status = "active" if is_enabled else "inactive"
                 user.suspended = False
 
         await self.db.flush()

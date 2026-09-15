@@ -695,13 +695,14 @@ function IntegrationCard({
   )
 }
 
-const AD_EXPORT_SCRIPT = `$properties = @('GivenName','Surname','mail')
-$users = Get-ADUser -Filter {Enabled -eq $true} -Properties $properties |
+const AD_EXPORT_SCRIPT = `$properties = @('GivenName','Surname','mail','Enabled')
+$users = Get-ADUser -Filter * -Properties $properties |
   Where-Object { $_.mail } | ForEach-Object {
     [pscustomobject]@{
       'First Name' = $_.GivenName
       'Last Name'  = $_.Surname
       'E-mail'     = $_.mail
+      'Enabled'    = $_.Enabled
     }
   }
 $users | Export-Csv -Path .\\sec360-ad-users.csv -NoTypeInformation -Encoding UTF8`
@@ -772,7 +773,7 @@ function AdManualImport({ onResult }: { onResult: (result: { success: boolean; m
           <FileText size={17} className="mt-0.5 shrink-0 text-sky-400" />
           <div>
             <p className="text-sm font-semibold text-zinc-200">Export from a domain-joined Windows machine</p>
-            <p className="mt-1 text-xs leading-5 text-zinc-500">Open PowerShell as a user allowed to read AD, install the ActiveDirectory module if needed, and run this script. It exports enabled users with exactly First Name, Last Name, and E-mail.</p>
+            <p className="mt-1 text-xs leading-5 text-zinc-500">Open PowerShell as a user allowed to read AD, install the ActiveDirectory module if needed, and run this script. It exports enabled and disabled accounts with their current status.</p>
           </div>
         </div>
         <div className="relative mt-3">
@@ -785,7 +786,7 @@ function AdManualImport({ onResult }: { onResult: (result: { success: boolean; m
 
       <div>
         <label className="mb-1.5 block text-xs font-medium text-zinc-400">Active Directory CSV</label>
-        <p className="mb-2 text-xs text-zinc-600">Required columns: First Name, Last Name, E-mail. SEC360 uses the text before @ as the endpoint username. UTF-8 CSV, up to 20 MB and 100,000 rows.</p>
+        <p className="mb-2 text-xs text-zinc-600">Required columns: First Name, Last Name, E-mail, Enabled. Enabled accepts True/False, Yes/No, Enabled/Disabled, or 1/0. SEC360 uses the text before @ as the endpoint username.</p>
         <input ref={inputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={event => selectFile(event.target.files?.[0] ?? null)} />
         <button type="button" onClick={() => inputRef.current?.click()} className="flex w-full items-center justify-between rounded-lg border border-dashed border-white/[0.12] bg-[var(--surface-2)] px-4 py-3 text-left transition-colors hover:border-sky-500/40">
           <span className="flex min-w-0 items-center gap-2.5"><Upload size={15} className="shrink-0 text-sky-400" /><span className="truncate text-xs text-zinc-300">{file?.name ?? 'Choose sec360-ad-users.csv'}</span></span>

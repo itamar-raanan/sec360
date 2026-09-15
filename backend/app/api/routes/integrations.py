@@ -114,7 +114,7 @@ async def import_active_directory_csv(
 
     reader = csv.DictReader(io.StringIO(decoded))
     normalized_headers = {str(header or "").strip().lower() for header in (reader.fieldnames or [])}
-    required_headers = {"first name", "last name", "e-mail"}
+    required_headers = {"first name", "last name", "e-mail", "enabled"}
     missing_headers = sorted(required_headers - normalized_headers)
     if missing_headers:
         raise HTTPException(400, f"Missing required columns: {', '.join(missing_headers)}")
@@ -139,6 +139,14 @@ async def import_active_directory_csv(
             if not first_name and not last_name:
                 rejected += 1
                 continue
+            enabled_value = row.get("enabled", "").lower()
+            if enabled_value in {"true", "yes", "enabled", "1"}:
+                enabled = True
+            elif enabled_value in {"false", "no", "disabled", "0"}:
+                enabled = False
+            else:
+                rejected += 1
+                continue
             seen_users.add(email)
             users.append({
                 "sAMAccountName": email.split("@", 1)[0],
@@ -147,6 +155,7 @@ async def import_active_directory_csv(
                 "department": "",
                 "title": "",
                 "userAccountControl": "",
+                "enabled": enabled,
             })
     except csv.Error as exc:
         raise HTTPException(400, f"The CSV is malformed near line {reader.line_num}") from exc
@@ -167,6 +176,8 @@ async def import_active_directory_csv(
     linked_endpoints = await collector.link_users_to_endpoints(
         [user["mail"] for user in users]
     )
+    enabled_count = sum(1 for user in users if user["enabled"])
+    disabled_count = user_count - enabled_count
     config = (await db.execute(
         select(IntegrationConfig).where(IntegrationConfig.integration_type == "active_directory")
     )).scalar_one_or_none()
@@ -194,6 +205,8 @@ async def import_active_directory_csv(
         {
             "filename": file.filename,
             "users": user_count,
+            "enabled_users": enabled_count,
+            "disabled_users": disabled_count,
             "linked_endpoints": linked_endpoints,
             "rejected_rows": rejected,
         },
@@ -206,8 +219,13 @@ async def import_active_directory_csv(
     )
     return {
         "success": True,
-        "message": f"Imported {user_count} users and linked {linked_endpoints} endpoints.",
+        "message": (
+            f"Imported {user_count} users ({enabled_count} enabled, "
+            f"{disabled_count} disabled) and linked {linked_endpoints} endpoints."
+        ),
         "users": user_count,
+        "enabled_users": enabled_count,
+        "disabled_users": disabled_count,
         "linked_endpoints": linked_endpoints,
         "rejected_rows": rejected,
     }

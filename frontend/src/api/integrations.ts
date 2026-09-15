@@ -47,7 +47,7 @@ export const importActiveDirectoryCsv = async (file: File): Promise<{
   success: boolean
   message: string
   users: number
-  endpoints: number
+  linked_endpoints: number
   rejected_rows: number
 }> => {
   const body = new FormData()

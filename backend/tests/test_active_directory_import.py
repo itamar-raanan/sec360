@@ -19,15 +19,17 @@ async def _admin_headers(client: AsyncClient) -> dict[str, str]:
     return {"Authorization": f"Bearer {login.json()['access_token']}"}
 
 
-async def test_admin_can_import_combined_ad_snapshot(
+async def test_admin_can_import_minimal_ad_users_and_link_endpoints(
     client: AsyncClient,
     db_session,
     admin_user,
 ):
     headers = await _admin_headers(client)
-    csv_data = """object_type,sAMAccountName,mail,displayName,department,title,userAccountControl,name,operatingSystem,operatingSystemVersion,dNSHostName,lastLogonTimestamp
-user,asmith,asmith@example.com,Alice Smith,Security,Analyst,512,,,,,
-computer,,,,,,,WS-014,Windows 11 Enterprise,10.0,WS-014.example.com,133700000000000000
+    endpoint = Endpoint(hostname="WS-014", username="asmith", source="sentinelone")
+    db_session.add(endpoint)
+    await db_session.commit()
+    csv_data = """First Name,Last Name,E-mail
+Alice,Smith,asmith@example.com
 """
     response = await client.post(
         "/api/integrations/active_directory/import",
@@ -36,31 +38,29 @@ computer,,,,,,,WS-014,Windows 11 Enterprise,10.0,WS-014.example.com,133700000000
     )
     assert response.status_code == 200
     assert response.json()["users"] == 1
-    assert response.json()["endpoints"] == 1
+    assert response.json()["linked_endpoints"] == 1
 
     user = (await db_session.execute(
         select(User).where(User.email == "asmith@example.com")
     )).scalar_one()
     assert user.full_name == "Alice Smith"
-    assert user.department == "Security"
-    assert user.job_title == "Analyst"
     assert user.sources == {"active_directory": {"sAMAccountName": "asmith"}}
 
-    endpoint = (await db_session.execute(
+    imported_endpoint = (await db_session.execute(
         select(Endpoint).where(Endpoint.hostname == "WS-014")
     )).scalar_one()
-    assert endpoint.source == "active_directory"
-    assert endpoint.os_version == "Windows 11 Enterprise 10.0"
+    assert imported_endpoint.source == "sentinelone"
+    assert imported_endpoint.owner_user_id == user.id
 
     config = (await db_session.execute(
         select(IntegrationConfig).where(IntegrationConfig.integration_type == "active_directory")
     )).scalar_one()
     assert config.status == "connected"
     assert config.credentials["import_mode"] == "manual"
-    assert config.records_synced == "2"
+    assert config.records_synced == "1"
 
 
-async def test_ad_import_rejects_missing_object_type(
+async def test_ad_import_rejects_missing_required_columns(
     client: AsyncClient,
     admin_user,
 ):
@@ -70,4 +70,4 @@ async def test_ad_import_rejects_missing_object_type(
         files={"file": ("bad.csv", "mail,name\na@example.com,Alice\n", "text/csv")},
     )
     assert response.status_code == 400
-    assert "object_type" in response.json()["detail"]
+    assert "first name" in response.json()["detail"]

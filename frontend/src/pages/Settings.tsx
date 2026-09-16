@@ -1144,6 +1144,10 @@ function SsoTab() {
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
   const [metaMsg, setMetaMsg] = useState<{ type: 'error' | 'success'; msg: string } | null>(null)
+  const [radiusTestUsername, setRadiusTestUsername] = useState('')
+  const [radiusTestPassword, setRadiusTestPassword] = useState('')
+  const [radiusTesting, setRadiusTesting] = useState(false)
+  const [radiusTestMsg, setRadiusTestMsg] = useState<{ type: 'error' | 'success'; msg: string } | null>(null)
   const metaInputRef = useRef<HTMLInputElement>(null)
 
   const handleMetadataUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1233,6 +1237,33 @@ function SsoTab() {
       setMsg({ type: 'error', msg: detail ?? 'Failed to save authentication settings' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const testRadius = async () => {
+    setRadiusTesting(true)
+    setRadiusTestMsg(null)
+    try {
+      const response = await apiClient.post('/settings/radius/test', {
+        radius_host: form.radius_host,
+        radius_port: form.radius_port,
+        radius_shared_secret: form.radius_shared_secret,
+        radius_nas_identifier: form.radius_nas_identifier,
+        radius_timeout_seconds: form.radius_timeout_seconds,
+        radius_username_format: form.radius_username_format,
+        username: radiusTestUsername,
+        password: radiusTestPassword,
+      })
+      setRadiusTestMsg({
+        type: response.data.success ? 'success' : 'error',
+        msg: response.data.message,
+      })
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setRadiusTestMsg({ type: 'error', msg: detail ?? 'RADIUS test failed' })
+    } finally {
+      setRadiusTesting(false)
+      setRadiusTestPassword('')
     }
   }
 
@@ -1431,7 +1462,7 @@ function SsoTab() {
       </div>
 
       <Section title="RADIUS Authentication" hint="Authenticate existing SEC360 accounts through a RADIUS server. The server must register this SEC360 host as a RADIUS client using the same shared secret.">
-        <Field label="Enable RADIUS login" hint="Adds a separate Sign in with RADIUS action to the login page">
+        <Field label="Enable RADIUS login" hint="RADIUS users authenticate through the regular Sign in form">
           <Toggle checked={form.radius_enabled} onChange={value => set('radius_enabled', value)} />
         </Field>
         <Field label="RADIUS server" hint="DNS name or IP address reachable from the backend container">
@@ -1460,6 +1491,38 @@ function SsoTab() {
         </Field>
         <Field label="Require SEC360 2FA after RADIUS" hint="Only enable after every RADIUS user has enrolled an authenticator in SEC360">
           <Toggle checked={form.radius_require_mfa} onChange={value => set('radius_require_mfa', value)} />
+        </Field>
+        <Field label="Test RADIUS authentication" hint="Uses these credentials once to verify the server, shared secret, username format, and Access-Accept response">
+          <div className="w-80 max-w-full space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                autoComplete="off"
+                value={radiusTestUsername}
+                onChange={event => setRadiusTestUsername(event.target.value)}
+                placeholder="user@company.com"
+                className="min-w-0 bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500"
+              />
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={radiusTestPassword}
+                onChange={event => setRadiusTestPassword(event.target.value)}
+                placeholder="RADIUS password"
+                className="min-w-0 bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={testRadius}
+              disabled={radiusTesting || !radiusTestUsername || !radiusTestPassword || !form.radius_host}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white pressable disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ background: 'var(--surface-3)', border: '1px solid var(--border-mid)' }}
+            >
+              <ShieldCheck size={14} /> {radiusTesting ? 'Testing…' : 'Test authentication'}
+            </button>
+            {radiusTestMsg && <Alert type={radiusTestMsg.type} msg={radiusTestMsg.msg} />}
+          </div>
         </Field>
       </Section>
 

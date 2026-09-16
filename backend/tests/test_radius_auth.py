@@ -155,6 +155,56 @@ async def test_user_provisioning_applies_auth_specific_invitation_rules(
     assert by_email["sso@test.local"]["is_active"] is True
 
 
+async def test_radius_authentication_check_uses_form_values_and_saved_secret(
+    client: AsyncClient,
+    admin_user,
+    monkeypatch,
+):
+    headers = await _admin_headers(client)
+    await client.put(
+        "/api/settings/saml",
+        headers=headers,
+        json={
+            "radius_enabled": True,
+            "radius_host": "saved-radius.internal",
+            "radius_shared_secret": "saved-secret",
+        },
+    )
+    received: dict = {}
+
+    def accept(**kwargs):
+        received.update(kwargs)
+        return True, "Access-Accept"
+
+    monkeypatch.setattr("app.services.radius_auth.authenticate_radius", accept)
+    response = await client.post(
+        "/api/settings/radius/test",
+        headers=headers,
+        json={
+            "radius_host": "new-radius.internal",
+            "radius_port": 18120,
+            "radius_shared_secret": "",
+            "radius_nas_identifier": "SEC360-TEST",
+            "radius_timeout_seconds": 3,
+            "radius_username_format": "local_part",
+            "username": "test.user@example.com",
+            "password": "one-time-test-password",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"success": True, "message": "RADIUS authentication succeeded"}
+    assert received == {
+        "host": "new-radius.internal",
+        "port": 18120,
+        "secret": "saved-secret",
+        "username": "test.user",
+        "password": "one-time-test-password",
+        "nas_identifier": "SEC360-TEST",
+        "timeout_seconds": 3.0,
+    }
+
+
 async def test_radius_packet_encrypts_password_and_validates_response():
     secret = b"test-shared-secret"
     request = _build_request(

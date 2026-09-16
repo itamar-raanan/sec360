@@ -2,6 +2,7 @@
 Settings routes — user management, 2FA, system config, audit log.
 All write operations require admin role.
 """
+import asyncio
 import io
 import base64
 import logging
@@ -132,6 +133,17 @@ class SamlSettingsIn(BaseModel):
     radius_timeout_seconds: int = Field(default=5, ge=1, le=30)
     radius_username_format: Literal["email", "local_part"] = "email"
     radius_require_mfa: bool = False
+
+
+class RadiusTestRequest(BaseModel):
+    radius_host: str
+    radius_port: int = Field(default=1812, ge=1, le=65535)
+    radius_shared_secret: str = ""
+    radius_nas_identifier: str = Field(default="SEC360", max_length=253)
+    radius_timeout_seconds: int = Field(default=5, ge=1, le=30)
+    radius_username_format: Literal["email", "local_part"] = "email"
+    username: str
+    password: str
 
 
 async def _read_upload(upload: UploadFile) -> bytes:
@@ -610,6 +622,55 @@ async def update_saml_settings(
         data.radius_enabled,
     )
     return {"message": "Authentication settings saved"}
+
+
+@router.post("/radius/test")
+async def test_radius_settings(
+    data: RadiusTestRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_role("admin")),
+):
+    """Test the complete RADIUS exchange using explicit administrator credentials."""
+    from app.services.radius_auth import RadiusError, authenticate_radius
+
+    cfg = (await db.execute(select(SystemSettings).where(SystemSettings.id == 1))).scalar_one_or_none()
+    saved_radius = cfg.radius_config if cfg and cfg.radius_config else {}
+    host = data.radius_host.strip()
+    secret = data.radius_shared_secret or saved_radius.get("shared_secret", "")
+    username = data.username.strip()
+    if not host or not secret:
+        return {"success": False, "message": "RADIUS server and shared secret are required"}
+    if not username or not data.password:
+        return {"success": False, "message": "Test username and password are required"}
+    if data.radius_username_format == "local_part":
+        username = username.split("@", 1)[0]
+
+    try:
+        accepted, reason = await asyncio.to_thread(
+            authenticate_radius,
+            host=host,
+            port=data.radius_port,
+            secret=secret,
+            username=username,
+            password=data.password,
+            nas_identifier=data.radius_nas_identifier.strip() or "SEC360",
+            timeout_seconds=float(data.radius_timeout_seconds),
+        )
+        message = (
+            "RADIUS authentication succeeded"
+            if accepted
+            else f"RADIUS rejected the test credentials ({reason})"
+        )
+    except RadiusError as exc:
+        accepted = False
+        message = str(exc)
+
+    await audit_action(
+        "test_radius", "system_settings", "1", request, db, current,
+        {"success": accepted, "host": host, "port": data.radius_port},
+    )
+    return {"success": accepted, "message": message}
 
 
 # ─── HTTPS certificate management (admin) ───────────────────────────────────

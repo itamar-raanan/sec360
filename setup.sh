@@ -105,34 +105,16 @@ if ! grep -q '^CREDENTIALS_ENCRYPTION_KEY=' .env \
   success "Credential-encryption key generated."
 fi
 
-# Use the same upstream DNS resolver as the host for private on-prem zones.
-# Preserve an explicit administrator override across setup reruns.
+# Docker's embedded resolver is the safest default for public cloud products.
+# A host resolver discovered from /etc/resolv.conf is not necessarily reachable
+# from the Docker bridge (VPN and systemd-resolved setups commonly expose this
+# problem). Preserve only an explicit administrator override for private zones.
 HOST_DNS=$(awk -F= '$1 == "HOST_DNS" && length($2) > 0 { print $2; exit }' .env)
 if [[ -n "$HOST_DNS" ]]; then
   success "Container DNS is configured to use ${HOST_DNS}."
 else
-  # systemd-resolved commonly exposes only a loopback stub in
-  # /etc/resolv.conf, so prefer its upstream resolver file when present.
-  for RESOLV_FILE in /run/systemd/resolve/resolv.conf /etc/resolv.conf; do
-    if [[ -f "$RESOLV_FILE" ]]; then
-      HOST_DNS=$(awk '
-        $1 == "nameserver" && $2 !~ /^127\./ && $2 != "::1" { print $2; exit }
-      ' "$RESOLV_FILE")
-      [[ -n "$HOST_DNS" ]] && break
-    fi
-  done
-fi
-
-if [[ -n "$HOST_DNS" ]] && ! grep -Eq '^HOST_DNS=.+$' .env; then
-  if grep -q '^HOST_DNS=' .env; then
-    sed -i "s|^HOST_DNS=.*|HOST_DNS=${HOST_DNS}|" .env
-  else
-    echo "HOST_DNS=${HOST_DNS}" >> .env
-  fi
-  success "Container DNS configured to use host resolver ${HOST_DNS}."
-elif [[ -z "$HOST_DNS" ]]; then
-  warn "Could not detect a non-loopback host DNS resolver."
-  warn "Set HOST_DNS=<corporate-dns-ip> in .env if private names do not resolve."
+  info "Container DNS will use Docker's default resolver."
+  info "Set HOST_DNS=<corporate-dns-ip> only when private on-prem names require it."
 fi
 
 echo ""

@@ -74,6 +74,7 @@ class AuthUserResponse(BaseModel):
     email: str
     role: str
     is_active: bool
+    auth_method: str
 
 
 class TokenResponse(BaseModel):

@@ -53,7 +53,7 @@ async def test_radius_settings_hide_secret_and_publish_availability(
     assert status.json() == {"enabled": True, "provider_label": "RADIUS"}
 
 
-async def test_radius_login_authenticates_only_existing_sec360_users(
+async def test_radius_user_is_active_without_invitation_and_uses_regular_login(
     client: AsyncClient,
     admin_user,
     monkeypatch,
@@ -69,6 +69,24 @@ async def test_radius_login_authenticates_only_existing_sec360_users(
             "radius_username_format": "local_part",
         },
     )
+    provision = await client.post(
+        "/api/settings/users/provision",
+        headers=headers,
+        json={
+            "email": "radius.user@test.local",
+            "role": "analyst",
+            "auth_method": "radius",
+        },
+    )
+    assert provision.status_code == 201
+    assert provision.json()["email_sent"] is False
+
+    users = (await client.get("/api/settings/users", headers=headers)).json()
+    radius_user = next(user for user in users if user["email"] == "radius.user@test.local")
+    assert radius_user["auth_method"] == "radius"
+    assert radius_user["is_active"] is True
+    assert radius_user["invitation_pending"] is False
+
     calls: list[str] = []
 
     def accept(**kwargs):
@@ -77,19 +95,114 @@ async def test_radius_login_authenticates_only_existing_sec360_users(
 
     monkeypatch.setattr("app.services.radius_auth.authenticate_radius", accept)
     response = await client.post(
-        "/api/auth/radius/login",
-        json={"email": "ADMIN@test.local", "password": "radius-password"},
+        "/api/auth/login",
+        json={"email": "RADIUS.USER@test.local", "password": "radius-password"},
     )
     assert response.status_code == 200
-    assert response.json()["user"]["email"] == "admin@test.local"
-    assert calls == ["ADMIN"]
+    assert response.json()["user"]["email"] == "radius.user@test.local"
+    assert response.json()["user"]["auth_method"] == "radius"
+    assert calls == ["RADIUS.USER"]
 
     unknown = await client.post(
         "/api/auth/radius/login",
         json={"email": "unknown@test.local", "password": "radius-password"},
     )
     assert unknown.status_code == 401
-    assert calls == ["ADMIN"]
+
+    local_user = await client.post(
+        "/api/auth/radius/login",
+        json={"email": "admin@test.local", "password": "radius-password"},
+    )
+    assert local_user.status_code == 401
+    assert calls == ["RADIUS.USER"]
+
+
+async def test_user_provisioning_applies_auth_specific_invitation_rules(
+    client: AsyncClient,
+    admin_user,
+    monkeypatch,
+):
+    headers = await _admin_headers(client)
+    sent_to: list[str] = []
+    monkeypatch.setattr(
+        "app.services.email.send_invitation_email",
+        lambda email, *_args: sent_to.append(email) or True,
+    )
+
+    local = await client.post(
+        "/api/settings/users/provision",
+        headers=headers,
+        json={"email": "local@test.local", "role": "viewer", "auth_method": "local"},
+    )
+    sso = await client.post(
+        "/api/settings/users/provision",
+        headers=headers,
+        json={"email": "sso@test.local", "role": "viewer", "auth_method": "sso"},
+    )
+
+    assert local.status_code == 201
+    assert local.json()["email_sent"] is True
+    assert sso.status_code == 201
+    assert sso.json()["email_sent"] is False
+    assert sent_to == ["local@test.local"]
+
+    users = (await client.get("/api/settings/users", headers=headers)).json()
+    by_email = {user["email"]: user for user in users}
+    assert by_email["local@test.local"]["invitation_pending"] is True
+    assert by_email["local@test.local"]["is_active"] is False
+    assert by_email["sso@test.local"]["auth_method"] == "sso"
+    assert by_email["sso@test.local"]["invitation_pending"] is False
+    assert by_email["sso@test.local"]["is_active"] is True
+
+
+async def test_radius_authentication_check_uses_form_values_and_saved_secret(
+    client: AsyncClient,
+    admin_user,
+    monkeypatch,
+):
+    headers = await _admin_headers(client)
+    await client.put(
+        "/api/settings/saml",
+        headers=headers,
+        json={
+            "radius_enabled": True,
+            "radius_host": "saved-radius.internal",
+            "radius_shared_secret": "saved-secret",
+        },
+    )
+    received: dict = {}
+
+    def accept(**kwargs):
+        received.update(kwargs)
+        return True, "Access-Accept"
+
+    monkeypatch.setattr("app.services.radius_auth.authenticate_radius", accept)
+    response = await client.post(
+        "/api/settings/radius/test",
+        headers=headers,
+        json={
+            "radius_host": "new-radius.internal",
+            "radius_port": 18120,
+            "radius_shared_secret": "",
+            "radius_nas_identifier": "SEC360-TEST",
+            "radius_timeout_seconds": 3,
+            "radius_username_format": "local_part",
+            "username": "test.user@example.com",
+            "password": "one-time-test-password",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"success": True, "message": "RADIUS authentication succeeded"}
+    assert received == {
+        "host": "new-radius.internal",
+        "port": 18120,
+        "secret": "saved-secret",
+        "username": "test.user",
+        "password": "one-time-test-password",
+        "nas_identifier": "SEC360-TEST",
+        "timeout_seconds": 3.0,
+    }
 
 
 async def test_radius_packet_encrypts_password_and_validates_response():

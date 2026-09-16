@@ -48,6 +48,7 @@ async def init_db():
             "ALTER TABLE auth_users         ADD COLUMN IF NOT EXISTS invitation_token  VARCHAR(64)",
             "ALTER TABLE auth_users         ADD COLUMN IF NOT EXISTS invitation_expires_at TIMESTAMPTZ",
             "ALTER TABLE auth_users         ADD COLUMN IF NOT EXISTS invited_by        VARCHAR(255)",
+            "ALTER TABLE auth_users         ADD COLUMN IF NOT EXISTS auth_method      VARCHAR(20) NOT NULL DEFAULT 'local'",
             "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS source           VARCHAR(50)  DEFAULT 'jumpcloud'",
             "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS serial_number    VARCHAR(100)",
             # Endpoint lifecycle / data-quality review
@@ -92,6 +93,7 @@ async def init_db():
             # SAML SSO — auth_users tracking
             "ALTER TABLE auth_users ADD COLUMN IF NOT EXISTS saml_subject VARCHAR(255)",
             "CREATE INDEX IF NOT EXISTS ix_auth_users_saml_subject ON auth_users (saml_subject)",
+            "UPDATE auth_users SET auth_method = 'sso' WHERE saml_subject IS NOT NULL AND saml_subject <> ''",
             # SAML SSO — system-wide configuration (stored in system_settings)
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS saml_provider      VARCHAR(30)   DEFAULT 'google'",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS saml_enabled       BOOLEAN       DEFAULT FALSE",

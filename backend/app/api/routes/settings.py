@@ -2,6 +2,7 @@
 Settings routes — user management, 2FA, system config, audit log.
 All write operations require admin role.
 """
+import asyncio
 import io
 import base64
 import logging
@@ -36,8 +37,10 @@ class AuthUserOut(BaseModel):
     id: str
     email: str
     role: str
+    auth_method: str
     is_active: bool
     mfa_enabled: bool
+    invitation_pending: bool
     created_at: datetime
 
     @classmethod
@@ -46,8 +49,10 @@ class AuthUserOut(BaseModel):
             id=str(u.id),
             email=u.email,
             role=u.role,
+            auth_method=u.auth_method,
             is_active=u.is_active,
             mfa_enabled=u.mfa_enabled,
+            invitation_pending=bool(u.invitation_token),
             created_at=u.created_at,
         )
 
@@ -61,6 +66,12 @@ class CreateUserRequest(BaseModel):
 class InviteUserRequest(BaseModel):
     email: str
     role: str = "analyst"
+
+
+class ProvisionUserRequest(BaseModel):
+    email: str
+    role: str = "analyst"
+    auth_method: Literal["local", "sso", "radius"] = "local"
 
 
 class UpdateUserRequest(BaseModel):
@@ -124,6 +135,17 @@ class SamlSettingsIn(BaseModel):
     radius_require_mfa: bool = False
 
 
+class RadiusTestRequest(BaseModel):
+    radius_host: str
+    radius_port: int = Field(default=1812, ge=1, le=65535)
+    radius_shared_secret: str = ""
+    radius_nas_identifier: str = Field(default="SEC360", max_length=253)
+    radius_timeout_seconds: int = Field(default=5, ge=1, le=30)
+    radius_username_format: Literal["email", "local_part"] = "email"
+    username: str
+    password: str
+
+
 async def _read_upload(upload: UploadFile) -> bytes:
     from app.services.tls_certificate import MAX_CERTIFICATE_BYTES
 
@@ -164,9 +186,10 @@ async def create_auth_user(
         raise HTTPException(409, "Email already in use")
 
     user = AuthUser(
-        email=data.email,
+        email=data.email.strip().lower(),
         hashed_password=hash_password(data.password),
         role=data.role,
+        auth_method="local",
         is_active=True,
         mfa_enabled=False,
     )
@@ -177,29 +200,29 @@ async def create_auth_user(
     return AuthUserOut.from_orm(user)
 
 
-@router.post("/users/invite", status_code=201)
-async def invite_user(
-    data: InviteUserRequest,
+async def _invite_local_user(
+    email: str,
+    role: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),
-    current: AuthUser = Depends(require_role("admin")),
+    db: AsyncSession,
+    current: AuthUser,
 ):
-    """Create a pending user account and send an invitation email."""
     from app.services.email import send_invitation_email
 
-    if data.role not in ("admin", "analyst", "viewer"):
-        raise HTTPException(400, "role must be admin, analyst, or viewer")
-
-    existing = (await db.execute(select(AuthUser).where(AuthUser.email == data.email))).scalar_one_or_none()
+    normalized_email = email.strip().lower()
+    existing = (await db.execute(
+        select(AuthUser).where(func.lower(AuthUser.email) == normalized_email)
+    )).scalar_one_or_none()
     if existing:
         raise HTTPException(409, "Email already in use")
 
     token = secrets.token_urlsafe(32)
     user = AuthUser(
-        email=data.email,
-        hashed_password="",          # set during acceptance
-        role=data.role,
-        is_active=False,             # activated when invite is accepted
+        email=normalized_email,
+        hashed_password="",
+        role=role,
+        auth_method="local",
+        is_active=False,
         mfa_enabled=False,
         invitation_token=token,
         invitation_expires_at=datetime.now(timezone.utc) + timedelta(days=7),
@@ -208,11 +231,77 @@ async def invite_user(
     db.add(user)
     await db.flush()
 
-    sent = send_invitation_email(data.email, data.role, token, current.email)
-    await audit_action("invite_user", "auth_user", str(user.id), request, db, current,
-                       {"email": data.email, "role": data.role, "email_sent": sent})
-    logger.info("Invited user %s (%s) by %s — email_sent=%s", data.email, data.role, current.email, sent)
-    return {"message": "Invitation sent", "email": data.email, "email_sent": sent}
+    sent = send_invitation_email(normalized_email, role, token, current.email)
+    await audit_action(
+        "invite_user", "auth_user", str(user.id), request, db, current,
+        {"email": normalized_email, "role": role, "auth_method": "local", "email_sent": sent},
+    )
+    logger.info("Invited local user %s (%s) by %s — email_sent=%s", normalized_email, role, current.email, sent)
+    return {
+        "message": "Invitation sent",
+        "email": normalized_email,
+        "email_sent": sent,
+        "auth_method": "local",
+    }
+
+
+@router.post("/users/provision", status_code=201)
+async def provision_auth_user(
+    data: ProvisionUserRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_role("admin")),
+):
+    """Provision a Local, SSO, or RADIUS account using the appropriate lifecycle."""
+    if data.role not in ("admin", "analyst", "viewer"):
+        raise HTTPException(400, "role must be admin, analyst, or viewer")
+    if data.auth_method == "local":
+        return await _invite_local_user(data.email, data.role, request, db, current)
+
+    normalized_email = data.email.strip().lower()
+    existing = (await db.execute(
+        select(AuthUser).where(func.lower(AuthUser.email) == normalized_email)
+    )).scalar_one_or_none()
+    if existing:
+        raise HTTPException(409, "Email already in use")
+
+    user = AuthUser(
+        email=normalized_email,
+        hashed_password="",
+        role=data.role,
+        auth_method=data.auth_method,
+        is_active=True,
+        mfa_enabled=False,
+    )
+    db.add(user)
+    await db.flush()
+    await audit_action(
+        "provision_user", "auth_user", str(user.id), request, db, current,
+        {"email": normalized_email, "role": data.role, "auth_method": data.auth_method},
+    )
+    logger.info(
+        "Admin %s provisioned %s user %s (%s)",
+        current.email, data.auth_method, normalized_email, data.role,
+    )
+    return {
+        "message": f"{data.auth_method.upper()} user created",
+        "email": normalized_email,
+        "email_sent": False,
+        "auth_method": data.auth_method,
+    }
+
+
+@router.post("/users/invite", status_code=201)
+async def invite_user(
+    data: InviteUserRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_role("admin")),
+):
+    """Create a pending Local account and send an invitation email."""
+    if data.role not in ("admin", "analyst", "viewer"):
+        raise HTTPException(400, "role must be admin, analyst, or viewer")
+    return await _invite_local_user(data.email, data.role, request, db, current)
 
 
 @router.patch("/users/{user_id}")
@@ -283,6 +372,8 @@ async def change_password(
     db: AsyncSession = Depends(get_db),
     current: AuthUser = Depends(get_current_user),
 ):
+    if current.auth_method != "local":
+        raise HTTPException(400, f"Password changes are managed by {current.auth_method.upper()}")
     if not verify_password(data.current_password, current.hashed_password):
         raise HTTPException(400, "Current password is incorrect")
     if len(data.new_password) < 8:
@@ -531,6 +622,55 @@ async def update_saml_settings(
         data.radius_enabled,
     )
     return {"message": "Authentication settings saved"}
+
+
+@router.post("/radius/test")
+async def test_radius_settings(
+    data: RadiusTestRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_role("admin")),
+):
+    """Test the complete RADIUS exchange using explicit administrator credentials."""
+    from app.services.radius_auth import RadiusError, authenticate_radius
+
+    cfg = (await db.execute(select(SystemSettings).where(SystemSettings.id == 1))).scalar_one_or_none()
+    saved_radius = cfg.radius_config if cfg and cfg.radius_config else {}
+    host = data.radius_host.strip()
+    secret = data.radius_shared_secret or saved_radius.get("shared_secret", "")
+    username = data.username.strip()
+    if not host or not secret:
+        return {"success": False, "message": "RADIUS server and shared secret are required"}
+    if not username or not data.password:
+        return {"success": False, "message": "Test username and password are required"}
+    if data.radius_username_format == "local_part":
+        username = username.split("@", 1)[0]
+
+    try:
+        accepted, reason = await asyncio.to_thread(
+            authenticate_radius,
+            host=host,
+            port=data.radius_port,
+            secret=secret,
+            username=username,
+            password=data.password,
+            nas_identifier=data.radius_nas_identifier.strip() or "SEC360",
+            timeout_seconds=float(data.radius_timeout_seconds),
+        )
+        message = (
+            "RADIUS authentication succeeded"
+            if accepted
+            else f"RADIUS rejected the test credentials ({reason})"
+        )
+    except RadiusError as exc:
+        accepted = False
+        message = str(exc)
+
+    await audit_action(
+        "test_radius", "system_settings", "1", request, db, current,
+        {"success": accepted, "host": host, "port": data.radius_port},
+    )
+    return {"success": accepted, "message": message}
 
 
 # ─── HTTPS certificate management (admin) ───────────────────────────────────

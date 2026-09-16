@@ -38,8 +38,10 @@ interface AuthUserDetail {
   id: string
   email: string
   role: 'admin' | 'analyst' | 'viewer'
+  auth_method: 'local' | 'sso' | 'radius'
   is_active: boolean
   mfa_enabled: boolean
+  invitation_pending: boolean
   created_at: string
 }
 
@@ -126,6 +128,7 @@ function UsersTab() {
   const [showCreate, setShowCreate] = useState(false)
   const [createEmail, setCreateEmail] = useState('')
   const [createRole, setCreateRole] = useState<'admin' | 'analyst' | 'viewer'>('analyst')
+  const [createAuthMethod, setCreateAuthMethod] = useState<'local' | 'sso' | 'radius'>('local')
   const [createErr, setCreateErr] = useState('')
   const [inviteSuccess, setInviteSuccess] = useState('')
   const [feedback, setFeedback] = useState<{ id: string; msg: string; type: 'success' | 'error' } | null>(null)
@@ -136,24 +139,28 @@ function UsersTab() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (body: { email: string; role: string }) =>
-      apiClient.post('/settings/users/invite', body),
+    mutationFn: (body: { email: string; role: string; auth_method: 'local' | 'sso' | 'radius' }) =>
+      apiClient.post('/settings/users/provision', body),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['settings-users'] })
       setShowCreate(false)
       setCreateEmail('')
       setCreateRole('analyst')
+      setCreateAuthMethod('local')
       setCreateErr('')
+      const authMethod = res.data?.auth_method
       const emailSent = res.data?.email_sent
       setInviteSuccess(
-        emailSent
+        authMethod === 'local' && emailSent
           ? `Invitation sent to ${res.data.email}`
-          : `User created. No SMTP configured — share the invite link manually.`
+          : authMethod === 'local'
+            ? `Local user created. No SMTP configured — share the invite link manually.`
+            : `${authMethod === 'sso' ? 'SSO' : 'RADIUS'} user ${res.data.email} is ready to sign in.`
       )
       setTimeout(() => setInviteSuccess(''), 6000)
     },
     onError: (e: { response?: { data?: { detail?: string } } }) => {
-      setCreateErr(e?.response?.data?.detail ?? 'Failed to invite user')
+      setCreateErr(e?.response?.data?.detail ?? 'Failed to create user')
     },
   })
 
@@ -196,19 +203,25 @@ function UsersTab() {
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-3.5 py-2 rounded-lg pressable"
         >
-          <Plus size={15} /> Invite user
+          <Plus size={15} /> Create user
         </button>
       </div>
 
       {inviteSuccess && <Alert type="success" msg={inviteSuccess} />}
 
-      {/* Invite user panel */}
+      {/* Create user panel */}
       {showCreate && (
         <div className="rounded-xl p-5 space-y-3" style={{ background: 'var(--surface-inset-strong)', border: '1px solid var(--border-lit)' }}>
           <div className="flex items-center justify-between mb-1">
             <div>
-              <span className="text-sm font-medium text-white">Invite new user</span>
-              <p className="text-xs text-zinc-500 mt-0.5">They'll receive an email to set their password and configure 2FA.</p>
+              <span className="text-sm font-medium text-white">Create new user</span>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                {createAuthMethod === 'local'
+                  ? "Local users receive an invitation to set their password."
+                  : createAuthMethod === 'sso'
+                    ? 'SSO users are activated immediately and authenticate through your identity provider.'
+                    : 'RADIUS users are activated immediately and use the regular Sign in form—no invitation required.'}
+              </p>
             </div>
             <button onClick={() => { setShowCreate(false); setCreateErr('') }}
               style={{ color: 'var(--text-3)', transition: 'color 150ms ease' }}
@@ -218,7 +231,7 @@ function UsersTab() {
             </button>
           </div>
           {createErr && <Alert type="error" msg={createErr} />}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-xs text-zinc-400 mb-1">Email address</label>
               <input
@@ -241,14 +254,28 @@ function UsersTab() {
                 <option value="viewer">Viewer</option>
               </select>
             </div>
+            <div>
+              <label className="block text-xs text-zinc-400 mb-1">Authentication</label>
+              <select
+                value={createAuthMethod}
+                onChange={e => setCreateAuthMethod(e.target.value as typeof createAuthMethod)}
+                className="w-full bg-zinc-950 border border-white/[0.08] text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+              >
+                <option value="local">Local</option>
+                <option value="sso">SSO</option>
+                <option value="radius">RADIUS</option>
+              </select>
+            </div>
           </div>
           <div className="flex gap-2 pt-1">
             <button
-              onClick={() => createMutation.mutate({ email: createEmail, role: createRole })}
+              onClick={() => createMutation.mutate({ email: createEmail, role: createRole, auth_method: createAuthMethod })}
               disabled={createMutation.isPending || !createEmail}
               className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-900 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 rounded-lg pressable"
             >
-              {createMutation.isPending ? 'Sending...' : 'Send invitation'}
+              {createMutation.isPending
+                ? 'Creating...'
+                : createAuthMethod === 'local' ? 'Send invitation' : 'Create user'}
             </button>
             <button onClick={() => { setShowCreate(false); setCreateErr('') }} className="text-sm px-3 py-2"
               style={{ color: 'var(--text-2)', transition: 'color 150ms ease' }}
@@ -281,6 +308,7 @@ function UsersTab() {
               <tr className="text-xs text-zinc-500 uppercase tracking-wider" style={{ borderBottom: '1px solid var(--border)' }}>
                 <th className="text-left px-4 py-3">User</th>
                 <th className="text-left px-4 py-3">Role</th>
+                <th className="text-left px-4 py-3">Authentication</th>
                 <th className="text-left px-4 py-3">2FA</th>
                 <th className="text-left px-4 py-3">Status</th>
                 <th className="text-left px-4 py-3">Created</th>
@@ -312,6 +340,12 @@ function UsersTab() {
                     </select>
                   </td>
                   <td className="px-4 py-3">
+                    <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs uppercase tracking-wide"
+                      style={{ color: 'var(--text-2)', borderColor: 'var(--border-mid)', background: 'var(--surface-2)' }}>
+                      {u.auth_method}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
                     {u.mfa_enabled ? (
                       <span className="inline-flex items-center gap-1 text-xs text-emerald-300">
                         <ShieldCheck size={13} /> On
@@ -323,7 +357,7 @@ function UsersTab() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    {!u.is_active && !u.mfa_enabled ? (
+                    {u.invitation_pending ? (
                       <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border bg-yellow-500/10 text-yellow-400 border-yellow-500/20">
                         Pending invite
                       </span>
@@ -519,7 +553,7 @@ function AccountTab() {
       </div>
 
       {/* Change password */}
-      <div className="rounded-xl p-5" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
+      {user?.auth_method === 'local' && <div className="rounded-xl p-5" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
         <h3 className="text-sm font-semibold text-white mb-4">Change password</h3>
         {pwMsg && <div className="mb-3"><Alert type={pwMsg.type} msg={pwMsg.msg} /></div>}
         <form onSubmit={changePw} className="space-y-3">
@@ -570,7 +604,7 @@ function AccountTab() {
             <Save size={14} /> Update password
           </button>
         </form>
-      </div>
+      </div>}
 
       {/* Two-factor authentication */}
       <div className="rounded-xl p-5" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
@@ -1110,6 +1144,10 @@ function SsoTab() {
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
   const [metaMsg, setMetaMsg] = useState<{ type: 'error' | 'success'; msg: string } | null>(null)
+  const [radiusTestUsername, setRadiusTestUsername] = useState('')
+  const [radiusTestPassword, setRadiusTestPassword] = useState('')
+  const [radiusTesting, setRadiusTesting] = useState(false)
+  const [radiusTestMsg, setRadiusTestMsg] = useState<{ type: 'error' | 'success'; msg: string } | null>(null)
   const metaInputRef = useRef<HTMLInputElement>(null)
 
   const handleMetadataUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1199,6 +1237,33 @@ function SsoTab() {
       setMsg({ type: 'error', msg: detail ?? 'Failed to save authentication settings' })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const testRadius = async () => {
+    setRadiusTesting(true)
+    setRadiusTestMsg(null)
+    try {
+      const response = await apiClient.post('/settings/radius/test', {
+        radius_host: form.radius_host,
+        radius_port: form.radius_port,
+        radius_shared_secret: form.radius_shared_secret,
+        radius_nas_identifier: form.radius_nas_identifier,
+        radius_timeout_seconds: form.radius_timeout_seconds,
+        radius_username_format: form.radius_username_format,
+        username: radiusTestUsername,
+        password: radiusTestPassword,
+      })
+      setRadiusTestMsg({
+        type: response.data.success ? 'success' : 'error',
+        msg: response.data.message,
+      })
+    } catch (e: unknown) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setRadiusTestMsg({ type: 'error', msg: detail ?? 'RADIUS test failed' })
+    } finally {
+      setRadiusTesting(false)
+      setRadiusTestPassword('')
     }
   }
 
@@ -1397,7 +1462,7 @@ function SsoTab() {
       </div>
 
       <Section title="RADIUS Authentication" hint="Authenticate existing SEC360 accounts through a RADIUS server. The server must register this SEC360 host as a RADIUS client using the same shared secret.">
-        <Field label="Enable RADIUS login" hint="Adds a separate Sign in with RADIUS action to the login page">
+        <Field label="Enable RADIUS login" hint="RADIUS users authenticate through the regular Sign in form">
           <Toggle checked={form.radius_enabled} onChange={value => set('radius_enabled', value)} />
         </Field>
         <Field label="RADIUS server" hint="DNS name or IP address reachable from the backend container">
@@ -1426,6 +1491,38 @@ function SsoTab() {
         </Field>
         <Field label="Require SEC360 2FA after RADIUS" hint="Only enable after every RADIUS user has enrolled an authenticator in SEC360">
           <Toggle checked={form.radius_require_mfa} onChange={value => set('radius_require_mfa', value)} />
+        </Field>
+        <Field label="Test RADIUS authentication" hint="Uses these credentials once to verify the server, shared secret, username format, and Access-Accept response">
+          <div className="w-80 max-w-full space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                autoComplete="off"
+                value={radiusTestUsername}
+                onChange={event => setRadiusTestUsername(event.target.value)}
+                placeholder="user@company.com"
+                className="min-w-0 bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500"
+              />
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={radiusTestPassword}
+                onChange={event => setRadiusTestPassword(event.target.value)}
+                placeholder="RADIUS password"
+                className="min-w-0 bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={testRadius}
+              disabled={radiusTesting || !radiusTestUsername || !radiusTestPassword || !form.radius_host}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-white pressable disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ background: 'var(--surface-3)', border: '1px solid var(--border-mid)' }}
+            >
+              <ShieldCheck size={14} /> {radiusTesting ? 'Testing…' : 'Test authentication'}
+            </button>
+            {radiusTestMsg && <Alert type={radiusTestMsg.type} msg={radiusTestMsg.msg} />}
+          </div>
         </Field>
       </Section>
 

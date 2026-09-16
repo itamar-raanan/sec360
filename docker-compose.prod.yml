@@ -64,10 +64,9 @@ services:
       - .env
     environment:
       DB_URL: postgresql+asyncpg://${POSTGRES_USER:-sec360}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sec360}
-    # Leave HOST_DNS empty for Docker's normal embedded resolver. Override it
-    # only when private on-prem integration hostnames require corporate DNS.
-    dns:
-      - ${HOST_DNS:-127.0.0.11}
+    # An empty HOST_DNS leaves Docker's automatically managed resolver intact.
+    # Set an explicit resolver only for private on-premises DNS zones.
+    dns: ${HOST_DNS:-}
     depends_on:
       postgres:
         condition: service_healthy

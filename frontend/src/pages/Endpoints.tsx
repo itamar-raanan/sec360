@@ -284,9 +284,9 @@ export default function Endpoints() {
     queryFn: async () => (await apiClient.get('/endpoints?limit=2000&active_only=false')).data,
   })
   const { tags: enabledProductTags, enabled: productEnabled } = useEndpointProductTags()
-  const { connected } = useConnectedIntegrations()
+  const { connected, configured } = useConnectedIntegrations()
   const endpointProducts = useMemo<EndpointProductOption[]>(() => [
-    ...(connected.has('sentinelone')
+    ...(configured.has('sentinelone')
       ? [
           { key: 'sentinelone', label: 'SentinelOne' },
           ...(enabledProductTags.includes('WSS')
@@ -294,13 +294,13 @@ export default function Endpoints() {
             : []),
         ]
       : []),
-    ...(connected.has('symantec_dlp')
+    ...(configured.has('symantec_dlp')
       ? [{ key: 'symantec_dlp', label: 'Symantec DLP' }]
       : []),
-    ...(connected.has('puppet')
+    ...(configured.has('puppet')
       ? [{ key: 'puppet', label: 'Puppet' }]
       : []),
-  ], [connected, enabledProductTags])
+  ], [configured, enabledProductTags])
 
   // Compute facet counts from raw (unfiltered) data
   const facetCounts = useMemo(() => {
@@ -402,8 +402,8 @@ export default function Endpoints() {
     if (filters.agentStatus.length) {
       const activeStatusFilters = filters.agentStatus.filter(value => (
         value === 'disabled_agent'
-        || (value.startsWith('s1_') && connected.has('sentinelone'))
-        || (value.startsWith('dlp_') && connected.has('symantec_dlp'))
+        || (value.startsWith('s1_') && configured.has('sentinelone'))
+        || (value.startsWith('dlp_') && configured.has('symantec_dlp'))
       ))
       if (activeStatusFilters.length > 0) {
         list = list.filter(ep => {
@@ -444,7 +444,7 @@ export default function Endpoints() {
       return ta - tb
     })
     return sortDir === 'asc' ? list : list.reverse()
-  }, [raw, filters, sortField, sortDir, enabledProductTags, connected, endpointProducts])
+  }, [raw, filters, sortField, sortDir, enabledProductTags, connected, configured, endpointProducts])
 
   const selectedEndpoints = endpoints.filter(ep => selectedIds.has(ep.id))
 
@@ -504,14 +504,14 @@ export default function Endpoints() {
       onToggle: v => toggleFilter('agentStatus', v),
       onClear: () => setFilters(f => ({ ...f, agentStatus: [] })),
       options: [
-        ...((connected.has('sentinelone') || connected.has('symantec_dlp')) ? [
+        ...((configured.has('sentinelone') || configured.has('symantec_dlp')) ? [
           { value: 'disabled_agent', label: 'Any Agent Disabled', count: facetCounts.agent.disabled_agent ?? 0 },
         ] : []),
-        ...(connected.has('sentinelone') ? [
+        ...(configured.has('sentinelone') ? [
           { value: 's1_active', label: 'S1 Active', count: facetCounts.agentStatus.s1_active ?? 0 },
           { value: 's1_inactive', label: 'S1 Inactive', count: facetCounts.agentStatus.s1_inactive ?? 0 },
         ] : []),
-        ...(connected.has('symantec_dlp') ? [
+        ...(configured.has('symantec_dlp') ? [
           { value: 'dlp_active', label: 'DLP Active', count: facetCounts.agentStatus.dlp_active ?? 0 },
           { value: 'dlp_inactive', label: 'DLP Inactive', count: facetCounts.agentStatus.dlp_inactive ?? 0 },
         ] : []),

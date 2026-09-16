@@ -217,6 +217,27 @@ Only two ports need to be externally reachable:
 
 PostgreSQL (5432) and the backend API (8000) are on an internal Docker network — **do not expose them**.
 
+## Integration DNS troubleshooting
+
+If a cloud integration reports `Temporary failure in name resolution`, first
+verify that its URL contains the real tenant hostname rather than an example
+value. Then test resolution from the backend container:
+
+```bash
+docker compose -f docker-compose.prod.yml exec backend \
+  getent hosts your-tenant.sentinelone.net
+```
+
+For public cloud integrations, leave `HOST_DNS=` empty in `.env` and recreate
+the backend so Docker uses its normal resolver:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --force-recreate backend
+```
+
+Set `HOST_DNS` only for private on-premises hostnames that require a corporate
+resolver reachable from the Docker network.
+
 ---
 
 ## Roles

@@ -2,6 +2,7 @@ import logging
 from typing import Any
 from datetime import datetime, timezone
 import uuid
+from urllib.parse import urlsplit
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +26,7 @@ class SentinelOneCollector(BaseCollector):
         super().__init__(verify_ssl=self.verify_ssl)
         if credentials:
             self.api_token = credentials.get("api_key", "")
-            console_url = credentials.get("console_url", "")
+            console_url = str(credentials.get("console_url", "")).strip()
             # Normalize: strip trailing slash and /web/api/... if present
             if console_url:
                 console_url = console_url.rstrip("/")
@@ -40,9 +41,35 @@ class SentinelOneCollector(BaseCollector):
     def _headers(self) -> dict:
         return {"Authorization": f"ApiToken {self.api_token}"}
 
+    def _console_hostname(self) -> str | None:
+        return urlsplit(self.base_url).hostname
+
+    def _connection_error_message(self, error: httpx.ConnectError) -> str:
+        hostname = self._console_hostname() or self.base_url
+        detail = str(error)
+        if "name resolution" in detail.lower() or "nodename nor servname" in detail.lower():
+            return (
+                f"DNS could not resolve SentinelOne host '{hostname}' from the SEC360 backend. "
+                "Verify that Console URL is the exact URL used to open your SentinelOne "
+                "management console. If the hostname is correct, set HOST_DNS in .env to a "
+                "DNS resolver reachable from Docker, then recreate the backend container."
+            )
+        return f"Could not connect to SentinelOne host '{hostname}': {detail}"
+
     async def test_connection(self) -> dict:
         if not self.api_token:
             return {"success": False, "message": "No API token configured"}
+        hostname = self._console_hostname()
+        if not hostname:
+            return {
+                "success": False,
+                "message": "Console URL must be a complete URL such as https://tenant.sentinelone.net",
+            }
+        if "your-tenant" in hostname or "<" in hostname or ">" in hostname:
+            return {
+                "success": False,
+                "message": "Replace the example Console URL with your actual SentinelOne management-console URL",
+            }
         try:
             async with httpx.AsyncClient(timeout=15.0, verify=self.verify_ssl) as client:
                 resp = await client.get(
@@ -86,7 +113,7 @@ class SentinelOneCollector(BaseCollector):
                     "message": f"Connected successfully. {total} agents found; application vulnerabilities are accessible.",
                 }
         except httpx.ConnectError as e:
-            return {"success": False, "message": f"Connection error: {str(e)}"}
+            return {"success": False, "message": self._connection_error_message(e)}
         except httpx.TimeoutException:
             return {"success": False, "message": "Connection timed out"}
         except Exception as e:

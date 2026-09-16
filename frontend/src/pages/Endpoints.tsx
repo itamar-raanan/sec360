@@ -25,11 +25,9 @@ interface AuthUserDetail {
   is_active: boolean
 }
 
-interface ComplianceAgentOption { key: string; label: string }
+interface EndpointProductOption { key: string; label: string }
 
-function endpointHasComplianceAgent(ep: Endpoint, key: string) {
-  const evaluated = ep.compliance_status?.agent_presence?.[key]
-  if (evaluated !== undefined) return evaluated
+function endpointHasProduct(ep: Endpoint, key: string) {
   if (key === 'puppet') return ep.puppet_managed
   const products: Record<string, string> = {
     sentinelone: 'sentinelone', symantec_dlp: 'symantec', symantec_wss: 'symantec_wss',
@@ -287,14 +285,22 @@ export default function Endpoints() {
   })
   const { tags: enabledProductTags, enabled: productEnabled } = useEndpointProductTags()
   const { connected } = useConnectedIntegrations()
-  const { data: complianceAgentConfig } = useQuery<{ agent_coverage: ComplianceAgentOption[] }>({
-    queryKey: ['compliance-dashboard'],
-    queryFn: () => apiClient.get('/compliance/dashboard').then(r => r.data),
-  })
-  const complianceAgents = useMemo(
-    () => complianceAgentConfig?.agent_coverage ?? [],
-    [complianceAgentConfig?.agent_coverage],
-  )
+  const endpointProducts = useMemo<EndpointProductOption[]>(() => [
+    ...(connected.has('sentinelone')
+      ? [
+          { key: 'sentinelone', label: 'SentinelOne' },
+          ...(enabledProductTags.includes('WSS')
+            ? [{ key: 'symantec_wss', label: 'Symantec WSS' }]
+            : []),
+        ]
+      : []),
+    ...(connected.has('symantec_dlp')
+      ? [{ key: 'symantec_dlp', label: 'Symantec DLP' }]
+      : []),
+    ...(connected.has('puppet')
+      ? [{ key: 'puppet', label: 'Puppet' }]
+      : []),
+  ], [connected, enabledProductTags])
 
   // Compute facet counts from raw (unfiltered) data
   const facetCounts = useMemo(() => {
@@ -302,7 +308,7 @@ export default function Endpoints() {
     const compliance: Record<string, number> = { compliant: 0, partial: 0, non_compliant: 0 }
     const os:         Record<string, number> = { windows: 0, macos: 0, linux: 0, other: 0 }
     const agent:       Record<string, number> = { disabled_agent: 0 }
-    complianceAgents.forEach(item => {
+    endpointProducts.forEach(item => {
       agent[`${item.key}:has`] = 0
       agent[`${item.key}:missing`] = 0
     })
@@ -324,8 +330,8 @@ export default function Endpoints() {
       os[o] = (os[o] ?? 0) + 1
       // agents
       const agents = ep.agents ?? []
-      complianceAgents.forEach(item => {
-        agent[`${item.key}:${endpointHasComplianceAgent(ep, item.key) ? 'has' : 'missing'}`]++
+      endpointProducts.forEach(item => {
+        agent[`${item.key}:${endpointHasProduct(ep, item.key) ? 'has' : 'missing'}`]++
       })
       if (agents.some(a => a.status === 'inactive')) agent.disabled_agent++
       // agent status
@@ -341,7 +347,7 @@ export default function Endpoints() {
     }
 
     return { risk, compliance, os, agent, agentStatus, owner }
-  }, [raw, complianceAgents])
+  }, [raw, endpointProducts])
 
   const endpoints = useMemo(() => {
     let list = [...raw]
@@ -376,7 +382,7 @@ export default function Endpoints() {
         has_dlp: 'symantec_dlp:has', no_dlp: 'symantec_dlp:missing',
         has_wss: 'symantec_wss:has', no_wss: 'symantec_wss:missing',
       }
-      const activeKeys = new Set(complianceAgents.map(item => item.key))
+      const activeKeys = new Set(endpointProducts.map(item => item.key))
       const activeAgentFilters = filters.agent
         .map(value => legacyMap[value] ?? value)
         .filter(value => value === 'disabled_agent' || activeKeys.has(value.split(':')[0]))
@@ -387,7 +393,7 @@ export default function Endpoints() {
           return activeAgentFilters.some(value => {
             if (value === 'disabled_agent') return hasDisabledAgent
             const [key, state] = value.split(':')
-            const present = endpointHasComplianceAgent(ep, key)
+            const present = endpointHasProduct(ep, key)
             return state === 'has' ? present : !present
           })
         })
@@ -395,8 +401,9 @@ export default function Endpoints() {
     }
     if (filters.agentStatus.length) {
       const activeStatusFilters = filters.agentStatus.filter(value => (
-        (value.startsWith('s1_') && enabledProductTags.includes('S1'))
-        || (value.startsWith('dlp_') && enabledProductTags.includes('DLP'))
+        value === 'disabled_agent'
+        || (value.startsWith('s1_') && connected.has('sentinelone'))
+        || (value.startsWith('dlp_') && connected.has('symantec_dlp'))
       ))
       if (activeStatusFilters.length > 0) {
         list = list.filter(ep => {
@@ -404,6 +411,7 @@ export default function Endpoints() {
           const s1Agent  = agents.find(a => a.product_name === 'sentinelone')
           const dlpAgent = agents.find(a => a.product_name === 'symantec')
           return activeStatusFilters.some(v => {
+            if (v === 'disabled_agent') return agents.some(a => a.status === 'inactive')
             if (v === 's1_active')    return s1Agent?.status  === 'active'
             if (v === 's1_inactive')  return s1Agent  != null && s1Agent.status  !== 'active'
             if (v === 'dlp_active')   return dlpAgent?.status === 'active'
@@ -436,7 +444,7 @@ export default function Endpoints() {
       return ta - tb
     })
     return sortDir === 'asc' ? list : list.reverse()
-  }, [raw, filters, sortField, sortDir, enabledProductTags, connected, complianceAgents])
+  }, [raw, filters, sortField, sortDir, enabledProductTags, connected, endpointProducts])
 
   const selectedEndpoints = endpoints.filter(ep => selectedIds.has(ep.id))
 
@@ -481,17 +489,14 @@ export default function Endpoints() {
       ],
     },
     {
-      id: 'agent', label: 'Agents',
+      id: 'agent', label: 'Products',
       selected: filters.agent,
       onToggle: v => toggleFilter('agent', v),
       onClear: () => setFilters(f => ({ ...f, agent: [] })),
-      options: [
-        { value: 'disabled_agent', label: 'Agent Disabled', count: facetCounts.agent.disabled_agent ?? 0 },
-        ...complianceAgents.flatMap(agent => [
-          { value: `${agent.key}:has`, label: `Has ${agent.label}`, count: facetCounts.agent[`${agent.key}:has`] ?? 0 },
-          { value: `${agent.key}:missing`, label: `Missing ${agent.label}`, count: facetCounts.agent[`${agent.key}:missing`] ?? 0 },
+      options: endpointProducts.flatMap(product => [
+          { value: `${product.key}:has`, label: `Has ${product.label}`, count: facetCounts.agent[`${product.key}:has`] ?? 0 },
+          { value: `${product.key}:missing`, label: `Missing ${product.label}`, count: facetCounts.agent[`${product.key}:missing`] ?? 0 },
         ]),
-      ],
     },
     {
       id: 'agentStatus', label: 'Agent Status',
@@ -499,11 +504,14 @@ export default function Endpoints() {
       onToggle: v => toggleFilter('agentStatus', v),
       onClear: () => setFilters(f => ({ ...f, agentStatus: [] })),
       options: [
-        ...(productEnabled('S1') ? [
+        ...((connected.has('sentinelone') || connected.has('symantec_dlp')) ? [
+          { value: 'disabled_agent', label: 'Any Agent Disabled', count: facetCounts.agent.disabled_agent ?? 0 },
+        ] : []),
+        ...(connected.has('sentinelone') ? [
           { value: 's1_active', label: 'S1 Active', count: facetCounts.agentStatus.s1_active ?? 0 },
           { value: 's1_inactive', label: 'S1 Inactive', count: facetCounts.agentStatus.s1_inactive ?? 0 },
         ] : []),
-        ...(productEnabled('DLP') ? [
+        ...(connected.has('symantec_dlp') ? [
           { value: 'dlp_active', label: 'DLP Active', count: facetCounts.agentStatus.dlp_active ?? 0 },
           { value: 'dlp_inactive', label: 'DLP Inactive', count: facetCounts.agentStatus.dlp_inactive ?? 0 },
         ] : []),
@@ -572,7 +580,7 @@ export default function Endpoints() {
           search={filters.search}
           onSearchChange={v => setFilters(f => ({ ...f, search: v }))}
           searchPlaceholder="Search hostname, IP…"
-          groups={filterGroups}
+          groups={filterGroups.filter(group => group.options.length > 0)}
           activeCount={activeFilterCount}
           onClearAll={() => setFilters(EMPTY)}
           totalLabel={`${endpoints.length} endpoint${endpoints.length !== 1 ? 's' : ''}`}

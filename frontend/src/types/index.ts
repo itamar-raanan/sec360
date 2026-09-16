@@ -11,6 +11,7 @@ export interface AuthUser {
   email: string
   role: AuthRole
   is_active: boolean
+  auth_method: 'local' | 'sso' | 'radius'
 }
 
 export interface UserSources {

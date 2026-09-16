@@ -67,6 +67,77 @@ def _clear_auth_cookies(response: Response) -> None:
     response.delete_cookie("sec360_refresh", path="/api/auth/refresh")
 
 
+def _issue_login_response(user: AuthUser, response: Response) -> TokenResponse:
+    token_data = {"sub": str(user.id), "email": user.email, "role": user.role}
+    access_token = create_access_token(token_data)
+    refresh_token = create_refresh_token(token_data)
+    _set_auth_cookies(response, access_token, refresh_token)
+    return TokenResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user=AuthUserResponse.model_validate(user),
+    )
+
+
+async def _authenticate_radius_user(
+    data: LoginRequest | RadiusLoginRequest,
+    user: AuthUser,
+    request: Request,
+    response: Response,
+    db: AsyncSession,
+    ip: str,
+):
+    from app.models.system_settings import SystemSettings
+    from app.services.radius_auth import RadiusError, authenticate_radius
+
+    cfg = (await db.execute(
+        select(SystemSettings).where(SystemSettings.id == 1)
+    )).scalar_one_or_none()
+    radius = cfg.radius_config if cfg and cfg.radius_config else {}
+    if not cfg or not cfg.radius_enabled or not radius.get("host") or not radius.get("shared_secret"):
+        raise HTTPException(status_code=503, detail="RADIUS authentication is not available")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account disabled")
+
+    username = data.email.strip()
+    if radius.get("username_format") == "local_part":
+        username = username.split("@", 1)[0]
+    try:
+        accepted, reason = await asyncio.to_thread(
+            authenticate_radius,
+            host=radius["host"],
+            port=int(radius.get("port", 1812)),
+            secret=radius["shared_secret"],
+            username=username,
+            password=data.password,
+            nas_identifier=radius.get("nas_identifier", "SEC360"),
+            timeout_seconds=float(radius.get("timeout_seconds", 5)),
+        )
+    except RadiusError as exc:
+        logger.error("RADIUS authentication service error for %s: %s", data.email, exc)
+        raise HTTPException(status_code=503, detail="RADIUS authentication service unavailable") from exc
+
+    if not accepted:
+        await record_failure(data.email, ip)
+        logger.warning("RADIUS login rejected for %s from %s: %s", data.email, ip, reason)
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    require_mfa = bool(radius.get("require_mfa")) or user.mfa_enabled
+    if require_mfa:
+        if not user.mfa_enabled or not user.mfa_secret:
+            raise HTTPException(status_code=403, detail="SEC360 2FA is required but is not configured for this account")
+        if not data.totp_code:
+            return {"mfa_required": True}
+        if not pyotp.TOTP(user.mfa_secret).verify(data.totp_code, valid_window=1):
+            await record_failure(data.email, ip)
+            raise HTTPException(status_code=401, detail="Invalid 2FA code")
+
+    await clear_failures(data.email, ip)
+    await audit_action("radius_login", "auth_user", str(user.id), request, db, user)
+    logger.info("Successful RADIUS login for %s from %s", user.email, ip)
+    return _issue_login_response(user, response)
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.post("/login")
@@ -79,10 +150,27 @@ async def login(
     ip = _get_client_ip(request)
     await check_rate_limit(data.email, ip)
 
-    result = await db.execute(select(AuthUser).where(AuthUser.email == data.email))
+    result = await db.execute(
+        select(AuthUser).where(func.lower(AuthUser.email) == data.email.strip().lower())
+    )
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(data.password, user.hashed_password):
+    if not user:
+        await record_failure(data.email, ip)
+        logger.warning("Failed login attempt for %s from %s", data.email, ip)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
+
+    if user.auth_method == "radius":
+        return await _authenticate_radius_user(data, user, request, response, db, ip)
+    if user.auth_method == "sso":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This account uses SSO. Continue with the configured SSO provider.",
+        )
+    if not verify_password(data.password, user.hashed_password):
         await record_failure(data.email, ip)
         logger.warning("Failed login attempt for %s from %s", data.email, ip)
         raise HTTPException(
@@ -109,16 +197,7 @@ async def login(
     logger.info("Successful login for %s from %s", data.email, ip)
     await audit_action("login", "auth_user", str(user.id), request, db, user)
 
-    token_data = {"sub": str(user.id), "email": user.email, "role": user.role}
-    access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token(token_data)
-    _set_auth_cookies(response, access_token, refresh_token)
-
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": AuthUserResponse.model_validate(user).model_dump(),
-    }
+    return _issue_login_response(user, response)
 
 
 @router.post("/logout")
@@ -189,76 +268,16 @@ async def radius_login(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
-    """Authenticate a pre-created SEC360 account against a RADIUS server."""
-    from app.models.system_settings import SystemSettings
-    from app.services.radius_auth import RadiusError, authenticate_radius
-
+    """Backward-compatible endpoint for explicitly provisioned RADIUS users."""
     ip = _get_client_ip(request)
     await check_rate_limit(data.email, ip)
-    cfg = (await db.execute(
-        select(SystemSettings).where(SystemSettings.id == 1)
-    )).scalar_one_or_none()
-    radius = cfg.radius_config if cfg and cfg.radius_config else {}
-    if not cfg or not cfg.radius_enabled or not radius.get("host") or not radius.get("shared_secret"):
-        raise HTTPException(status_code=503, detail="RADIUS authentication is not available")
-
-    # Do not expose SEC360 as an authentication relay for arbitrary RADIUS
-    # usernames. Only accounts provisioned by an administrator may reach the
-    # upstream server.
     user = (await db.execute(
         select(AuthUser).where(func.lower(AuthUser.email) == data.email.strip().lower())
     )).scalar_one_or_none()
-    if not user:
+    if not user or user.auth_method != "radius":
         await record_failure(data.email, ip)
-        raise HTTPException(status_code=401, detail="Invalid RADIUS username or password")
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="Account disabled")
-
-    username = data.email.strip()
-    if radius.get("username_format") == "local_part":
-        username = username.split("@", 1)[0]
-    try:
-        accepted, reason = await asyncio.to_thread(
-            authenticate_radius,
-            host=radius["host"],
-            port=int(radius.get("port", 1812)),
-            secret=radius["shared_secret"],
-            username=username,
-            password=data.password,
-            nas_identifier=radius.get("nas_identifier", "SEC360"),
-            timeout_seconds=float(radius.get("timeout_seconds", 5)),
-        )
-    except RadiusError as exc:
-        logger.error("RADIUS authentication service error for %s: %s", data.email, exc)
-        raise HTTPException(status_code=503, detail="RADIUS authentication service unavailable") from exc
-
-    if not accepted:
-        await record_failure(data.email, ip)
-        logger.warning("RADIUS login rejected for %s from %s: %s", data.email, ip, reason)
-        raise HTTPException(status_code=401, detail="Invalid RADIUS username or password")
-
-    require_mfa = bool(radius.get("require_mfa")) or user.mfa_enabled
-    if require_mfa:
-        if not user.mfa_enabled or not user.mfa_secret:
-            raise HTTPException(status_code=403, detail="SEC360 2FA is required but is not configured for this account")
-        if not data.totp_code:
-            return {"mfa_required": True}
-        if not pyotp.TOTP(user.mfa_secret).verify(data.totp_code, valid_window=1):
-            await record_failure(data.email, ip)
-            raise HTTPException(status_code=401, detail="Invalid 2FA code")
-
-    await clear_failures(data.email, ip)
-    await audit_action("radius_login", "auth_user", str(user.id), request, db, user)
-    logger.info("Successful RADIUS login for %s from %s", user.email, ip)
-    token_data = {"sub": str(user.id), "email": user.email, "role": user.role}
-    access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token(token_data)
-    _set_auth_cookies(response, access_token, refresh_token)
-    return TokenResponse(
-        access_token=access_token,
-        token_type="bearer",
-        user=AuthUserResponse.model_validate(user),
-    )
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    return await _authenticate_radius_user(data, user, request, response, db, ip)
 
 
 @router.get("/me", response_model=AuthUserResponse)
@@ -277,6 +296,7 @@ async def validate_invite(token: str, db: AsyncSession = Depends(get_db)):
             AuthUser.invitation_token == token,
             AuthUser.invitation_expires_at > now,
             AuthUser.is_active == False,  # noqa: E712
+            AuthUser.auth_method == "local",
         )
     )
     user = result.scalar_one_or_none()
@@ -301,6 +321,7 @@ async def accept_invite(
             AuthUser.invitation_token == data.token,
             AuthUser.invitation_expires_at > now,
             AuthUser.is_active == False,  # noqa: E712
+            AuthUser.auth_method == "local",
         )
     )
     user = result.scalar_one_or_none()
@@ -510,25 +531,25 @@ async def saml_acs(request: Request, db: AsyncSession = Depends(get_db)):
     user = result.scalar_one_or_none()
 
     if user is None:
-        logger.warning("SSO login rejected — no invitation found for %s", email)
+        logger.warning("SSO login rejected — no provisioned account found for %s", email)
         return RedirectResponse(
             url=f"{frontend_base}/login?sso_error=not_invited",
             status_code=302,
         )
 
+    if user.auth_method != "sso":
+        logger.warning("SSO login rejected — account %s uses %s authentication", email, user.auth_method)
+        return RedirectResponse(
+            url=f"{frontend_base}/login?sso_error=wrong_auth_method",
+            status_code=302,
+        )
+
     if not user.is_active:
-        # Pending invitation: auto-activate on first SSO login (identity proven by the IdP)
-        if user.invitation_token:
-            user.is_active = True
-            user.invitation_token = None
-            user.invitation_expires_at = None
-            logger.info("SSO auto-activated invited user %s", email)
-        else:
-            logger.warning("SSO login rejected — account disabled for %s", email)
-            return RedirectResponse(
-                url=f"{frontend_base}/login?sso_error=account_disabled",
-                status_code=302,
-            )
+        logger.warning("SSO login rejected — account disabled for %s", email)
+        return RedirectResponse(
+            url=f"{frontend_base}/login?sso_error=account_disabled",
+            status_code=302,
+        )
 
     if not user.saml_subject:
         user.saml_subject = saml_subject

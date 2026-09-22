@@ -55,20 +55,25 @@ COMPLIANCE_AGENT_BY_KEY = {agent.key: agent for agent in COMPLIANCE_AGENTS}
 
 
 async def load_required_compliance_agents(db: AsyncSession) -> tuple[ComplianceAgent, ...]:
-    """Return enabled, connected endpoint-agent integrations in display order."""
+    """Return configured endpoint-agent requirements in display order.
+
+    A transient sync or health-check error must not remove a product from the
+    compliance policy. This intentionally matches the product visibility used
+    by the Endpoints page: enabled with saved credentials.
+    """
     from app.models.integration import IntegrationConfig
 
-    connected = set((await db.execute(
+    configured = set((await db.execute(
         select(IntegrationConfig.integration_type).where(
             IntegrationConfig.is_enabled.is_(True),
-            IntegrationConfig.status == "connected",
+            IntegrationConfig.credentials.is_not(None),
         )
     )).scalars().all())
     product_tags = set(await load_product_tags(db))
     return tuple(
         agent
         for agent in COMPLIANCE_AGENTS
-        if agent.integration_type in connected
+        if agent.integration_type in configured
         and (agent.product_tag is None or agent.product_tag in product_tags)
     )
 

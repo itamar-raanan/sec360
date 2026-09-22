@@ -95,6 +95,22 @@ async def test_compliance_dashboard_only_counts_current_inventory(
         "compliant_pct": 50.0,
     }
 
+    inventory = await client.get("/api/endpoints?limit=100", headers=headers)
+    assert inventory.status_code == 200
+    assert {row["hostname"] for row in inventory.json()} == {
+        "current-device",
+        "agent-current-device",
+    }
+
+    inventory_with_stale = await client.get(
+        "/api/endpoints?limit=100&active_only=false", headers=headers
+    )
+    assert {row["hostname"] for row in inventory_with_stale.json()} == {
+        "current-device",
+        "stale-device",
+        "agent-current-device",
+    }
+
     endpoints = await client.get("/api/compliance/endpoints", headers=headers)
     assert endpoints.status_code == 200
     assert endpoints.headers["x-total-count"] == "2"

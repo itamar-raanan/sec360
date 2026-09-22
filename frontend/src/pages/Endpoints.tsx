@@ -27,12 +27,12 @@ interface AuthUserDetail {
 
 interface EndpointProductOption { key: string; label: string }
 
-function endpointHasProduct(ep: Endpoint, key: string) {
-  if (key === 'puppet') return ep.puppet_managed
-  const products: Record<string, string> = {
-    sentinelone: 'sentinelone', symantec_dlp: 'symantec', symantec_wss: 'symantec_wss',
-  }
-  return ep.agents?.some(agent => agent.product_name === products[key]) ?? false
+type EndpointProductState = 'has' | 'missing' | 'excluded' | 'unassessed'
+
+function endpointProductState(ep: Endpoint, key: string): EndpointProductState {
+  if (ep.compliance_excluded || ep.excluded_agents?.includes(key)) return 'excluded'
+  if (!ep.compliance_status) return 'unassessed'
+  return ep.compliance_status.agent_presence?.[key] ? 'has' : 'missing'
 }
 
 const relTime = (iso: string) => formatDistanceToNow(new Date(iso), { addSuffix: true })
@@ -281,20 +281,18 @@ export default function Endpoints() {
 
   const { data: raw = [], isLoading } = useQuery<Endpoint[]>({
     queryKey: ['endpoints-all'],
-    queryFn: async () => (await apiClient.get('/endpoints?limit=2000&active_only=false')).data,
+    queryFn: async () => (await apiClient.get('/endpoints?limit=2000')).data,
   })
   const { tags: enabledProductTags, enabled: productEnabled } = useEndpointProductTags()
   const { connected, configured } = useConnectedIntegrations()
   const endpointProducts = useMemo<EndpointProductOption[]>(() => [
-    ...(configured.has('sentinelone')
-      ? [
-          { key: 'sentinelone', label: 'SentinelOne' },
-          ...(enabledProductTags.includes('WSS')
-            ? [{ key: 'symantec_wss', label: 'Symantec WSS' }]
-            : []),
-        ]
+    ...(configured.has('sentinelone') && enabledProductTags.includes('S1')
+      ? [{ key: 'sentinelone', label: 'SentinelOne' }]
       : []),
-    ...(configured.has('symantec_dlp')
+    ...(configured.has('sentinelone') && enabledProductTags.includes('WSS')
+      ? [{ key: 'symantec_wss', label: 'Symantec WSS' }]
+      : []),
+    ...(configured.has('symantec_dlp') && enabledProductTags.includes('DLP')
       ? [{ key: 'symantec_dlp', label: 'Symantec DLP' }]
       : []),
     ...(configured.has('puppet')
@@ -331,7 +329,8 @@ export default function Endpoints() {
       // agents
       const agents = ep.agents ?? []
       endpointProducts.forEach(item => {
-        agent[`${item.key}:${endpointHasProduct(ep, item.key) ? 'has' : 'missing'}`]++
+        const state = endpointProductState(ep, item.key)
+        if (state === 'has' || state === 'missing') agent[`${item.key}:${state}`]++
       })
       if (agents.some(a => a.status === 'inactive')) agent.disabled_agent++
       // agent status
@@ -393,8 +392,7 @@ export default function Endpoints() {
           return activeAgentFilters.some(value => {
             if (value === 'disabled_agent') return hasDisabledAgent
             const [key, state] = value.split(':')
-            const present = endpointHasProduct(ep, key)
-            return state === 'has' ? present : !present
+            return endpointProductState(ep, key) === state
           })
         })
       }
@@ -552,7 +550,10 @@ export default function Endpoints() {
               ? <CheckSquare size={16} className="text-emerald-400" />
               : <Square size={16} />}
           </button>
-          <h1 className="text-[17px] font-semibold text-white tracking-[-0.02em]">Endpoints</h1>
+          <div className="min-w-0">
+            <h1 className="text-[17px] font-semibold text-white tracking-[-0.02em]">Endpoints</h1>
+            <p className="mt-0.5 text-[11px] text-zinc-500">Showing endpoints observed in the last 60 days.</p>
+          </div>
           <div className="ml-auto flex items-center rounded-[8px] p-0.5" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }} aria-label="Table density">
             <button
               onClick={() => updateDensity('compact')}

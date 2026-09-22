@@ -60,6 +60,13 @@ async def get_compliance_dashboard(
     use_dlp = "symantec_dlp" in required_keys
     use_wss = "symantec_wss" in required_keys
 
+    # This is the same inventory scope used by the Endpoints page. Compliance
+    # metrics below may intentionally omit full exclusions, so expose the raw
+    # inventory total separately for a like-for-like page count.
+    inventory_total = await db.scalar(
+        select(func.count()).select_from(Endpoint).where(current_endpoint_clause())
+    ) or 0
+
     def issue_metric(enabled, condition, label, agent_key=None):
         if agent_key:
             condition = condition & ~_has_exclusion(agent_key)
@@ -136,6 +143,7 @@ async def get_compliance_dashboard(
             "active_product_tags": list(active_product_tags),
             "agent_coverage": agent_coverage,
             "excluded_total": excluded_total,
+            "inventory_total": inventory_total,
         }
 
     # ── OS breakdown via SQL GROUP BY ─────────────────────────────────────────
@@ -255,6 +263,7 @@ async def get_compliance_dashboard(
         "active_product_tags": list(active_product_tags),
         "agent_coverage": agent_coverage,
         "excluded_total": excluded_total,
+        "inventory_total": inventory_total,
     }
 
 

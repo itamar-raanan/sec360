@@ -34,6 +34,7 @@ export interface ComplianceDashboardData {
     no_disk_encryption?: number; no_network_security?: number
   }
   excluded_total: number
+  inventory_total: number
   agent_coverage: Array<{
     key: string
     label: string

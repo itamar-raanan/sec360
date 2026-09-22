@@ -1,33 +1,9 @@
-from datetime import datetime, timedelta, timezone
+def current_endpoint_clause():
+    """SQL predicate for every endpoint still available in inventory.
 
-from sqlalchemy import exists, or_
-
-
-ENDPOINT_ACTIVITY_WINDOW_DAYS = 60
-
-
-def current_endpoint_clause(*, now: datetime | None = None):
-    """SQL predicate for endpoints that belong in current inventory metrics.
-
-    An endpoint must still exist in its authoritative inventory and must have
-    been observed either directly or by one of its product agents recently.
+    Last-seen time is intentionally not considered: old devices must remain
+    visible so analysts can identify and clean them up in source systems.
     """
-    from app.models.agent import SecurityAgent
     from app.models.endpoint import Endpoint
-    from app.models.puppet import PuppetNode
 
-    reference_time = now or datetime.now(timezone.utc)
-    cutoff = reference_time - timedelta(days=ENDPOINT_ACTIVITY_WINDOW_DAYS)
-    recent_agent = exists().where(
-        SecurityAgent.endpoint_id == Endpoint.id,
-        SecurityAgent.last_seen >= cutoff,
-    )
-    recent_puppet_node = exists().where(
-        PuppetNode.endpoint_id == Endpoint.id,
-        PuppetNode.synced_at >= cutoff,
-    )
-    return (
-        Endpoint.is_active.is_(True)
-        & (Endpoint.lifecycle_state == "active")
-        & or_(Endpoint.last_seen >= cutoff, recent_agent, recent_puppet_node)
-    )
+    return Endpoint.is_active.is_(True) & (Endpoint.lifecycle_state == "active")

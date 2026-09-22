@@ -29,8 +29,8 @@ async def _seed_inventory(db_session):
         is_active=False,
         source="jumpcloud",
     )
-    stale = Endpoint(
-        hostname="stale-device",
+    old_available = Endpoint(
+        hostname="old-available-device",
         last_seen=now - timedelta(days=90),
         is_active=True,
         source="sentinelone",
@@ -42,7 +42,7 @@ async def _seed_inventory(db_session):
         is_active=True,
         source="jumpcloud",
     )
-    db_session.add_all([current, removed, stale, agent_current])
+    db_session.add_all([current, removed, old_available, agent_current])
     await db_session.flush()
 
     db_session.add(SecurityAgent(
@@ -63,11 +63,11 @@ async def _seed_inventory(db_session):
         ),
         ComplianceStatus(endpoint_id=current.id, status="compliant", edr_installed=True, dlp_installed=True),
         ComplianceStatus(endpoint_id=removed.id, status="non_compliant"),
-        ComplianceStatus(endpoint_id=stale.id, status="non_compliant"),
+        ComplianceStatus(endpoint_id=old_available.id, status="non_compliant"),
         ComplianceStatus(endpoint_id=agent_current.id, status="partial", edr_installed=True),
     ])
     await db_session.commit()
-    return current, removed, stale, agent_current
+    return current, removed, old_available, agent_current
 
 
 async def _login(client: AsyncClient) -> dict[str, str]:
@@ -79,7 +79,7 @@ async def _login(client: AsyncClient) -> dict[str, str]:
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
-async def test_compliance_dashboard_only_counts_current_inventory(
+async def test_compliance_dashboard_counts_all_available_inventory(
     client: AsyncClient, db_session, admin_user
 ):
     await _seed_inventory(db_session)
@@ -88,34 +88,27 @@ async def test_compliance_dashboard_only_counts_current_inventory(
     dashboard = await client.get("/api/compliance/dashboard", headers=headers)
     assert dashboard.status_code == 200
     assert dashboard.json()["summary"] == {
-        "total": 2,
+        "total": 3,
         "compliant": 1,
         "partial": 1,
-        "non_compliant": 0,
-        "compliant_pct": 50.0,
+        "non_compliant": 1,
+        "compliant_pct": 33.3,
     }
 
     inventory = await client.get("/api/endpoints?limit=100", headers=headers)
     assert inventory.status_code == 200
     assert {row["hostname"] for row in inventory.json()} == {
         "current-device",
-        "agent-current-device",
-    }
-
-    inventory_with_stale = await client.get(
-        "/api/endpoints?limit=100&active_only=false", headers=headers
-    )
-    assert {row["hostname"] for row in inventory_with_stale.json()} == {
-        "current-device",
-        "stale-device",
+        "old-available-device",
         "agent-current-device",
     }
 
     endpoints = await client.get("/api/compliance/endpoints", headers=headers)
     assert endpoints.status_code == 200
-    assert endpoints.headers["x-total-count"] == "2"
+    assert endpoints.headers["x-total-count"] == "3"
     assert {row["hostname"] for row in endpoints.json()} == {
         "current-device",
+        "old-available-device",
         "agent-current-device",
     }
 
@@ -141,18 +134,18 @@ async def test_compliance_dashboard_only_counts_current_inventory(
     ]
 
 
-async def test_full_evaluation_removes_stale_derived_records(db_session):
+async def test_full_evaluation_keeps_old_available_records(db_session):
     await _seed_inventory(db_session)
 
     result = await run_full_compliance(db_session)
     await db_session.commit()
 
     assert result == {
-        "evaluated": 2,
-        "total": 2,
-        "stale_records_removed": 2,
+        "evaluated": 3,
+        "total": 3,
+        "stale_records_removed": 1,
     }
     remaining = await db_session.scalar(
         select(func.count()).select_from(ComplianceStatus)
     )
-    assert remaining == 2
+    assert remaining == 3

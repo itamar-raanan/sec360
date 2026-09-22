@@ -183,7 +183,6 @@ class SymantecCollector(BaseCollector):
         return h.strip()
 
     async def _upsert_agents(self, records: list) -> int:
-        from datetime import timedelta
         from sqlalchemy import select
         from app.models.endpoint import Endpoint
         from app.models.agent import SecurityAgent
@@ -192,9 +191,6 @@ class SymantecCollector(BaseCollector):
             normalize_username,
             normalize_hostname,
         )
-
-        # Only process records active in the last 60 days — skip stale DLP entries
-        cutoff = datetime.now(timezone.utc) - timedelta(days=60)
 
         count = 0
         for record in records:
@@ -226,10 +222,6 @@ class SymantecCollector(BaseCollector):
                             last_seen = parsed.replace(tzinfo=timezone.utc) if not parsed.tzinfo else parsed
                 except Exception:
                     pass
-
-            # Skip DLP records that haven't checked in for 60 days
-            if last_seen and last_seen < cutoff:
-                continue
 
             # ── Determine agent status ───────────────────────────────────────
             agent_status = "inactive"

@@ -550,7 +550,10 @@ export default function Endpoints() {
               ? <CheckSquare size={16} className="text-emerald-400" />
               : <Square size={16} />}
           </button>
-          <h1 className="text-[17px] font-semibold text-white tracking-[-0.02em]">Endpoints</h1>
+          <div className="min-w-0">
+            <h1 className="text-[17px] font-semibold text-white tracking-[-0.02em]">Endpoints</h1>
+            <p className="mt-0.5 text-[11px] text-zinc-500">Showing endpoints observed in the last 60 days.</p>
+          </div>
           <div className="ml-auto flex items-center rounded-[8px] p-0.5" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }} aria-label="Table density">
             <button
               onClick={() => updateDensity('compact')}

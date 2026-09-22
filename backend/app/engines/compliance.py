@@ -174,7 +174,7 @@ async def evaluate_endpoint(endpoint_id, db: AsyncSession, required_agents=None)
 
 
 async def run_full_compliance(db: AsyncSession) -> dict:
-    """Evaluate current endpoints and remove derived rows for stale inventory."""
+    """Evaluate all available endpoints and remove rows for unavailable inventory."""
     from app.models.endpoint import Endpoint
     from app.models.compliance import ComplianceStatus
 

@@ -25,7 +25,6 @@ async def list_endpoints(
     has_dlp: Optional[bool] = Query(None),         # true = has Symantec DLP, false = missing
     has_wss: Optional[bool] = Query(None),         # true = has Symantec WSS, false = missing
     unassigned: Optional[bool] = Query(None),      # true = no owner linked
-    active_only: bool = Query(True),               # false = include stale endpoints
     limit: int = Query(50, ge=1, le=5000),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
@@ -87,10 +86,9 @@ async def list_endpoints(
     elif unassigned is False:
         query = query.where(Endpoint.owner_user_id.isnot(None))
 
-    # Activity filter: show only endpoints seen within the last 60 days
-    # (via JumpCloud last_seen OR any agent last_seen)
-    if active_only:
-        query = query.where(current_endpoint_clause())
+    # Keep old devices visible so analysts can identify records that need to be
+    # cleaned up in their source systems.
+    query = query.where(current_endpoint_clause())
 
     count_q = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_q)).scalar_one()

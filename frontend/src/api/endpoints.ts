@@ -9,7 +9,6 @@ interface EndpointListParams {
   has_s1?: boolean
   has_dlp?: boolean
   unassigned?: boolean
-  active_only?: boolean
   limit?: number
   offset?: number
 }

@@ -563,7 +563,6 @@ export default function Compliance() {
           <div>
             <h1 className="text-base font-bold text-white">Compliance</h1>
             <p className="text-xs text-zinc-500 mt-0.5">{s.total} endpoints evaluated</p>
-            <p className="mt-1 text-[11px] text-zinc-600">Showing endpoints observed in the last 60 days.</p>
           </div>
           <button
             onClick={() => evaluateMutation.mutate()}

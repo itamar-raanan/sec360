@@ -110,6 +110,14 @@ async def test_agent_filter_and_exclusions_update_coverage(
     assert endpoint_detail.json()["excluded_agents"] == ["puppet"]
     assert endpoint_detail.json()["compliance_exclusion_reason"] == "Temporary Puppet migration"
 
+    endpoint_list = await client.get("/api/endpoints?limit=100", headers=headers)
+    listed_missing = next(
+        row for row in endpoint_list.json() if row["id"] == str(missing.id)
+    )
+    assert listed_missing["compliance_excluded"] is False
+    assert listed_missing["excluded_agents"] == ["puppet"]
+    assert listed_missing["compliance_exclusion_reason"] == "Temporary Puppet migration"
+
     dashboard = await client.get("/api/compliance/dashboard", headers=headers)
     puppet = dashboard.json()["agent_coverage"][0]
     assert puppet["missing"] == 0
@@ -144,6 +152,58 @@ async def test_agent_filter_and_exclusions_update_coverage(
             ComplianceExclusion.agent_key == "*",
         )
     ) == "Lab device"
+
+
+async def test_configured_product_remains_required_during_connection_error(
+    client: AsyncClient, db_session, admin_user
+):
+    now = datetime.now(timezone.utc)
+    endpoint = Endpoint(hostname="missing-dlp", last_seen=now, source="jumpcloud")
+    db_session.add_all([
+        endpoint,
+        IntegrationConfig(
+            integration_type="symantec_dlp",
+            display_name="Symantec DLP",
+            credentials={"api_url": "https://dlp.example.test", "api_key": "test"},
+            is_enabled=True,
+            status="error",
+        ),
+    ])
+    await db_session.commit()
+    await run_full_compliance(db_session)
+    await db_session.commit()
+
+    compliance = await db_session.scalar(
+        select(ComplianceStatus).where(ComplianceStatus.endpoint_id == endpoint.id)
+    )
+    assert compliance.agent_presence == {"symantec_dlp": False}
+
+    dashboard = await client.get(
+        "/api/compliance/dashboard", headers=await _login(client)
+    )
+    assert dashboard.status_code == 200
+    coverage = dashboard.json()["agent_coverage"]
+    assert coverage == [{
+        "key": "symantec_dlp",
+        "label": "Symantec DLP",
+        "description": "Data loss prevention endpoint agent",
+        "has": 0,
+        "missing": 1,
+        "excluded": 0,
+        "in_scope": 1,
+        "coverage_pct": 0.0,
+    }]
+
+    inventory = (await client.get(
+        "/api/endpoints?limit=100", headers=await _login(client)
+    )).json()
+    endpoint_missing = sum(
+        not row["compliance_excluded"]
+        and "symantec_dlp" not in row["excluded_agents"]
+        and not row["compliance_status"]["agent_presence"].get("symantec_dlp", False)
+        for row in inventory
+    )
+    assert endpoint_missing == coverage[0]["missing"]
 
 
 async def test_exclusion_requires_reason(client: AsyncClient, db_session, admin_user):

@@ -36,6 +36,7 @@ async def list_endpoints(
     query = select(Endpoint).options(
         selectinload(Endpoint.owner),
         selectinload(Endpoint.compliance_status),
+        selectinload(Endpoint.compliance_exclusions),
         selectinload(Endpoint.agents),
     ).where(Endpoint.is_active == True)  # noqa: E712
 
@@ -108,15 +109,26 @@ async def list_endpoints(
             .where(PuppetNode.endpoint_id.in_(endpoint_ids))
             .group_by(PuppetNode.endpoint_id)
         )).all())
-    return [
-        EndpointResponse.model_validate(endpoint).model_copy(
-            update={
-                "puppet_managed": endpoint.id in puppet_activity,
-                "puppet_last_seen": puppet_activity.get(endpoint.id),
-            }
+    payload = []
+    for endpoint in endpoints:
+        exclusions = list(endpoint.compliance_exclusions or [])
+        full_exclusion = next((item for item in exclusions if item.agent_key == "*"), None)
+        agent_exclusions = [item for item in exclusions if item.agent_key != "*"]
+        newest_exclusion = max(exclusions, key=lambda item: item.created_at) if exclusions else None
+        payload.append(
+            EndpointResponse.model_validate(endpoint).model_copy(
+                update={
+                    "puppet_managed": endpoint.id in puppet_activity,
+                    "puppet_last_seen": puppet_activity.get(endpoint.id),
+                    "compliance_excluded": full_exclusion is not None,
+                    "excluded_agents": [item.agent_key for item in agent_exclusions],
+                    "compliance_exclusion_reason": newest_exclusion.reason if newest_exclusion else None,
+                    "compliance_exclusion_changed_at": newest_exclusion.created_at if newest_exclusion else None,
+                    "compliance_exclusion_changed_by": newest_exclusion.created_by if newest_exclusion else None,
+                }
+            )
         )
-        for endpoint in endpoints
-    ]
+    return payload
 
 
 @router.get("/{endpoint_id}", response_model=EndpointDetail)

@@ -620,7 +620,7 @@ export default function Compliance() {
           {agentCoverage.length > 0 && (
             <div className="rounded-xl card p-4">
               <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-zinc-400">Agent coverage</div>
-              <p className="mb-3 text-[11px] leading-4 text-zinc-600">Connected endpoint agents are active compliance requirements.</p>
+              <p className="mb-3 text-[11px] leading-4 text-zinc-600">Enabled, configured endpoint agents remain compliance requirements during connection errors.</p>
               <div className="space-y-3">
                 {agentCoverage.map(agent => {
                   const hasValue = `${agent.key}:has`

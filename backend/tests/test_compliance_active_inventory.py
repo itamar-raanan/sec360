@@ -87,6 +87,7 @@ async def test_compliance_dashboard_counts_all_available_inventory(
 
     dashboard = await client.get("/api/compliance/dashboard", headers=headers)
     assert dashboard.status_code == 200
+    assert dashboard.json()["inventory_total"] == 3
     assert dashboard.json()["summary"] == {
         "total": 3,
         "compliant": 1,

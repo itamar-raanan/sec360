@@ -32,7 +32,7 @@ interface ComplianceDashboard {
   summary: DashboardSummary; issues: DashboardIssues
   os_breakdown: OsBreakdown[]; worst_offenders: any[]
   active_product_tags: Array<'S1' | 'DLP' | 'WSS'>
-  agent_coverage: AgentCoverage[]; excluded_total: number
+  agent_coverage: AgentCoverage[]; excluded_total: number; inventory_total: number
 }
 interface ComplianceEndpoint {
   endpoint_id: string; hostname: string; os_version: string | null
@@ -545,6 +545,7 @@ export default function Compliance() {
   const osd = data?.os_breakdown ?? []
   const agentCoverage = data?.agent_coverage ?? []
   const excludedTotal = data?.excluded_total ?? 0
+  const inventoryTotal = data?.inventory_total ?? s.total + excludedTotal
   const activeAgentKeys = new Set(agentCoverage.map(agent => agent.key))
 
   const pieData = [
@@ -562,7 +563,7 @@ export default function Compliance() {
         <div className="flex-shrink-0 px-5 pt-5 pb-3 flex items-center justify-between">
           <div>
             <h1 className="text-base font-bold text-white">Compliance</h1>
-            <p className="text-xs text-zinc-500 mt-0.5">{s.total} endpoints evaluated</p>
+            <p className="text-xs text-zinc-500 mt-0.5">{inventoryTotal} endpoints in inventory</p>
           </div>
           <button
             onClick={() => evaluateMutation.mutate()}

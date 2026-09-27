@@ -669,14 +669,60 @@ function AuditTab() {
 
 // ── Compliance change log tab ─────────────────────────────────────────────────
 
+type ChangeCategory = 'all' | 'agents' | 'users' | 'dlp'
+
+const PRODUCT_LABELS: Record<string, string> = {
+  sentinelone: 'SentinelOne',
+  symantec_dlp: 'Symantec DLP',
+  symantec: 'Symantec DLP',
+  symantec_wss: 'Symantec WSS',
+}
+
+function productLabel(value: unknown) {
+  const key = String(value ?? '')
+  return PRODUCT_LABELS[key] ?? key.replace(/_/g, ' ').replace(/\b\w/g, (letter: string) => letter.toUpperCase())
+}
+
+function changeEventLabel(item: ChangeEventEntry) {
+  const product = productLabel(item.details?.product ?? item.after?.product ?? item.before?.product)
+  switch (item.event_type) {
+    case 'endpoint.product_added': return `${product} detected`
+    case 'endpoint.product_missing': return `${product} missing`
+    case 'user.enabled': return 'User enabled'
+    case 'user.disabled': return 'User disabled'
+    case 'endpoint.dlp_exclusion_added': return 'DLP exclusion added'
+    case 'endpoint.dlp_exclusion_removed': return 'DLP exclusion removed'
+    case 'endpoint.compliance_exclusions_changed': return 'DLP policy exclusions changed'
+    default: return item.event_type
+  }
+}
+
+function changeValue(item: ChangeEventEntry, phase: 'before' | 'after') {
+  const value = item[phase]
+  if (!value) return 'Not recorded'
+
+  if (item.event_type === 'endpoint.product_added' || item.event_type === 'endpoint.product_missing') {
+    const product = productLabel(value.product ?? item.details?.product)
+    return `${product}: ${value.present ? 'Installed' : 'Missing'}`
+  }
+  if (item.event_type === 'user.enabled' || item.event_type === 'user.disabled') {
+    return value.enabled ? 'Enabled' : 'Disabled'
+  }
+  if (item.event_type.includes('exclusion')) {
+    const exclusions = Array.isArray(value.excluded_agents) ? value.excluded_agents : []
+    return exclusions.length ? exclusions.map(productLabel).join(', ') : 'No exclusions'
+  }
+  return JSON.stringify(value)
+}
+
 function ChangeLogTab() {
   const [page, setPage] = useState(0)
-  const [entityType, setEntityType] = useState<'all' | 'endpoint' | 'user'>('all')
+  const [category, setCategory] = useState<ChangeCategory>('all')
   const limit = 30
   const query = new URLSearchParams({ limit: String(limit), offset: String(page * limit) })
-  if (entityType !== 'all') query.set('entity_type', entityType)
+  if (category !== 'all') query.set('category', category)
   const { data, isLoading } = useQuery<{ total: number; items: ChangeEventEntry[] }>({
-    queryKey: ['security-change-events', page, entityType],
+    queryKey: ['security-change-events', page, category],
     queryFn: () => apiClient.get(`/settings/change-events?${query}`).then(r => r.data),
   })
   const total = data?.total ?? 0
@@ -687,39 +733,39 @@ function ChangeLogTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-sm font-semibold text-white">Compliance change log</h2>
-          <p className="mt-0.5 text-xs text-zinc-500">{total.toLocaleString()} endpoint and user state changes</p>
+          <h2 className="text-sm font-semibold text-white">Operational change log</h2>
+          <p className="mt-0.5 text-xs text-zinc-500">{total.toLocaleString()} agent, user status, and DLP policy changes</p>
         </div>
         <div className="flex items-center gap-2">
-          {(['all', 'endpoint', 'user'] as const).map(value => (
-            <button key={value} onClick={() => { setEntityType(value); setPage(0) }}
+          {(['all', 'agents', 'users', 'dlp'] as const).map(value => (
+            <button key={value} onClick={() => { setCategory(value); setPage(0) }}
               className="rounded-full border px-2.5 py-1 text-xs capitalize"
               style={{
-                borderColor: entityType === value ? 'rgba(16,185,129,.35)' : 'var(--border)',
-                color: entityType === value ? '#34d399' : 'var(--text-3)',
-                background: entityType === value ? 'rgba(16,185,129,.12)' : 'var(--hover-1)',
-              }}>{value}</button>
+                borderColor: category === value ? 'rgba(16,185,129,.35)' : 'var(--border)',
+                color: category === value ? '#34d399' : 'var(--text-3)',
+                background: category === value ? 'rgba(16,185,129,.12)' : 'var(--hover-1)',
+              }}>{value === 'dlp' ? 'DLP policies' : value}</button>
           ))}
           <button onClick={() => setPage(value => Math.max(0, value - 1))} disabled={page === 0} className="p-1.5 text-zinc-400 disabled:opacity-30"><ChevronLeft size={15} /></button>
           <span className="text-xs text-zinc-500">{page + 1} / {totalPages}</span>
           <button onClick={() => setPage(value => Math.min(totalPages - 1, value + 1))} disabled={page >= totalPages - 1} className="p-1.5 text-zinc-400 disabled:opacity-30"><ChevronRight size={15} /></button>
         </div>
       </div>
-      <div className="overflow-hidden rounded-xl" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
+      <div className="overflow-x-auto rounded-xl" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
         {isLoading ? <div className="p-8 text-center text-sm text-zinc-500">Loading events…</div>
           : items.length === 0 ? <div className="p-12 text-center text-sm text-zinc-600">No changes recorded yet</div>
-          : <table className="w-full text-sm">
+          : <table className="w-full min-w-[1000px] text-sm">
               <thead><tr className="text-xs uppercase tracking-wider text-zinc-500" style={{ borderBottom: '1px solid var(--border)' }}>
-                <th className="px-4 py-3 text-left">Timestamp</th><th className="px-4 py-3 text-left">Severity</th><th className="px-4 py-3 text-left">Event</th><th className="px-4 py-3 text-left">Entity</th><th className="px-4 py-3 text-left">Actor / source</th><th className="px-4 py-3 text-left">Change</th>
+                <th className="px-4 py-3 text-left">Timestamp</th><th className="px-4 py-3 text-left">Change</th><th className="px-4 py-3 text-left">Endpoint / user</th><th className="px-4 py-3 text-left">Changed by</th><th className="px-4 py-3 text-left">Before</th><th className="px-4 py-3 text-left">Now</th>
               </tr></thead>
               <tbody>{items.map(item => (
                 <tr key={item.id} style={{ borderTop: '1px solid var(--border)' }}>
                   <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-zinc-400">{fmtDate(item.timestamp)}</td>
-                  <td className="px-4 py-3"><span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase ${item.severity === 'warning' ? 'border-amber-500/25 bg-amber-500/10 text-amber-300' : item.severity === 'error' ? 'border-red-500/25 bg-red-500/10 text-red-300' : 'border-sky-500/25 bg-sky-500/10 text-sky-300'}`}>{item.severity}</span></td>
-                  <td className="px-4 py-3 font-mono text-xs text-zinc-200">{item.event_type}</td>
+                  <td className="px-4 py-3"><div className="flex items-center gap-2 text-xs font-medium text-zinc-200"><span className={`h-1.5 w-1.5 rounded-full ${item.severity === 'warning' ? 'bg-amber-400' : item.severity === 'error' ? 'bg-red-400' : 'bg-sky-400'}`} />{changeEventLabel(item)}</div>{item.details?.reason ? <div className="mt-1 max-w-[220px] truncate text-[10px] text-zinc-500" title={String(item.details.reason)}>Reason: {String(item.details.reason)}</div> : null}</td>
                   <td className="px-4 py-3"><div className="text-xs text-zinc-200">{item.entity_name ?? item.entity_id}</div><div className="text-[10px] capitalize text-zinc-600">{item.entity_type}</div></td>
                   <td className="px-4 py-3 text-xs text-zinc-400">{item.actor_email ?? item.source}</td>
-                  <td className="max-w-[320px] truncate px-4 py-3 font-mono text-[10px] text-zinc-500" title={JSON.stringify(item.details ?? item.after ?? {})}>{JSON.stringify(item.details ?? item.after ?? {})}</td>
+                  <td className="max-w-[240px] px-4 py-3 text-xs text-zinc-500">{changeValue(item, 'before')}</td>
+                  <td className="max-w-[240px] px-4 py-3 text-xs font-medium text-zinc-200">{changeValue(item, 'after')}</td>
                 </tr>
               ))}</tbody>
             </table>}

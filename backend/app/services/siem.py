@@ -30,7 +30,11 @@ def _event_type(action: str) -> list[str]:
 
 
 def change_event_to_ecs(event: ChangeEvent) -> dict[str, Any]:
-    category = "host" if event.entity_type == "endpoint" else "iam"
+    category = (
+        "host" if event.entity_type == "endpoint"
+        else "iam" if event.entity_type == "user"
+        else "configuration"
+    )
     message = f"{event.event_type} for {event.entity_name or event.entity_id}"
     document: dict[str, Any] = {
         "@timestamp": _iso(event.timestamp),
@@ -67,7 +71,8 @@ def change_event_to_ecs(event: ChangeEvent) -> dict[str, Any]:
     elif event.entity_type == "user":
         document["user"] = {"id": event.entity_id, "email": event.entity_name}
     if event.actor_email:
-        document["user"] = {**document.get("user", {}), "email": event.actor_email}
+        actor_field = "email" if "@" in event.actor_email else "name"
+        document["user"] = {**document.get("user", {}), actor_field: event.actor_email}
         document["user"]["target"] = {"id": event.entity_id, "name": event.entity_name}
     return document
 

@@ -873,6 +873,9 @@ async def get_change_events(
             "endpoint.dlp_exclusion_added",
             "endpoint.dlp_exclusion_removed",
             "endpoint.compliance_exclusions_changed",
+            "dlp.policy_pattern_added",
+            "dlp.policy_pattern_changed",
+            "dlp.policy_pattern_removed",
         },
     }
     selected_event_types = (

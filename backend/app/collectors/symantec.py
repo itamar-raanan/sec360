@@ -91,7 +91,36 @@ class SymantecCollector(BaseCollector):
         try:
             records = await self._query_dlp_agents()
             count = await self._upsert_agents(records)
-            return {"records_synced": count}
+            policy_count = 0
+            policy_changes = 0
+            if self._is_oracle():
+                try:
+                    from app.services.dlp_policy_search import query_dlp_policy_exclusions
+                    from app.services.dlp_policy_tracking import capture_dlp_policy_changes
+
+                    policy_rows, truncated = await query_dlp_policy_exclusions({
+                        "db_host": self.db_host,
+                        "db_port": self.db_port,
+                        "db_name": self.db_name,
+                        "db_user": self.db_user,
+                        "db_password": self.db_password,
+                    })
+                    policy_count = len(policy_rows)
+                    # Isolate optional policy tracking so a schema-specific
+                    # failure cannot leave partial snapshots in this sync.
+                    async with self.db.begin_nested():
+                        policy_changes = await capture_dlp_policy_changes(
+                            self.db, policy_rows, complete=not truncated,
+                        )
+                except Exception as policy_error:
+                    # Endpoint inventory should still sync if the optional
+                    # policy metadata query is unsupported by this DLP schema.
+                    logger.warning("Symantec: policy change tracking failed: %s", policy_error, exc_info=True)
+            return {
+                "records_synced": count,
+                "policy_patterns_synced": policy_count,
+                "policy_changes_logged": policy_changes,
+            }
         except Exception as e:
             logger.error(f"Symantec: collect failed: {e}", exc_info=True)
             return {"records_synced": 0, "error": str(e)}

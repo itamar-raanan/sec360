@@ -63,6 +63,9 @@ async def get_dlp_policy_exclusions(
         ) from exc
 
     duration_ms = round((time.perf_counter() - started) * 1000)
+    from app.services.dlp_policy_tracking import capture_dlp_policy_changes
+
+    changes_logged = await capture_dlp_policy_changes(db, items, complete=not truncated)
     await audit_action(
         "search_dlp_user_policies",
         "symantec_dlp",
@@ -70,7 +73,12 @@ async def get_dlp_policy_exclusions(
         request,
         db,
         current,
-        {"rows_returned": len(items), "truncated": truncated, "duration_ms": duration_ms},
+        {
+            "rows_returned": len(items),
+            "truncated": truncated,
+            "duration_ms": duration_ms,
+            "policy_changes_logged": changes_logged,
+        },
     )
     return DlpPolicySearchResponse(
         items=items,

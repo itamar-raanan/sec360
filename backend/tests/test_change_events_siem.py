@@ -11,6 +11,7 @@ from app.models.endpoint import Endpoint
 from app.models.integration import IntegrationConfig
 from app.models.user import User
 from app.services.change_tracking import capture_inventory_changes, record_change_event
+from app.services.dlp_policy_tracking import capture_dlp_policy_changes
 from app.services.siem import audit_log_to_ecs, change_event_to_ecs
 
 
@@ -212,3 +213,47 @@ async def test_dlp_exclusion_event_contains_actor_and_added_scope(db_session):
     delivery = (await db_session.execute(select(SiemDelivery))).scalar_one()
     assert delivery.payload["event"]["action"] == "endpoint.dlp_exclusion_added"
     assert delivery.payload["user"]["email"] == "analyst@example.com"
+
+
+async def test_dlp_policy_pattern_edit_records_before_after_and_editor(db_session):
+    original = [{
+        "object_id": 42,
+        "object_uuid": "pattern-42",
+        "object_name": "Approved senders",
+        "object_status": "ACTIVE",
+        "user_patterns": "old@example.com",
+        "modified_date": "2026-09-27T10:00:00",
+        "modified_by_id": 7,
+        "modified_by_name": "DLP Admin",
+        "policy_id": 100,
+        "policy_name": "Outbound PII",
+        "used_as": "SENDER",
+        "policy_active_status": 1,
+    }]
+    updated = [{
+        **original[0],
+        "user_patterns": "old@example.com,new@example.com",
+        "modified_date": "2026-09-27T11:00:00",
+    }]
+
+    # First observation is a silent baseline; the second is a real edit.
+    assert await capture_dlp_policy_changes(db_session, original) == 0
+    assert await capture_dlp_policy_changes(db_session, updated) == 1
+
+    event = (await db_session.execute(
+        select(ChangeEvent).where(ChangeEvent.event_type == "dlp.policy_pattern_changed")
+    )).scalar_one()
+    assert event.entity_name == "Approved senders"
+    assert event.actor_email == "DLP Admin"
+    assert event.before["user_patterns"] == "old@example.com"
+    assert event.after["user_patterns"] == "old@example.com,new@example.com"
+    assert "user_patterns" in event.details["changed_fields"]
+    assert event.details["policies"] == ["Outbound PII"]
+    delivery = (await db_session.execute(
+        select(SiemDelivery).where(SiemDelivery.source_id == str(event.id))
+    )).scalar_one()
+    assert delivery.payload["event"]["category"] == ["configuration"]
+    assert delivery.payload["user"]["name"] == "DLP Admin"
+
+    # Reading the same policy state again must not create a duplicate.
+    assert await capture_dlp_policy_changes(db_session, updated) == 0

@@ -780,13 +780,12 @@ function SiemTab() {
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 
-type Tab = 'users' | 'changes' | 'audit' | 'siem'
+type Tab = 'changes' | 'audit' | 'siem'
 
 export default function Security() {
-  const [tab, setTab] = useState<Tab>('users')
+  const [tab, setTab] = useState<Tab>('changes')
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
-    { id: 'users', label: 'Users & Access', icon: Users },
     { id: 'changes', label: 'Change Log',    icon: Activity },
     { id: 'audit', label: 'Audit Log',      icon: ClipboardList },
     { id: 'siem', label: 'SIEM',            icon: Radio },
@@ -803,7 +802,7 @@ export default function Security() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-white leading-none">Security</h1>
-            <p className="text-xs text-zinc-500 mt-0.5">User access, roles, and audit trail</p>
+            <p className="text-xs text-zinc-500 mt-0.5">Compliance changes, audit trail, and SIEM forwarding</p>
           </div>
         </div>
 
@@ -828,7 +827,6 @@ export default function Security() {
 
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
-        {tab === 'users' && <UsersTab />}
         {tab === 'changes' && <ChangeLogTab />}
         {tab === 'audit' && <AuditTab />}
         {tab === 'siem' && <SiemTab />}

@@ -30,7 +30,7 @@ import { useAuthStore } from '../store/auth'
 import apiClient from '../api/client'
 import { useConfirm } from '../components/shared/ConfirmDialog'
 
-type Tab = 'users' | 'account' | 'platform' | 'sso' | 'certificate' | 'audit'
+type Tab = 'users' | 'account' | 'platform' | 'sso' | 'certificate'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -1759,7 +1759,6 @@ export default function Settings() {
     { id: 'platform', label: 'Platform', icon: Settings2, adminOnly: true },
     { id: 'sso', label: 'Authentication', icon: KeyRound, adminOnly: true },
     { id: 'certificate', label: 'HTTPS Certificate', icon: FileKey2, adminOnly: true },
-    { id: 'audit', label: 'Audit Log', icon: ClipboardList, adminOnly: true },
   ]
 
   const visibleTabs = tabs.filter(t => !t.adminOnly || isAdmin)
@@ -1798,7 +1797,6 @@ export default function Settings() {
         {tab === 'platform' && isAdmin && <PlatformTab />}
         {tab === 'sso' && isAdmin && <SsoTab />}
         {tab === 'certificate' && isAdmin && <CertificateTab />}
-        {tab === 'audit' && isAdmin && <AuditTab />}
       </div>
     </div>
   )

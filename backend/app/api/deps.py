@@ -185,3 +185,6 @@ async def audit_action(
     )
     db.add(log)
     await db.flush()
+    from app.services.siem import queue_audit_log
+
+    await queue_audit_log(db, log)

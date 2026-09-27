@@ -24,6 +24,7 @@ from app.core.security import hash_password, verify_password
 from app.models.user import AuthUser
 from app.models.system_settings import SystemSettings
 from app.models.audit import AuditLog
+from app.models.change_event import ChangeEvent, SiemDelivery
 from app.services.product_scope import normalize_product_tags
 
 logger = logging.getLogger(__name__)
@@ -144,6 +145,18 @@ class RadiusTestRequest(BaseModel):
     radius_username_format: Literal["email", "local_part"] = "email"
     username: str
     password: str
+
+
+class SiemSettingsIn(BaseModel):
+    enabled: bool = False
+    url: str = Field(default="", max_length=2000)
+    auth_type: Literal["none", "basic", "bearer", "api_key"] = "none"
+    username: str = Field(default="", max_length=255)
+    secret: str = Field(default="", max_length=4000)
+    verify_ssl: bool = True
+    payload_format: Literal["json", "ndjson"] = "json"
+    index_prefix: str = Field(default="sec360", max_length=100)
+    timeout_seconds: int = Field(default=10, ge=1, le=60)
 
 
 async def _read_upload(upload: UploadFile) -> bytes:
@@ -317,6 +330,7 @@ async def update_auth_user(
         raise HTTPException(404, "User not found")
     if str(user.id) == str(current.id) and data.is_active is False:
         raise HTTPException(400, "Cannot disable your own account")
+    previous = {"role": user.role, "is_active": user.is_active}
     if data.role:
         if data.role not in ("admin", "analyst", "viewer"):
             raise HTTPException(400, "Invalid role")
@@ -324,7 +338,31 @@ async def update_auth_user(
     if data.is_active is not None:
         user.is_active = data.is_active
     await db.flush()
-    await audit_action("update_user", "auth_user", user_id, request, db, current, data.model_dump(exclude_none=True))
+    updated = {"role": user.role, "is_active": user.is_active}
+    if previous != updated:
+        from app.services.change_tracking import record_change_event
+
+        active_changed = previous["is_active"] != updated["is_active"]
+        await record_change_event(
+            db,
+            event_type=(
+                f"user.{'enabled' if updated['is_active'] else 'disabled'}"
+                if active_changed else "user.access_changed"
+            ),
+            entity_type="user",
+            entity_id=str(user.id),
+            entity_name=user.email,
+            action=("enabled" if updated["is_active"] else "disabled") if active_changed else "changed",
+            severity="warning" if active_changed and not updated["is_active"] else "info",
+            source="sec360_access",
+            actor_email=current.email,
+            before=previous,
+            after=updated,
+        )
+    await audit_action(
+        "update_user", "auth_user", user_id, request, db, current,
+        {"before": previous, "after": updated},
+    )
     return AuthUserOut.from_orm(user)
 
 
@@ -756,3 +794,165 @@ async def get_audit_log(
             for l in logs
         ],
     }
+
+
+@router.get("/change-events")
+async def get_change_events(
+    entity_type: Optional[str] = Query(None, pattern="^(endpoint|user)$"),
+    event_type: Optional[str] = Query(None, max_length=100),
+    severity: Optional[str] = Query(None, pattern="^(info|warning|error)$"),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    _: AuthUser = Depends(require_role("admin")),
+):
+    query = select(ChangeEvent)
+    if entity_type:
+        query = query.where(ChangeEvent.entity_type == entity_type)
+    if event_type:
+        query = query.where(ChangeEvent.event_type == event_type)
+    if severity:
+        query = query.where(ChangeEvent.severity == severity)
+    total = await db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    items = (await db.execute(
+        query.order_by(ChangeEvent.timestamp.desc()).limit(limit).offset(offset)
+    )).scalars().all()
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": str(item.id),
+                "event_type": item.event_type,
+                "entity_type": item.entity_type,
+                "entity_id": item.entity_id,
+                "entity_name": item.entity_name,
+                "action": item.action,
+                "severity": item.severity,
+                "source": item.source,
+                "actor_email": item.actor_email,
+                "before": item.before,
+                "after": item.after,
+                "details": item.details,
+                "timestamp": item.timestamp.isoformat(),
+            }
+            for item in items
+        ],
+    }
+
+
+@router.get("/siem")
+async def get_siem_settings(
+    db: AsyncSession = Depends(get_db),
+    _: AuthUser = Depends(require_role("admin")),
+):
+    cfg = await db.get(SystemSettings, 1)
+    config = cfg.siem_config if cfg and cfg.siem_config else {}
+    pending = await db.scalar(
+        select(func.count()).select_from(SiemDelivery).where(SiemDelivery.status == "pending")
+    ) or 0
+    failed = await db.scalar(
+        select(func.count()).select_from(SiemDelivery).where(SiemDelivery.status == "failed")
+    ) or 0
+    return {
+        "enabled": bool(cfg and cfg.siem_enabled),
+        "url": config.get("url", ""),
+        "auth_type": config.get("auth_type", "none"),
+        "username": config.get("username", ""),
+        "has_secret": bool(config.get("secret")),
+        "verify_ssl": config.get("verify_ssl", True),
+        "payload_format": config.get("payload_format", "json"),
+        "index_prefix": config.get("index_prefix", "sec360"),
+        "timeout_seconds": config.get("timeout_seconds", 10),
+        "pending_deliveries": pending,
+        "failed_deliveries": failed,
+    }
+
+
+def _validated_siem_config(
+    data: SiemSettingsIn,
+    previous: dict | None = None,
+    *,
+    require_connection: bool = False,
+) -> dict:
+    url = data.url.strip()
+    connection_required = data.enabled or require_connection
+    if connection_required and not (url.startswith("https://") or url.startswith("http://")):
+        raise HTTPException(400, "SIEM URL must start with http:// or https://")
+    secret = data.secret or (previous or {}).get("secret", "")
+    if connection_required and data.auth_type != "none" and not secret:
+        raise HTTPException(400, "Authentication secret is required")
+    if connection_required and data.auth_type == "basic" and not data.username.strip():
+        raise HTTPException(400, "Username is required for basic authentication")
+    return {
+        "url": url,
+        "auth_type": data.auth_type,
+        "username": data.username.strip(),
+        "secret": secret,
+        "verify_ssl": data.verify_ssl,
+        "payload_format": data.payload_format,
+        "index_prefix": data.index_prefix.strip() or "sec360",
+        "timeout_seconds": data.timeout_seconds,
+    }
+
+
+@router.put("/siem")
+async def update_siem_settings(
+    data: SiemSettingsIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_role("admin")),
+):
+    cfg = await db.get(SystemSettings, 1)
+    if not cfg:
+        cfg = SystemSettings(id=1)
+        db.add(cfg)
+    config = _validated_siem_config(data, cfg.siem_config)
+    cfg.siem_enabled = data.enabled
+    cfg.siem_config = config
+    await db.flush()
+    await audit_action(
+        "update_siem_settings", "system_settings", "1", request, db, current,
+        {
+            "enabled": data.enabled,
+            "url": config["url"],
+            "auth_type": config["auth_type"],
+            "payload_format": config["payload_format"],
+            "verify_ssl": config["verify_ssl"],
+        },
+    )
+    return {"message": "SIEM settings saved"}
+
+
+@router.post("/siem/test")
+async def test_siem_settings(
+    data: SiemSettingsIn,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_role("admin")),
+):
+    cfg = await db.get(SystemSettings, 1)
+    config = _validated_siem_config(
+        data,
+        cfg.siem_config if cfg else None,
+        require_connection=True,
+    )
+    from app.services.siem import ECS_VERSION, send_ecs_document
+
+    sample = {
+        "@timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "ecs": {"version": ECS_VERSION},
+        "event": {
+            "kind": "event", "category": ["configuration"], "type": ["info"],
+            "action": "siem_connection_test", "outcome": "success", "provider": "sec360",
+        },
+        "service": {"name": "sec360"},
+        "observer": {"vendor": "SEC360", "product": "SEC360"},
+        "message": "SEC360 SIEM connection test",
+        "user": {"email": current.email},
+    }
+    try:
+        await send_ecs_document(config, sample)
+    except Exception as exc:
+        raise HTTPException(502, f"SIEM connection failed: {str(exc)[:500]}") from exc
+    await audit_action("test_siem_connection", "system_settings", "1", request, db, current, {"url": config["url"]})
+    return {"success": True, "message": "ECS test event delivered successfully"}

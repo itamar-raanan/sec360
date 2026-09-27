@@ -299,8 +299,20 @@ async def purge_old_audit_logs():
                 {"cutoff": cutoff},
             )
             deleted = result.rowcount
+            delivery_cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+            delivery_result = await db.execute(
+                text(
+                    "DELETE FROM siem_deliveries "
+                    "WHERE status = 'sent' AND sent_at < :cutoff"
+                ),
+                {"cutoff": delivery_cutoff},
+            )
             await db.commit()
-        logger.info("Scheduler: audit_logs purge complete — %d rows deleted", deleted)
+        logger.info(
+            "Scheduler: audit purge complete — %d audit rows and %d sent delivery rows deleted",
+            deleted,
+            delivery_result.rowcount,
+        )
     except Exception as e:
         logger.error("Scheduler: audit_logs purge failed: %s", e, exc_info=True)
 
@@ -397,6 +409,15 @@ def start_scheduler():
         trigger=IntervalTrigger(hours=24),
         id="purge_audit_logs",
         replace_existing=True,
+    )
+    from app.services.siem import flush_siem_deliveries
+
+    scheduler.add_job(
+        flush_siem_deliveries,
+        trigger=IntervalTrigger(minutes=1),
+        id="flush_siem_deliveries",
+        replace_existing=True,
+        max_instances=1,
     )
     scheduler.start()
     logger.info(f"Scheduler started with {interval_minutes}min interval")

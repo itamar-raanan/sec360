@@ -195,6 +195,9 @@ async def import_active_directory_csv(
     config.last_error = None
     config.records_synced = str(user_count)
     await db.flush()
+    from app.services.change_tracking import capture_inventory_changes
+
+    await capture_inventory_changes(db)
     await audit_action(
         "import_active_directory",
         "integration",
@@ -367,6 +370,10 @@ async def sync_integration(
 
             await run_full_compliance(db)
             await update_all_risk_scores(db)
+        else:
+            from app.services.change_tracking import capture_inventory_changes
+
+            await capture_inventory_changes(db)
         await audit_action("sync_integration", "integration", integration_type, request, db, current, {"success": True, "records_synced": count})
         return SyncResult(
             success=True,

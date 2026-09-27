@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Users,
@@ -24,6 +24,9 @@ import {
   PlusCircle,
   MinusCircle,
   Key,
+  Activity,
+  Radio,
+  Send,
 } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
 import apiClient from '../api/client'
@@ -47,6 +50,37 @@ interface AuditEntry {
   timestamp: string
   ip_address: string | null
   details: Record<string, unknown> | null
+}
+
+interface ChangeEventEntry {
+  id: string
+  event_type: string
+  entity_type: 'endpoint' | 'user'
+  entity_id: string
+  entity_name: string | null
+  action: string
+  severity: 'info' | 'warning' | 'error'
+  source: string
+  actor_email: string | null
+  before: Record<string, unknown> | null
+  after: Record<string, unknown> | null
+  details: Record<string, unknown> | null
+  timestamp: string
+}
+
+interface SiemSettings {
+  enabled: boolean
+  url: string
+  auth_type: 'none' | 'basic' | 'bearer' | 'api_key'
+  username: string
+  secret?: string
+  has_secret: boolean
+  verify_ssl: boolean
+  payload_format: 'json' | 'ndjson'
+  index_prefix: string
+  timeout_seconds: number
+  pending_deliveries: number
+  failed_deliveries: number
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -633,16 +667,129 @@ function AuditTab() {
   )
 }
 
+// ── Compliance change log tab ─────────────────────────────────────────────────
+
+function ChangeLogTab() {
+  const [page, setPage] = useState(0)
+  const [entityType, setEntityType] = useState<'all' | 'endpoint' | 'user'>('all')
+  const limit = 30
+  const query = new URLSearchParams({ limit: String(limit), offset: String(page * limit) })
+  if (entityType !== 'all') query.set('entity_type', entityType)
+  const { data, isLoading } = useQuery<{ total: number; items: ChangeEventEntry[] }>({
+    queryKey: ['security-change-events', page, entityType],
+    queryFn: () => apiClient.get(`/settings/change-events?${query}`).then(r => r.data),
+  })
+  const total = data?.total ?? 0
+  const items = data?.items ?? []
+  const totalPages = Math.max(1, Math.ceil(total / limit))
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-semibold text-white">Compliance change log</h2>
+          <p className="mt-0.5 text-xs text-zinc-500">{total.toLocaleString()} endpoint and user state changes</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {(['all', 'endpoint', 'user'] as const).map(value => (
+            <button key={value} onClick={() => { setEntityType(value); setPage(0) }}
+              className="rounded-full border px-2.5 py-1 text-xs capitalize"
+              style={{
+                borderColor: entityType === value ? 'rgba(16,185,129,.35)' : 'var(--border)',
+                color: entityType === value ? '#34d399' : 'var(--text-3)',
+                background: entityType === value ? 'rgba(16,185,129,.12)' : 'var(--hover-1)',
+              }}>{value}</button>
+          ))}
+          <button onClick={() => setPage(value => Math.max(0, value - 1))} disabled={page === 0} className="p-1.5 text-zinc-400 disabled:opacity-30"><ChevronLeft size={15} /></button>
+          <span className="text-xs text-zinc-500">{page + 1} / {totalPages}</span>
+          <button onClick={() => setPage(value => Math.min(totalPages - 1, value + 1))} disabled={page >= totalPages - 1} className="p-1.5 text-zinc-400 disabled:opacity-30"><ChevronRight size={15} /></button>
+        </div>
+      </div>
+      <div className="overflow-hidden rounded-xl" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
+        {isLoading ? <div className="p-8 text-center text-sm text-zinc-500">Loading events…</div>
+          : items.length === 0 ? <div className="p-12 text-center text-sm text-zinc-600">No changes recorded yet</div>
+          : <table className="w-full text-sm">
+              <thead><tr className="text-xs uppercase tracking-wider text-zinc-500" style={{ borderBottom: '1px solid var(--border)' }}>
+                <th className="px-4 py-3 text-left">Timestamp</th><th className="px-4 py-3 text-left">Severity</th><th className="px-4 py-3 text-left">Event</th><th className="px-4 py-3 text-left">Entity</th><th className="px-4 py-3 text-left">Actor / source</th><th className="px-4 py-3 text-left">Change</th>
+              </tr></thead>
+              <tbody>{items.map(item => (
+                <tr key={item.id} style={{ borderTop: '1px solid var(--border)' }}>
+                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-zinc-400">{fmtDate(item.timestamp)}</td>
+                  <td className="px-4 py-3"><span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase ${item.severity === 'warning' ? 'border-amber-500/25 bg-amber-500/10 text-amber-300' : item.severity === 'error' ? 'border-red-500/25 bg-red-500/10 text-red-300' : 'border-sky-500/25 bg-sky-500/10 text-sky-300'}`}>{item.severity}</span></td>
+                  <td className="px-4 py-3 font-mono text-xs text-zinc-200">{item.event_type}</td>
+                  <td className="px-4 py-3"><div className="text-xs text-zinc-200">{item.entity_name ?? item.entity_id}</div><div className="text-[10px] capitalize text-zinc-600">{item.entity_type}</div></td>
+                  <td className="px-4 py-3 text-xs text-zinc-400">{item.actor_email ?? item.source}</td>
+                  <td className="max-w-[320px] truncate px-4 py-3 font-mono text-[10px] text-zinc-500" title={JSON.stringify(item.details ?? item.after ?? {})}>{JSON.stringify(item.details ?? item.after ?? {})}</td>
+                </tr>
+              ))}</tbody>
+            </table>}
+      </div>
+    </div>
+  )
+}
+
+// ── SIEM forwarding tab ───────────────────────────────────────────────────────
+
+function SiemTab() {
+  const qc = useQueryClient()
+  const [form, setForm] = useState<SiemSettings>({
+    enabled: false, url: '', auth_type: 'none', username: '', secret: '', has_secret: false,
+    verify_ssl: true, payload_format: 'json', index_prefix: 'sec360', timeout_seconds: 10,
+    pending_deliveries: 0, failed_deliveries: 0,
+  })
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const { data } = useQuery<SiemSettings>({ queryKey: ['siem-settings'], queryFn: () => apiClient.get('/settings/siem').then(r => r.data) })
+  useEffect(() => { if (data) setForm(current => ({ ...current, ...data, secret: '' })) }, [data])
+  const payload = () => ({
+    enabled: form.enabled, url: form.url, auth_type: form.auth_type, username: form.username,
+    secret: form.secret ?? '', verify_ssl: form.verify_ssl, payload_format: form.payload_format,
+    index_prefix: form.index_prefix, timeout_seconds: form.timeout_seconds,
+  })
+  const save = useMutation({
+    mutationFn: () => apiClient.put('/settings/siem', payload()),
+    onSuccess: () => { setMessage({ type: 'success', text: 'SIEM settings saved' }); qc.invalidateQueries({ queryKey: ['siem-settings'] }) },
+    onError: (error: { response?: { data?: { detail?: string } } }) => setMessage({ type: 'error', text: error.response?.data?.detail ?? 'Unable to save SIEM settings' }),
+  })
+  const test = useMutation({
+    mutationFn: () => apiClient.post('/settings/siem/test', payload()),
+    onSuccess: response => setMessage({ type: 'success', text: response.data.message }),
+    onError: (error: { response?: { data?: { detail?: string } } }) => setMessage({ type: 'error', text: error.response?.data?.detail ?? 'SIEM test failed' }),
+  })
+  const fieldClass = 'w-full rounded-lg border border-white/[0.08] bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500'
+  return (
+    <div className="max-w-3xl space-y-5">
+      <div><h2 className="text-sm font-semibold text-white">SIEM forwarding</h2><p className="mt-0.5 text-xs text-zinc-500">Send change events and audit logs as ECS 8.11 JSON over HTTP(S).</p></div>
+      {message && <Alert type={message.type} msg={message.text} />}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-xl p-4" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}><div className="text-xs text-zinc-500">Queued</div><div className="mt-1 text-xl font-bold text-white">{form.pending_deliveries}</div></div>
+        <div className="rounded-xl p-4" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}><div className="text-xs text-zinc-500">Retrying</div><div className="mt-1 text-xl font-bold text-amber-300">{form.failed_deliveries}</div></div>
+      </div>
+      <div className="space-y-4 rounded-xl p-5" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
+        <label className="flex items-center justify-between"><span><span className="block text-sm font-medium text-white">Enable forwarding</span><span className="text-xs text-zinc-500">The durable queue is delivered every minute.</span></span><input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} className="h-4 w-4 accent-emerald-500" /></label>
+        <div><label className="mb-1 block text-xs text-zinc-400">HTTP ingestion URL</label><input className={fieldClass} value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} placeholder="https://siem.example.com/api/events" /></div>
+        <div className="grid grid-cols-2 gap-3"><div><label className="mb-1 block text-xs text-zinc-400">Authentication</label><select className={fieldClass} value={form.auth_type} onChange={e => setForm({ ...form, auth_type: e.target.value as SiemSettings['auth_type'] })}><option value="none">None</option><option value="bearer">Bearer token</option><option value="api_key">Elastic API key</option><option value="basic">Basic auth</option></select></div><div><label className="mb-1 block text-xs text-zinc-400">Payload</label><select className={fieldClass} value={form.payload_format} onChange={e => setForm({ ...form, payload_format: e.target.value as SiemSettings['payload_format'] })}><option value="json">ECS JSON</option><option value="ndjson">Elastic Bulk NDJSON</option></select></div></div>
+        {form.auth_type === 'basic' && <div><label className="mb-1 block text-xs text-zinc-400">Username</label><input className={fieldClass} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} /></div>}
+        {form.auth_type !== 'none' && <div><label className="mb-1 block text-xs text-zinc-400">{form.has_secret ? 'Secret (leave blank to keep saved value)' : 'Secret'}</label><input type="password" className={fieldClass} value={form.secret ?? ''} onChange={e => setForm({ ...form, secret: e.target.value })} /></div>}
+        {form.payload_format === 'ndjson' && <div><label className="mb-1 block text-xs text-zinc-400">Daily index prefix</label><input className={fieldClass} value={form.index_prefix} onChange={e => setForm({ ...form, index_prefix: e.target.value })} /></div>}
+        <label className="flex items-center gap-2 text-xs text-zinc-300"><input type="checkbox" checked={form.verify_ssl} onChange={e => setForm({ ...form, verify_ssl: e.target.checked })} className="accent-emerald-500" />Verify TLS certificate</label>
+        <div className="flex gap-2"><button onClick={() => test.mutate()} disabled={test.isPending || !form.url} className="flex items-center gap-2 rounded-lg border border-emerald-500/30 px-4 py-2 text-sm text-emerald-300 disabled:opacity-40"><Send size={14} />{test.isPending ? 'Testing…' : 'Send test event'}</button><button onClick={() => save.mutate()} disabled={save.isPending} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-40">{save.isPending ? 'Saving…' : 'Save settings'}</button></div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 
-type Tab = 'users' | 'audit'
+type Tab = 'users' | 'changes' | 'audit' | 'siem'
 
 export default function Security() {
   const [tab, setTab] = useState<Tab>('users')
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: 'users', label: 'Users & Access', icon: Users },
+    { id: 'changes', label: 'Change Log',    icon: Activity },
     { id: 'audit', label: 'Audit Log',      icon: ClipboardList },
+    { id: 'siem', label: 'SIEM',            icon: Radio },
   ]
 
   return (
@@ -682,7 +829,9 @@ export default function Security() {
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
         {tab === 'users' && <UsersTab />}
+        {tab === 'changes' && <ChangeLogTab />}
         {tab === 'audit' && <AuditTab />}
+        {tab === 'siem' && <SiemTab />}
       </div>
     </div>
   )

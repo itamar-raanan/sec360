@@ -205,6 +205,15 @@ async def run_full_compliance(db: AsyncSession) -> dict:
         except Exception as e:
             logger.error(f"Compliance: Failed to evaluate endpoint {eid}: {e}")
 
+    try:
+        from app.services.change_tracking import capture_inventory_changes
+
+        changes_logged = await capture_inventory_changes(db)
+        if changes_logged:
+            logger.info("Compliance: recorded %d inventory changes", changes_logged)
+    except Exception as e:
+        logger.error("Compliance: change tracking failed: %s", e, exc_info=True)
+
     logger.info(
         "Compliance: evaluated %d/%d current endpoints; removed %d stale records",
         evaluated,

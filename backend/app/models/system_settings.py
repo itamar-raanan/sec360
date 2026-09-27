@@ -65,3 +65,8 @@ class SystemSettings(Base):
     # encrypted together using CREDENTIALS_ENCRYPTION_KEY.
     radius_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     radius_config: Mapped[dict | None] = mapped_column(EncryptedJSON, nullable=True)
+
+    # ECS event forwarding. Authentication secrets are encrypted with the same
+    # key used for integration credentials.
+    siem_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    siem_config: Mapped[dict | None] = mapped_column(EncryptedJSON, nullable=True)

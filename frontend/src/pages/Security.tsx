@@ -55,7 +55,7 @@ interface AuditEntry {
 interface ChangeEventEntry {
   id: string
   event_type: string
-  entity_type: 'endpoint' | 'user'
+  entity_type: 'endpoint' | 'user' | 'dlp_policy_pattern'
   entity_id: string
   entity_name: string | null
   action: string
@@ -693,6 +693,9 @@ function changeEventLabel(item: ChangeEventEntry) {
     case 'endpoint.dlp_exclusion_added': return 'DLP exclusion added'
     case 'endpoint.dlp_exclusion_removed': return 'DLP exclusion removed'
     case 'endpoint.compliance_exclusions_changed': return 'DLP policy exclusions changed'
+    case 'dlp.policy_pattern_added': return 'DLP policy pattern added'
+    case 'dlp.policy_pattern_changed': return 'DLP policy pattern changed'
+    case 'dlp.policy_pattern_removed': return 'DLP policy pattern removed'
     default: return item.event_type
   }
 }
@@ -711,6 +714,36 @@ function changeValue(item: ChangeEventEntry, phase: 'before' | 'after') {
   if (item.event_type.includes('exclusion')) {
     const exclusions = Array.isArray(value.excluded_agents) ? value.excluded_agents : []
     return exclusions.length ? exclusions.map(productLabel).join(', ') : 'No exclusions'
+  }
+  if (item.event_type.startsWith('dlp.policy_pattern_')) {
+    const labels: Record<string, string> = {
+      pattern: 'Pattern',
+      object_name: 'Name',
+      object_description: 'Description',
+      object_status: 'Status',
+      rule_type: 'Rule type',
+      user_patterns: 'User patterns',
+      ip_addresses: 'IP addresses',
+      url_domains: 'URL domains',
+      personal_email_breadth: 'Personal email breadth',
+      personal_email_excluded_domains: 'Excluded domains',
+      personal_email_max_recipients: 'Max recipients',
+      modified_date: 'Modified date',
+      modified_by_id: 'Editor ID',
+      modified_by_name: 'Editor',
+      policies: 'Policies',
+    }
+    const fields = Array.isArray(item.details?.changed_fields)
+      ? item.details.changed_fields.map(String)
+      : Object.keys(value)
+    return fields.map(field => {
+      const raw = value[field]
+      if (field === 'pattern' && raw === undefined) return `${labels[field]}: ${phase === 'before' ? 'Not present' : 'Present'}`
+      const displayed = Array.isArray(raw)
+        ? raw.map(entry => typeof entry === 'object' && entry !== null ? String((entry as Record<string, unknown>).policy_name ?? JSON.stringify(entry)) : String(entry)).join(', ')
+        : raw === null || raw === undefined || raw === '' ? 'Empty' : String(raw)
+      return `${labels[field] ?? field}: ${displayed}`
+    }).join(' · ')
   }
   return JSON.stringify(value)
 }

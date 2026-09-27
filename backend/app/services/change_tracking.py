@@ -104,11 +104,15 @@ async def _emit_endpoint_changes(
         )
         count += 1
         for product, present in new["products"].items():
+            # An absent product on a newly discovered endpoint is an initial
+            # state, not a transition. Only record products actually detected.
+            if not present:
+                continue
             await record_change_event(
                 db,
-                event_type="endpoint.product_added" if present else "endpoint.product_missing",
-                action="added" if present else "missing",
-                severity="info" if present else "warning",
+                event_type="endpoint.product_added",
+                action="added",
+                severity="info",
                 after={"product": product, "present": present},
                 details={"product": product, "initial_observation": True},
                 **common,
@@ -133,6 +137,10 @@ async def _emit_endpoint_changes(
         was_present = bool(old_products.get(product, False))
         is_present = bool(new["products"].get(product, False))
         newly_tracked = product not in old_products
+        # Adding a product to the compliance scope establishes a baseline. It
+        # must not report every endpoint as newly missing that product.
+        if newly_tracked and not is_present:
+            continue
         if was_present == is_present and not newly_tracked:
             continue
         await record_change_event(
@@ -140,7 +148,7 @@ async def _emit_endpoint_changes(
             event_type="endpoint.product_added" if is_present else "endpoint.product_missing",
             action="added" if is_present else "missing",
             severity="info" if is_present else "warning",
-            before={"product": product, "present": was_present},
+            before={"product": product, "present": None if newly_tracked else was_present},
             after={"product": product, "present": is_present},
             details={"product": product, "newly_tracked": newly_tracked},
             **common,

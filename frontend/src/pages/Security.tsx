@@ -703,7 +703,10 @@ function changeValue(item: ChangeEventEntry, phase: 'before' | 'after') {
 
   if (item.event_type === 'endpoint.product_added' || item.event_type === 'endpoint.product_missing') {
     const product = productLabel(value.product ?? item.details?.product)
-    return `${product}: ${value.present ? 'Installed' : 'Missing'}`
+    const state = typeof value.present === 'boolean'
+      ? (value.present ? 'Installed' : 'Missing')
+      : 'Not previously tracked'
+    return `${product}: ${state}`
   }
   if (item.event_type === 'user.enabled' || item.event_type === 'user.disabled') {
     return value.enabled ? 'Enabled' : 'Disabled'

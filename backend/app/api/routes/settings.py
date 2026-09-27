@@ -16,7 +16,7 @@ import qrcode.image.svg
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, status, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import and_, func, not_, or_, select
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_db, get_current_user, require_role, audit_action
@@ -823,6 +823,18 @@ async def get_change_events(
         else set().union(*visible_event_types.values())
     )
     query = query.where(ChangeEvent.event_type.in_(selected_event_types))
+    # Older tracker versions emitted product-missing rows while establishing a
+    # baseline. Keep them stored for audit integrity, but do not present them as
+    # real changes because the product never transitioned from present to absent.
+    baseline_product_missing = and_(
+        ChangeEvent.event_type == "endpoint.product_missing",
+        or_(
+            ChangeEvent.before.is_(None),
+            ChangeEvent.details["initial_observation"].as_boolean().is_(True),
+            ChangeEvent.details["newly_tracked"].as_boolean().is_(True),
+        ),
+    )
+    query = query.where(not_(baseline_product_missing))
     if entity_type:
         query = query.where(ChangeEvent.entity_type == entity_type)
     if event_type:

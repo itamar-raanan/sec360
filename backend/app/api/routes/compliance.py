@@ -554,10 +554,16 @@ async def update_compliance_exclusions(
     if (body.exclude_all or body.excluded_agents) and not body.reason:
         raise HTTPException(status_code=422, detail="A reason is required for compliance exclusions")
 
+    previous_exclusions = (await db.execute(
+        select(ComplianceExclusion).where(ComplianceExclusion.endpoint_id == endpoint.id)
+    )).scalars().all()
+    previous_keys = {item.agent_key for item in previous_exclusions}
+
     await db.execute(
         delete(ComplianceExclusion).where(ComplianceExclusion.endpoint_id == endpoint.id)
     )
     keys = ["*"] if body.exclude_all else body.excluded_agents
+    new_keys = set(keys)
     for key in keys:
         db.add(ComplianceExclusion(
             endpoint_id=endpoint.id,
@@ -573,6 +579,41 @@ async def update_compliance_exclusions(
     compliance = await evaluate_endpoint(endpoint.id, db)
     risk = await endpoint_risk_score(str(endpoint.id), db)
     endpoint.risk_score = risk["score"]
+    added_keys = sorted(new_keys - previous_keys)
+    removed_keys = sorted(previous_keys - new_keys)
+    if added_keys or removed_keys:
+        from app.services.change_tracking import record_change_event
+
+        dlp_added = bool({"*", "symantec_dlp"} & set(added_keys))
+        dlp_removed = bool({"*", "symantec_dlp"} & set(removed_keys))
+        if dlp_added:
+            event_type = "endpoint.dlp_exclusion_added"
+            action = "added"
+        elif dlp_removed:
+            event_type = "endpoint.dlp_exclusion_removed"
+            action = "removed"
+        else:
+            event_type = "endpoint.compliance_exclusions_changed"
+            action = "changed"
+        await record_change_event(
+            db,
+            event_type=event_type,
+            entity_type="endpoint",
+            entity_id=str(endpoint.id),
+            entity_name=endpoint.hostname,
+            action=action,
+            severity="warning" if added_keys else "info",
+            source="analyst",
+            actor_email=current.email,
+            before={"excluded_agents": sorted(previous_keys)},
+            after={"excluded_agents": sorted(new_keys)},
+            details={
+                "added": added_keys,
+                "removed": removed_keys,
+                "reason": body.reason,
+                "changed_by": current.email,
+            },
+        )
     await audit_action(
         "update_compliance_exclusions",
         "endpoint",
@@ -584,6 +625,9 @@ async def update_compliance_exclusions(
             "hostname": endpoint.hostname,
             "exclude_all": body.exclude_all,
             "excluded_agents": body.excluded_agents,
+            "previous_excluded_agents": sorted(previous_keys),
+            "added": added_keys,
+            "removed": removed_keys,
             "reason": body.reason,
         },
     )

@@ -39,7 +39,7 @@ async def get_db() -> AsyncSession:
 async def init_db():
     """Create all tables and apply incremental schema patches."""
     async with engine.begin() as conn:
-        from app.models import user, endpoint, agent, activity, compliance, application, audit, system_settings, report, note, puppet  # noqa
+        from app.models import user, endpoint, agent, activity, compliance, application, audit, system_settings, report, note, puppet, change_event  # noqa
         await conn.run_sync(Base.metadata.create_all)
         # Incremental patches — safe to run repeatedly
         from sqlalchemy import text
@@ -110,6 +110,55 @@ async def init_db():
             # RADIUS authentication. The JSON payload is encrypted by the ORM.
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS radius_enabled BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS radius_config JSONB",
+            "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS siem_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS siem_config JSONB",
+            """
+            CREATE TABLE IF NOT EXISTS change_events (
+                id UUID PRIMARY KEY,
+                event_type VARCHAR(100) NOT NULL,
+                entity_type VARCHAR(50) NOT NULL,
+                entity_id VARCHAR(255) NOT NULL,
+                entity_name VARCHAR(255),
+                action VARCHAR(50) NOT NULL,
+                severity VARCHAR(20) NOT NULL DEFAULT 'info',
+                source VARCHAR(50) NOT NULL DEFAULT 'sec360',
+                actor_email VARCHAR(255),
+                before JSONB,
+                after JSONB,
+                details JSONB,
+                timestamp TIMESTAMPTZ NOT NULL
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_change_events_timestamp ON change_events (timestamp)",
+            "CREATE INDEX IF NOT EXISTS ix_change_events_event_type ON change_events (event_type)",
+            "CREATE INDEX IF NOT EXISTS ix_change_events_entity_type ON change_events (entity_type)",
+            """
+            CREATE TABLE IF NOT EXISTS entity_state_snapshots (
+                id UUID PRIMARY KEY,
+                entity_type VARCHAR(50) NOT NULL,
+                entity_id VARCHAR(255) NOT NULL,
+                state JSONB NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL,
+                CONSTRAINT uq_entity_state_snapshot UNIQUE (entity_type, entity_id)
+            )
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS siem_deliveries (
+                id UUID PRIMARY KEY,
+                source_type VARCHAR(30) NOT NULL,
+                source_id VARCHAR(255) NOT NULL,
+                payload JSONB NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                attempts INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT,
+                next_attempt_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL,
+                sent_at TIMESTAMPTZ,
+                CONSTRAINT uq_siem_delivery_source UNIQUE (source_type, source_id)
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_siem_deliveries_status ON siem_deliveries (status)",
+            "CREATE INDEX IF NOT EXISTS ix_siem_deliveries_next_attempt_at ON siem_deliveries (next_attempt_at)",
             # Symantec WSS compliance fields (safe for upgraded installations)
             "ALTER TABLE compliance_statuses ADD COLUMN IF NOT EXISTS wss_installed  BOOLEAN DEFAULT FALSE",
             "ALTER TABLE compliance_statuses ADD COLUMN IF NOT EXISTS wss_version_ok BOOLEAN DEFAULT FALSE",

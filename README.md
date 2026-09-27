@@ -67,6 +67,13 @@ docker-compose exec backend python -m app.seed
 - Filter by event type and suspicious flag
 - Real-time suspicious activity highlighting
 
+### Change logging and SIEM
+- Durable endpoint and user compliance change log under **Security → Change Log**
+- Tracks newly detected entities, enable/disable changes, product presence, compliance state, ownership, MFA, and directory-source changes
+- Records compliance/DLP exclusions with the added or removed scope, reason, and analyst identity
+- Sends change events and administrator audit logs to an HTTP(S) SIEM endpoint in ECS 8.11 JSON or Elastic Bulk NDJSON
+- Uses a durable retry queue; configure and test delivery under **Security → SIEM**
+
 ## Data Sources
 
 | Source | Data Type | Endpoint |

@@ -8,6 +8,7 @@ from app.models.audit import AuditLog
 from app.models.integration import IntegrationConfig
 from app.models.note import Note
 from app.models.puppet import PuppetFact, PuppetFactFavorite, PuppetFactSavedView, PuppetNode
+from app.models.change_event import ChangeEvent, EntityStateSnapshot, SiemDelivery
 
 __all__ = [
     "User",
@@ -26,4 +27,7 @@ __all__ = [
     "PuppetFactFavorite",
     "PuppetFactSavedView",
     "PuppetNode",
+    "ChangeEvent",
+    "EntityStateSnapshot",
+    "SiemDelivery",
 ]

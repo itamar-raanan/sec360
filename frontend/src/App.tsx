@@ -12,6 +12,7 @@ const Users = lazy(() => import('./pages/Users'))
 const Compliance = lazy(() => import('./pages/Compliance'))
 const Activity = lazy(() => import('./pages/Activity'))
 const Integrations = lazy(() => import('./pages/Integrations'))
+const Security = lazy(() => import('./pages/Security'))
 const Settings = lazy(() => import('./pages/Settings'))
 const Reports = lazy(() => import('./pages/Reports'))
 const SsoMfa = lazy(() => import('./pages/SsoMfa'))
@@ -101,7 +102,7 @@ export default function App() {
         <Route path="/dlp-user-policy-search" element={<AnalystOnly><IntegrationOnly integration="symantec_dlp"><DlpUserPolicySearch /></IntegrationOnly></AnalystOnly>} />
         <Route path="/reports" element={<AnalystOnly><Reports /></AnalystOnly>} />
         <Route path="/integrations" element={<AdminOnly><Integrations /></AdminOnly>} />
-        <Route path="/security" element={<Navigate to="/settings" replace />} />
+        <Route path="/security" element={<AdminOnly><Security /></AdminOnly>} />
         <Route path="/settings" element={<Settings />} />
       </Route>
       <Route path="*" element={<NotFound />} />

@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Monitor,
   Plug,
+  ShieldCheck,
   Settings,
   Users,
   type LucideIcon,
@@ -40,6 +41,7 @@ export const NAV_ITEMS: NavigationItem[] = [
   { to: '/dlp-user-policy-search', icon: Database, label: 'DLP Policy Search', minRole: 'analyst', group: 'Analyze', requiredIntegration: 'symantec_dlp' },
   { to: '/reports', icon: FileText, label: 'Reports', minRole: 'analyst', group: 'Manage' },
   { to: '/integrations', icon: Plug, label: 'Integration Store', shortLabel: 'Integrations', minRole: 'admin', group: 'Manage' },
+  { to: '/security', icon: ShieldCheck, label: 'Security', minRole: 'admin', group: 'Manage' },
   { to: '/settings', icon: Settings, label: 'Settings', minRole: 'admin', group: 'Manage' },
 ]
 

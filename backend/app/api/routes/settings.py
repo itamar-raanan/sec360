@@ -800,6 +800,7 @@ async def get_audit_log(
 async def get_change_events(
     entity_type: Optional[str] = Query(None, pattern="^(endpoint|user)$"),
     event_type: Optional[str] = Query(None, max_length=100),
+    category: Optional[Literal["agents", "users", "dlp"]] = Query(None),
     severity: Optional[str] = Query(None, pattern="^(info|warning|error)$"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
@@ -807,6 +808,21 @@ async def get_change_events(
     _: AuthUser = Depends(require_role("admin")),
 ):
     query = select(ChangeEvent)
+    visible_event_types = {
+        "agents": {"endpoint.product_added", "endpoint.product_missing"},
+        "users": {"user.enabled", "user.disabled"},
+        "dlp": {
+            "endpoint.dlp_exclusion_added",
+            "endpoint.dlp_exclusion_removed",
+            "endpoint.compliance_exclusions_changed",
+        },
+    }
+    selected_event_types = (
+        visible_event_types[category]
+        if category
+        else set().union(*visible_event_types.values())
+    )
+    query = query.where(ChangeEvent.event_type.in_(selected_event_types))
     if entity_type:
         query = query.where(ChangeEvent.entity_type == entity_type)
     if event_type:

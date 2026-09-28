@@ -110,7 +110,7 @@ async def test_inventory_changes_create_events_and_siem_deliveries(db_session):
     assert len(deliveries) == len(event_types)
 
 
-async def test_new_endpoint_does_not_report_absent_products_as_changes(db_session):
+async def test_new_endpoint_does_not_report_initial_products_as_changes(db_session):
     db_session.add(IntegrationConfig(
         integration_type="sentinelone",
         display_name="SentinelOne",
@@ -133,8 +133,8 @@ async def test_new_endpoint_does_not_report_absent_products_as_changes(db_sessio
     await db_session.flush()
     db_session.add(ComplianceStatus(
         endpoint_id=endpoint.id,
-        status="non_compliant",
-        agent_presence={"sentinelone": False},
+        status="compliant",
+        agent_presence={"sentinelone": True},
     ))
     await db_session.flush()
 
@@ -144,6 +144,45 @@ async def test_new_endpoint_does_not_report_absent_products_as_changes(db_sessio
     )).scalars().all()
 
     assert event_types == ["endpoint.detected"]
+
+
+async def test_newly_tracked_product_uses_existing_endpoint_state_as_baseline(db_session):
+    endpoint = Endpoint(
+        hostname="existing-workstation",
+        source="jumpcloud",
+        is_active=True,
+        lifecycle_state="active",
+    )
+    db_session.add(endpoint)
+    await db_session.flush()
+    status = ComplianceStatus(
+        endpoint_id=endpoint.id,
+        status="compliant",
+        agent_presence={},
+    )
+    db_session.add(status)
+    await db_session.flush()
+
+    assert await capture_inventory_changes(db_session) == 0
+
+    db_session.add(IntegrationConfig(
+        integration_type="sentinelone",
+        display_name="SentinelOne",
+        credentials={"url": "https://example.invalid", "token": "test"},
+        is_enabled=True,
+        status="connected",
+    ))
+    status.agent_presence = {"sentinelone": True}
+    await db_session.flush()
+
+    assert await capture_inventory_changes(db_session) == 0
+    product_events = (await db_session.execute(
+        select(ChangeEvent).where(
+            ChangeEvent.entity_id == str(endpoint.id),
+            ChangeEvent.event_type.in_({"endpoint.product_added", "endpoint.product_missing"}),
+        )
+    )).scalars().all()
+    assert product_events == []
 
 
 async def test_dlp_exclusion_event_contains_actor_and_added_scope(db_session):

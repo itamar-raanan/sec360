@@ -823,18 +823,18 @@ async def get_change_events(
         else set().union(*visible_event_types.values())
     )
     query = query.where(ChangeEvent.event_type.in_(selected_event_types))
-    # Older tracker versions emitted product-missing rows while establishing a
-    # baseline. Keep them stored for audit integrity, but do not present them as
-    # real changes because the product never transitioned from present to absent.
-    baseline_product_missing = and_(
-        ChangeEvent.event_type == "endpoint.product_missing",
+    # Older tracker versions emitted product-added/missing rows while first
+    # observing an endpoint or product. Keep them stored for audit integrity,
+    # but hide them because no recorded present/absent transition occurred.
+    baseline_product_observation = and_(
+        ChangeEvent.event_type.in_({"endpoint.product_added", "endpoint.product_missing"}),
         or_(
             ChangeEvent.before.is_(None),
             ChangeEvent.details["initial_observation"].as_boolean().is_(True),
             ChangeEvent.details["newly_tracked"].as_boolean().is_(True),
         ),
     )
-    query = query.where(not_(baseline_product_missing))
+    query = query.where(not_(baseline_product_observation))
     if entity_type:
         query = query.where(ChangeEvent.entity_type == entity_type)
     if event_type:

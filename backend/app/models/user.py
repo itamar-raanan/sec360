@@ -53,6 +53,7 @@ class AuthUser(Base):
         SAEnum("admin", "analyst", "viewer", name="role_enum"), default="viewer"
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     mfa_secret: Mapped[str | None] = mapped_column(String(64))
     mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     invitation_token: Mapped[str | None] = mapped_column(String(64), index=True)

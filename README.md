@@ -32,10 +32,9 @@ docker-compose exec backend python -m app.seed
 
 ### 4. Login
 
-| Email | Password | Role |
-|-------|----------|------|
-| admin@sec360.local | Admin123! | Admin |
-| analyst@sec360.local | Analyst123! | Analyst |
+Set `BOOTSTRAP_ADMIN_PASSWORD` to a unique value of at least 12 characters
+before the first startup. The bootstrap administrator is required to replace
+that password before accessing the application.
 
 ## Features
 

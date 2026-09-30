@@ -30,13 +30,24 @@ _redis_unavailable = False
 
 async def _get_redis():
     global _redis_client, _redis_unavailable
+    from app.core.config import settings
+
     if _redis_unavailable:
+        if settings.REQUIRE_REDIS_RATE_LIMIT:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication rate limiter is unavailable",
+            )
         return None
     if _redis_client is not None:
         return _redis_client
 
-    from app.core.config import settings
     if not settings.REDIS_URL:
+        if settings.REQUIRE_REDIS_RATE_LIMIT:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication rate limiter is unavailable",
+            )
         return None
 
     try:
@@ -49,6 +60,11 @@ async def _get_redis():
     except Exception as e:
         logger.warning("Rate limiter: Redis unavailable (%s) — using in-memory fallback", e)
         _redis_unavailable = True
+        if settings.REQUIRE_REDIS_RATE_LIMIT:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication rate limiter is unavailable",
+            ) from e
         return None
 
 
@@ -77,7 +93,7 @@ def _mem_clear(key: str) -> None:
 # ── Public API ────────────────────────────────────────────────────────────────
 
 async def check_rate_limit(email: str, ip: str) -> None:
-    key = f"bf:{email}:{ip}"
+    key = _key(email, ip)
     r = await _get_redis()
     if r:
         try:
@@ -96,7 +112,7 @@ async def check_rate_limit(email: str, ip: str) -> None:
 
 
 async def record_failure(email: str, ip: str) -> None:
-    key = f"bf:{email}:{ip}"
+    key = _key(email, ip)
     r = await _get_redis()
     if r:
         try:
@@ -111,7 +127,7 @@ async def record_failure(email: str, ip: str) -> None:
 
 
 async def clear_failures(email: str, ip: str) -> None:
-    key = f"bf:{email}:{ip}"
+    key = _key(email, ip)
     r = await _get_redis()
     if r:
         try:
@@ -120,3 +136,7 @@ async def clear_failures(email: str, ip: str) -> None:
         except Exception as e:
             logger.warning("Rate limiter: Redis error on clear (%s), falling back to memory", e)
     _mem_clear(key)
+
+
+def _key(email: str, ip: str) -> str:
+    return f"bf:{email.strip().lower()}:{ip.strip()}"

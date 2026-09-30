@@ -73,19 +73,41 @@ else
     JWT_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
     DB_PASS=$(python3 -c "import secrets; print('sec360_' + secrets.token_hex(12))")
     CREDENTIALS_KEY=$(python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
+    BOOTSTRAP_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")
   else
     JWT_SECRET=$(openssl rand -hex 32 2>/dev/null || echo "CHANGE_ME_$(date +%s)")
     DB_PASS="sec360_$(openssl rand -hex 12 2>/dev/null || echo 'changeme')"
     CREDENTIALS_KEY=$(openssl rand -base64 32 2>/dev/null | tr '+/' '-_' | tr -d '\n')
+    BOOTSTRAP_PASSWORD=$(openssl rand -base64 24 2>/dev/null | tr '+/' '-_' | tr -d '\n')
   fi
 
   # Patch .env with generated values
   sed -i "s|CHANGE_ME_generate_a_64_char_random_hex_string|${JWT_SECRET}|" .env
   sed -i "s|CHANGE_ME_strong_password_here|${DB_PASS}|" .env
   sed -i "s|CHANGE_ME_generate_a_fernet_key|${CREDENTIALS_KEY}|" .env
+  sed -i "s|CHANGE_ME_generate_a_random_bootstrap_password|${BOOTSTRAP_PASSWORD}|" .env
 
   success ".env created with generated secrets."
   warn "Review .env and update CORS_ORIGINS with your actual hostname before going live."
+fi
+
+# Older installations may not have bootstrap settings. The random value is
+# used only for an empty user database or to invalidate the historical default.
+if ! grep -q '^BOOTSTRAP_ADMIN_EMAIL=' .env; then
+  echo "BOOTSTRAP_ADMIN_EMAIL=admin@sec360.local" >> .env
+fi
+if ! grep -q '^BOOTSTRAP_ADMIN_PASSWORD=' .env \
+  || grep -q '^BOOTSTRAP_ADMIN_PASSWORD=CHANGE_ME_' .env; then
+  if command -v python3 &>/dev/null; then
+    BOOTSTRAP_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")
+  else
+    BOOTSTRAP_PASSWORD=$(openssl rand -base64 24 2>/dev/null | tr '+/' '-_' | tr -d '\n')
+  fi
+  if grep -q '^BOOTSTRAP_ADMIN_PASSWORD=' .env; then
+    sed -i "s|^BOOTSTRAP_ADMIN_PASSWORD=.*|BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_PASSWORD}|" .env
+  else
+    echo "BOOTSTRAP_ADMIN_PASSWORD=${BOOTSTRAP_PASSWORD}" >> .env
+  fi
 fi
 
 # Repair the placeholder left by older setup versions, but never rotate a real
@@ -217,11 +239,16 @@ echo ""
 echo -e "  🌐 URL:       ${CYAN}https://${SERVER_HOST}:${HTTPS_PORT}${RESET}"
 echo -e "  🌐 HTTP:      ${CYAN}http://${SERVER_HOST}:${HTTP_PORT}${RESET}  (redirects to HTTPS)"
 echo ""
-echo -e "  ${BOLD}Default admin credentials:${RESET}"
-echo -e "  👤 Email:     ${YELLOW}admin@sec360.local${RESET}"
-echo -e "  🔑 Password:  ${YELLOW}Admin123!${RESET}"
-echo ""
-echo -e "  ${RED}${BOLD}⚠  Change the admin password immediately after first login!${RESET}"
+echo -e "  ${BOLD}Bootstrap administrator:${RESET}"
+echo -e "  👤 Email:     ${YELLOW}$(grep '^BOOTSTRAP_ADMIN_EMAIL=' .env | cut -d= -f2-)${RESET}"
+if [[ -n "${BOOTSTRAP_PASSWORD:-}" ]]; then
+  echo -e "  🔑 First-run password: ${YELLOW}${BOOTSTRAP_PASSWORD}${RESET}"
+  echo -e "     (used only if the login-user database is empty)"
+  echo ""
+  echo -e "  ${RED}${BOLD}⚠  This password must be changed at first login.${RESET}"
+else
+  echo -e "  🔑 Existing user database detected; current credentials are unchanged.${RESET}"
+fi
 echo ""
 echo -e "  ${BOLD}Useful commands:${RESET}"
 echo "  View logs:     $COMPOSE -f docker-compose.prod.yml logs -f"
@@ -231,7 +258,7 @@ echo "                 $COMPOSE -f docker-compose.prod.yml build && \\"
 echo "                 $COMPOSE -f docker-compose.prod.yml up -d"
 echo ""
 echo -e "  ${BOLD}Next steps:${RESET}"
-echo "  1. Log in and change the admin password (Settings → Users)"
+echo "  1. Log in and change the bootstrap password (Settings → My Account)"
 echo "  2. Invite your team (Settings → Users → Invite)"
 echo "  3. Connect your integrations (Integrations page)"
 echo "  4. Install a CA-signed certificate from Settings → HTTPS Certificate"

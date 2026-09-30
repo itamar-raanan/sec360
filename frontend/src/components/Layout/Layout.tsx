@@ -9,7 +9,7 @@ import { useAuthStore } from '../../store/auth'
 import { useThemeStore } from '../../store/theme'
 
 export default function Layout() {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, user } = useAuthStore()
   const { theme } = useThemeStore()
   const location = useLocation()
   const [cmdOpen, setCmdOpen] = useState(false)
@@ -50,6 +50,10 @@ export default function Layout() {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />
+  }
+
+  if (user?.must_change_password && location.pathname !== '/settings') {
+    return <Navigate to="/settings" replace />
   }
 
   return (

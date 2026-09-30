@@ -10,16 +10,9 @@ from app.core.database import AsyncSessionLocal
 from app.core.security import decode_token, has_role
 from app.models.user import AuthUser
 from app.models.audit import AuditLog
+from app.core.request import get_client_ip
 
 security = HTTPBearer(auto_error=False)
-
-
-def _get_client_ip(request: Request) -> str:
-    """Return the real client IP, honouring X-Forwarded-For from a trusted proxy."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -85,6 +78,18 @@ async def get_current_user(
 
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+
+    password_change_paths = {
+        "/api/auth/me",
+        "/api/auth/logout",
+        "/api/settings/me",
+        "/api/settings/me/password",
+    }
+    if user.must_change_password and request.url.path not in password_change_paths:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password change required before continuing",
+        )
 
     return user
 
@@ -180,7 +185,7 @@ async def audit_action(
         resource_type=resource_type,
         resource_id=resource_id,
         timestamp=datetime.now(timezone.utc),
-        ip_address=_get_client_ip(request),
+        ip_address=get_client_ip(request),
         details=merged,
     )
     db.add(log)

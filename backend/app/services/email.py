@@ -31,12 +31,13 @@ def send_email(
 ) -> bool:
     """
     Send an email synchronously. Returns True on success.
-    Falls back to logging when SMTP is not configured.
+    Logs metadata only when SMTP is not configured; message bodies can contain
+    credentials or invitation tokens and must never be written to logs.
     """
     if not _is_configured():
         logger.info(
-            "SMTP not configured — email not sent. Subject: %s | To: %s | Body preview: %.300s",
-            subject, to, text_body or html_body,
+            "SMTP not configured — email not sent. Subject: %s | To: %s",
+            subject, to,
         )
         return False
 
@@ -114,7 +115,6 @@ def send_invitation_email(to_email: str, role: str, token: str, invited_by: str)
         f"You've been invited to SEC360 as {role_label} by {invited_by}.\n\n"
         f"Accept your invitation here (expires in 7 days):\n{accept_url}\n"
     )
-    logger.info("Invitation link for %s: %s", to_email, accept_url)
     return send_email([to_email], "You've been invited to SEC360", html, text)
 
 

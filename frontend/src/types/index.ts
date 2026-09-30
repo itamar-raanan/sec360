@@ -12,6 +12,7 @@ export interface AuthUser {
   role: AuthRole
   is_active: boolean
   auth_method: 'local' | 'sso' | 'radius'
+  must_change_password: boolean
 }
 
 export interface UserSources {

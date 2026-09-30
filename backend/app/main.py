@@ -39,6 +39,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info('"Starting Sec360 API"')
+    from app.core.config import validate_runtime_security
+
+    validate_runtime_security()
     await init_db()
     await _seed_auth_defaults()
     await _seed_integration_defaults()
@@ -52,26 +55,58 @@ async def lifespan(app: FastAPI):
 
 
 async def _seed_auth_defaults():
-    """Create default admin user on first run if no auth users exist."""
-    from sqlalchemy import select
+    """Create an explicit, one-time bootstrap admin on an empty installation."""
+    from sqlalchemy import func, select
     from app.core.database import AsyncSessionLocal
-    from app.core.security import hash_password
+    from app.core.security import hash_password, verify_password
     from app.models.user import AuthUser
 
     try:
         async with AsyncSessionLocal() as db:
-            count = (await db.execute(select(AuthUser))).scalars().first()
-            if count is None:
+            first_user = (await db.execute(select(AuthUser))).scalars().first()
+            password = settings.BOOTSTRAP_ADMIN_PASSWORD or ""
+            valid_bootstrap_password = len(password) >= 12 and not password.startswith("CHANGE_ME")
+            if first_user is None:
+                if not valid_bootstrap_password:
+                    raise RuntimeError(
+                        "No users exist. Set BOOTSTRAP_ADMIN_PASSWORD to a unique "
+                        "value of at least 12 characters, then restart SEC360."
+                    )
                 db.add(AuthUser(
-                    email="admin@sec360.local",
-                    hashed_password=hash_password("Admin123!"),
+                    email=settings.BOOTSTRAP_ADMIN_EMAIL.strip().lower(),
+                    hashed_password=hash_password(password),
                     role="admin",
                     is_active=True,
+                    must_change_password=True,
                 ))
                 await db.commit()
-                logger.info('"Default admin created: admin@sec360.local / Admin123!"')
+                logger.warning(
+                    '"Bootstrap admin created for %s; password change is required"',
+                    settings.BOOTSTRAP_ADMIN_EMAIL.strip().lower(),
+                )
+                return
+
+            # Upgraded installations may still contain the historical public
+            # default. Invalidate it before the API begins serving requests.
+            legacy_admin = (await db.execute(
+                select(AuthUser).where(func.lower(AuthUser.email) == "admin@sec360.local")
+            )).scalar_one_or_none()
+            if legacy_admin and verify_password("Admin123!", legacy_admin.hashed_password):
+                if not valid_bootstrap_password:
+                    raise RuntimeError(
+                        "The legacy default administrator password is still active. "
+                        "Set BOOTSTRAP_ADMIN_PASSWORD to a unique value of at least "
+                        "12 characters, then restart SEC360."
+                    )
+                legacy_admin.hashed_password = hash_password(password)
+                legacy_admin.must_change_password = True
+                await db.commit()
+                logger.warning(
+                    '"Legacy default administrator password invalidated; password change is required"'
+                )
     except Exception as e:
-        logger.warning('"Could not seed default admin: %s"', e)
+        logger.error('"Could not create bootstrap admin: %s"', e)
+        raise
 
 
 async def _seed_integration_defaults():

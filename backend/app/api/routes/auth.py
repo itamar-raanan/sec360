@@ -15,6 +15,7 @@ from app.api.deps import get_db, get_current_user, audit_action
 from app.core.config import settings
 from app.core.security import verify_password, hash_password, create_access_token, create_refresh_token, create_sso_mfa_pending_token, decode_token
 from app.core.rate_limit import check_rate_limit, record_failure, clear_failures
+from app.core.request import get_client_ip
 from app.models.user import AuthUser
 from app.schemas.user import LoginRequest, TokenResponse, AuthUserResponse
 
@@ -31,13 +32,6 @@ class RadiusLoginRequest(BaseModel):
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-def _get_client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
 
 
 def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
@@ -147,7 +141,7 @@ async def login(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
-    ip = _get_client_ip(request)
+    ip = get_client_ip(request)
     await check_rate_limit(data.email, ip)
 
     result = await db.execute(
@@ -269,7 +263,7 @@ async def radius_login(
     db: AsyncSession = Depends(get_db),
 ):
     """Backward-compatible endpoint for explicitly provisioned RADIUS users."""
-    ip = _get_client_ip(request)
+    ip = get_client_ip(request)
     await check_rate_limit(data.email, ip)
     user = (await db.execute(
         select(AuthUser).where(func.lower(AuthUser.email) == data.email.strip().lower())

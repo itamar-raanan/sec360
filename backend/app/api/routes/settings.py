@@ -180,6 +180,7 @@ class RadiusTestRequest(BaseModel):
 
 class SiemSettingsIn(BaseModel):
     enabled: bool = False
+    transport: Literal["http", "syslog"] = "http"
     url: str = Field(default="", max_length=2000)
     auth_type: Literal["none", "basic", "bearer", "api_key"] = "none"
     username: str = Field(default="", max_length=255)
@@ -188,6 +189,9 @@ class SiemSettingsIn(BaseModel):
     payload_format: Literal["json", "ndjson"] = "json"
     index_prefix: str = Field(default="sec360", max_length=100)
     timeout_seconds: int = Field(default=10, ge=1, le=60)
+    syslog_host: str = Field(default="", max_length=253)
+    syslog_port: int = Field(default=514, ge=1, le=65535)
+    syslog_protocol: Literal["udp", "tcp"] = "udp"
 
 
 async def _read_upload(upload: UploadFile) -> bytes:
@@ -944,6 +948,7 @@ async def get_siem_settings(
     ) or 0
     return {
         "enabled": bool(cfg and cfg.siem_enabled),
+        "transport": config.get("transport", "http"),
         "url": config.get("url", ""),
         "auth_type": config.get("auth_type", "none"),
         "username": config.get("username", ""),
@@ -952,6 +957,9 @@ async def get_siem_settings(
         "payload_format": config.get("payload_format", "json"),
         "index_prefix": config.get("index_prefix", "sec360"),
         "timeout_seconds": config.get("timeout_seconds", 10),
+        "syslog_host": config.get("syslog_host", ""),
+        "syslog_port": config.get("syslog_port", 514),
+        "syslog_protocol": config.get("syslog_protocol", "udp"),
         "pending_deliveries": pending,
         "failed_deliveries": failed,
     }
@@ -964,15 +972,21 @@ def _validated_siem_config(
     require_connection: bool = False,
 ) -> dict:
     url = data.url.strip()
+    syslog_host = data.syslog_host.strip()
     connection_required = data.enabled or require_connection
-    if connection_required and not (url.startswith("https://") or url.startswith("http://")):
+    if connection_required and data.transport == "http" and not (
+        url.startswith("https://") or url.startswith("http://")
+    ):
         raise HTTPException(400, "SIEM URL must start with http:// or https://")
+    if connection_required and data.transport == "syslog" and not syslog_host:
+        raise HTTPException(400, "Elastic Agent/syslog host is required")
     secret = data.secret or (previous or {}).get("secret", "")
-    if connection_required and data.auth_type != "none" and not secret:
+    if connection_required and data.transport == "http" and data.auth_type != "none" and not secret:
         raise HTTPException(400, "Authentication secret is required")
-    if connection_required and data.auth_type == "basic" and not data.username.strip():
+    if connection_required and data.transport == "http" and data.auth_type == "basic" and not data.username.strip():
         raise HTTPException(400, "Username is required for basic authentication")
     return {
+        "transport": data.transport,
         "url": url,
         "auth_type": data.auth_type,
         "username": data.username.strip(),
@@ -981,6 +995,9 @@ def _validated_siem_config(
         "payload_format": data.payload_format,
         "index_prefix": data.index_prefix.strip() or "sec360",
         "timeout_seconds": data.timeout_seconds,
+        "syslog_host": syslog_host,
+        "syslog_port": data.syslog_port,
+        "syslog_protocol": data.syslog_protocol,
     }
 
 
@@ -1003,7 +1020,11 @@ async def update_siem_settings(
         "update_siem_settings", "system_settings", "1", request, db, current,
         {
             "enabled": data.enabled,
-            "url": config["url"],
+            "transport": config["transport"],
+            "target": (
+                config["url"] if config["transport"] == "http"
+                else f"{config['syslog_protocol']}://{config['syslog_host']}:{config['syslog_port']}"
+            ),
             "auth_type": config["auth_type"],
             "payload_format": config["payload_format"],
             "verify_ssl": config["verify_ssl"],
@@ -1043,5 +1064,17 @@ async def test_siem_settings(
         await send_ecs_document(config, sample)
     except Exception as exc:
         raise HTTPException(502, f"SIEM connection failed: {str(exc)[:500]}") from exc
-    await audit_action("test_siem_connection", "system_settings", "1", request, db, current, {"url": config["url"]})
-    return {"success": True, "message": "ECS test event delivered successfully"}
+    target = (
+        config["url"] if config["transport"] == "http"
+        else f"{config['syslog_protocol']}://{config['syslog_host']}:{config['syslog_port']}"
+    )
+    await audit_action(
+        "test_siem_connection", "system_settings", "1", request, db, current,
+        {"transport": config["transport"], "target": target},
+    )
+    delivery_note = (
+        "UDP datagram sent successfully (UDP does not provide receiver acknowledgement)"
+        if config["transport"] == "syslog" and config["syslog_protocol"] == "udp"
+        else "ECS test event delivered successfully"
+    )
+    return {"success": True, "message": delivery_note}

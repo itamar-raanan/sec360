@@ -91,6 +91,8 @@ services:
     # An empty HOST_DNS leaves Docker's automatically managed resolver intact.
     # Set an explicit resolver only for private on-premises DNS zones.
     dns: ${HOST_DNS:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy

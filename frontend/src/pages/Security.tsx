@@ -69,6 +69,7 @@ interface ChangeEventEntry {
 
 interface SiemSettings {
   enabled: boolean
+  transport: 'http' | 'syslog'
   url: string
   auth_type: 'none' | 'basic' | 'bearer' | 'api_key'
   username: string
@@ -78,6 +79,9 @@ interface SiemSettings {
   payload_format: 'json' | 'ndjson'
   index_prefix: string
   timeout_seconds: number
+  syslog_host: string
+  syslog_port: number
+  syslog_protocol: 'udp' | 'tcp'
   pending_deliveries: number
   failed_deliveries: number
 }
@@ -833,17 +837,19 @@ function ChangeLogTab() {
 function SiemTab() {
   const qc = useQueryClient()
   const [form, setForm] = useState<SiemSettings>({
-    enabled: false, url: '', auth_type: 'none', username: '', secret: '', has_secret: false,
+    enabled: false, transport: 'http', url: '', auth_type: 'none', username: '', secret: '', has_secret: false,
     verify_ssl: true, payload_format: 'json', index_prefix: 'sec360', timeout_seconds: 10,
+    syslog_host: '', syslog_port: 514, syslog_protocol: 'udp',
     pending_deliveries: 0, failed_deliveries: 0,
   })
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const { data } = useQuery<SiemSettings>({ queryKey: ['siem-settings'], queryFn: () => apiClient.get('/settings/siem').then(r => r.data) })
   useEffect(() => { if (data) setForm(current => ({ ...current, ...data, secret: '' })) }, [data])
   const payload = () => ({
-    enabled: form.enabled, url: form.url, auth_type: form.auth_type, username: form.username,
+    enabled: form.enabled, transport: form.transport, url: form.url, auth_type: form.auth_type, username: form.username,
     secret: form.secret ?? '', verify_ssl: form.verify_ssl, payload_format: form.payload_format,
     index_prefix: form.index_prefix, timeout_seconds: form.timeout_seconds,
+    syslog_host: form.syslog_host, syslog_port: form.syslog_port, syslog_protocol: form.syslog_protocol,
   })
   const save = useMutation({
     mutationFn: () => apiClient.put('/settings/siem', payload()),
@@ -858,7 +864,7 @@ function SiemTab() {
   const fieldClass = 'w-full rounded-lg border border-white/[0.08] bg-zinc-950 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500'
   return (
     <div className="max-w-3xl space-y-5">
-      <div><h2 className="text-sm font-semibold text-white">SIEM forwarding</h2><p className="mt-0.5 text-xs text-zinc-500">Send change events and audit logs as ECS 8.11 JSON over HTTP(S).</p></div>
+      <div><h2 className="text-sm font-semibold text-white">SIEM forwarding</h2><p className="mt-0.5 text-xs text-zinc-500">Send change events and audit logs as ECS 8.11 JSON over HTTP(S) or RFC 5424 syslog.</p></div>
       {message && <Alert type={message.type} msg={message.text} />}
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl p-4" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}><div className="text-xs text-zinc-500">Queued</div><div className="mt-1 text-xl font-bold text-white">{form.pending_deliveries}</div></div>
@@ -866,13 +872,19 @@ function SiemTab() {
       </div>
       <div className="space-y-4 rounded-xl p-5" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
         <label className="flex items-center justify-between"><span><span className="block text-sm font-medium text-white">Enable forwarding</span><span className="text-xs text-zinc-500">The durable queue is delivered every minute.</span></span><input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} className="h-4 w-4 accent-emerald-500" /></label>
-        <div><label className="mb-1 block text-xs text-zinc-400">HTTP ingestion URL</label><input className={fieldClass} value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} placeholder="https://siem.example.com/api/events" /></div>
-        <div className="grid grid-cols-2 gap-3"><div><label className="mb-1 block text-xs text-zinc-400">Authentication</label><select className={fieldClass} value={form.auth_type} onChange={e => setForm({ ...form, auth_type: e.target.value as SiemSettings['auth_type'] })}><option value="none">None</option><option value="bearer">Bearer token</option><option value="api_key">Elastic API key</option><option value="basic">Basic auth</option></select></div><div><label className="mb-1 block text-xs text-zinc-400">Payload</label><select className={fieldClass} value={form.payload_format} onChange={e => setForm({ ...form, payload_format: e.target.value as SiemSettings['payload_format'] })}><option value="json">ECS JSON</option><option value="ndjson">Elastic Bulk NDJSON</option></select></div></div>
-        {form.auth_type === 'basic' && <div><label className="mb-1 block text-xs text-zinc-400">Username</label><input className={fieldClass} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} /></div>}
-        {form.auth_type !== 'none' && <div><label className="mb-1 block text-xs text-zinc-400">{form.has_secret ? 'Secret (leave blank to keep saved value)' : 'Secret'}</label><input type="password" className={fieldClass} value={form.secret ?? ''} onChange={e => setForm({ ...form, secret: e.target.value })} /></div>}
-        {form.payload_format === 'ndjson' && <div><label className="mb-1 block text-xs text-zinc-400">Daily index prefix</label><input className={fieldClass} value={form.index_prefix} onChange={e => setForm({ ...form, index_prefix: e.target.value })} /></div>}
-        <label className="flex items-center gap-2 text-xs text-zinc-300"><input type="checkbox" checked={form.verify_ssl} onChange={e => setForm({ ...form, verify_ssl: e.target.checked })} className="accent-emerald-500" />Verify TLS certificate</label>
-        <div className="flex gap-2"><button onClick={() => test.mutate()} disabled={test.isPending || !form.url} className="flex items-center gap-2 rounded-lg border border-emerald-500/30 px-4 py-2 text-sm text-emerald-300 disabled:opacity-40"><Send size={14} />{test.isPending ? 'Testing…' : 'Send test event'}</button><button onClick={() => save.mutate()} disabled={save.isPending} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-40">{save.isPending ? 'Saving…' : 'Save settings'}</button></div>
+        <div><label className="mb-1 block text-xs text-zinc-400">Delivery method</label><select className={fieldClass} value={form.transport} onChange={e => setForm({ ...form, transport: e.target.value as SiemSettings['transport'] })}><option value="http">HTTP(S) endpoint</option><option value="syslog">Elastic Agent / syslog</option></select></div>
+        {form.transport === 'http' ? <>
+          <div><label className="mb-1 block text-xs text-zinc-400">HTTP ingestion URL</label><input className={fieldClass} value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} placeholder="https://siem.example.com/api/events" /></div>
+          <div className="grid grid-cols-2 gap-3"><div><label className="mb-1 block text-xs text-zinc-400">Authentication</label><select className={fieldClass} value={form.auth_type} onChange={e => setForm({ ...form, auth_type: e.target.value as SiemSettings['auth_type'] })}><option value="none">None</option><option value="bearer">Bearer token</option><option value="api_key">Elastic API key</option><option value="basic">Basic auth</option></select></div><div><label className="mb-1 block text-xs text-zinc-400">Payload</label><select className={fieldClass} value={form.payload_format} onChange={e => setForm({ ...form, payload_format: e.target.value as SiemSettings['payload_format'] })}><option value="json">ECS JSON</option><option value="ndjson">Elastic Bulk NDJSON</option></select></div></div>
+          {form.auth_type === 'basic' && <div><label className="mb-1 block text-xs text-zinc-400">Username</label><input className={fieldClass} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} /></div>}
+          {form.auth_type !== 'none' && <div><label className="mb-1 block text-xs text-zinc-400">{form.has_secret ? 'Secret (leave blank to keep saved value)' : 'Secret'}</label><input type="password" className={fieldClass} value={form.secret ?? ''} onChange={e => setForm({ ...form, secret: e.target.value })} /></div>}
+          {form.payload_format === 'ndjson' && <div><label className="mb-1 block text-xs text-zinc-400">Daily index prefix</label><input className={fieldClass} value={form.index_prefix} onChange={e => setForm({ ...form, index_prefix: e.target.value })} /></div>}
+          <label className="flex items-center gap-2 text-xs text-zinc-300"><input type="checkbox" checked={form.verify_ssl} onChange={e => setForm({ ...form, verify_ssl: e.target.checked })} className="accent-emerald-500" />Verify TLS certificate</label>
+        </> : <>
+          <div className="grid grid-cols-[1fr_120px] gap-3"><div><label className="mb-1 block text-xs text-zinc-400">Elastic Agent host</label><input className={fieldClass} value={form.syslog_host} onChange={e => setForm({ ...form, syslog_host: e.target.value })} placeholder="host.docker.internal" /></div><div><label className="mb-1 block text-xs text-zinc-400">Port</label><input type="number" min={1} max={65535} className={fieldClass} value={form.syslog_port} onChange={e => setForm({ ...form, syslog_port: Number(e.target.value) })} /></div></div>
+          <div><label className="mb-1 block text-xs text-zinc-400">Protocol</label><select className={fieldClass} value={form.syslog_protocol} onChange={e => setForm({ ...form, syslog_protocol: e.target.value as SiemSettings['syslog_protocol'] })}><option value="udp">UDP — standard port 514</option><option value="tcp">TCP — delivery connection verified</option></select><p className="mt-1.5 text-[11px] leading-4 text-zinc-500">Events use RFC 5424 framing with compact ECS JSON in the message field. For an agent on this server, enter <span className="font-mono text-zinc-400">127.0.0.1</span> or <span className="font-mono text-zinc-400">host.docker.internal</span>; SEC360 routes loopback through the Docker host gateway.</p></div>
+        </>}
+        <div className="flex gap-2"><button onClick={() => test.mutate()} disabled={test.isPending || (form.transport === 'http' ? !form.url : !form.syslog_host)} className="flex items-center gap-2 rounded-lg border border-emerald-500/30 px-4 py-2 text-sm text-emerald-300 disabled:opacity-40"><Send size={14} />{test.isPending ? 'Testing…' : 'Send test event'}</button><button onClick={() => save.mutate()} disabled={save.isPending} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-40">{save.isPending ? 'Saving…' : 'Save settings'}</button></div>
       </div>
     </div>
   )

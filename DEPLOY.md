@@ -150,6 +150,20 @@ Live Active Directory synchronization requires LDAPS on port 636 with a certific
 by the backend container. Plain LDAP binds are rejected. Production HTTP API, SIEM, Puppet,
 ADFS, and SentinelOne integration URLs must use HTTPS.
 
+### Elastic Agent syslog forwarding
+
+SEC360 can forward ECS events to an Elastic Agent listener instead of posting directly to
+the SIEM. In **Security → SIEM**, choose **Elastic Agent / syslog**, enter the listener host,
+port `514`, and select UDP or TCP. Messages use RFC 5424 with compact ECS JSON in the message
+field. Configure Elastic Agent to parse RFC 5424 and decode the JSON message before forwarding.
+
+When Elastic Agent runs on the same Docker server, enter `127.0.0.1` or
+`host.docker.internal` as the host. SEC360 translates loopback syslog destinations to
+`host.docker.internal`, and the Compose files map that name to the Docker host gateway.
+Elastic Agent must listen on an address reachable from Docker (not only the host loopback
+interface), and the host firewall must allow port 514 from the Docker network. TCP confirms
+that the connection accepted the event; UDP has no receiver acknowledgement.
+
 After the first startup, administrators can replace the HTTPS certificate from **Settings → HTTPS Certificate**. Upload the PEM/CRT certificate bundle and its matching unencrypted private key. SEC360 validates the pair and reloads nginx automatically; the certificate persists in the `sec360_tls_data` Docker volume.
 
 ---

@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.outbound import validate_outbound_url
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ class PuppetCollector:
         if not self.base_url:
             return {"success": False, "message": "No base URL configured"}
         try:
+            await validate_outbound_url(self.base_url)
             async with httpx.AsyncClient(timeout=15.0, verify=self.verify_ssl) as client:
                 nodes = await client.get(
                     f"{self.base_url}/pdb/query/v4/nodes",
@@ -71,6 +73,7 @@ class PuppetCollector:
             return {"records_synced": 0, "error": "No base URL configured"}
 
         try:
+            await validate_outbound_url(self.base_url)
             nodes = await self._fetch_nodes()
             facts = await self._fetch_facts()
             now = datetime.now(timezone.utc)

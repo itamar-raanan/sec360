@@ -25,7 +25,7 @@ function focusHandlers() {
 export default function AcceptInvite() {
   const [params] = useSearchParams()
   const navigate = useNavigate()
-  const { setAuth } = useAuthStore()
+  const { setAuth, logout } = useAuthStore()
   const token = params.get('token') ?? ''
 
   const [step, setStep] = useState<Step>('loading')
@@ -72,8 +72,9 @@ export default function AcceptInvite() {
     setError(''); setLoading(true)
     try {
       await apiClient.post('/settings/me/mfa/enable', { code: totpCode })
+      await logout()
       setStep('success')
-      setTimeout(() => navigate('/dashboard'), 2000)
+      setTimeout(() => navigate('/login'), 2000)
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       setError(msg || 'Invalid code — try again')
@@ -154,7 +155,7 @@ export default function AcceptInvite() {
                 <CheckCircle2 size={22} style={{ color: 'var(--accent)' }} />
               </div>
               <h2 className="text-[15px] font-semibold text-white">Account activated!</h2>
-              <p className="text-[13px]" style={{ color: 'var(--text-4)' }}>Redirecting to your dashboard…</p>
+              <p className="text-[13px]" style={{ color: 'var(--text-4)' }}>Redirecting to sign in with 2FA…</p>
             </div>
           )}
 

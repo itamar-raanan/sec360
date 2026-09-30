@@ -1,8 +1,10 @@
 import asyncio
+import copy
 import logging
 import secrets
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlsplit
 
 import pyotp
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -16,7 +18,9 @@ from app.core.config import settings
 from app.core.security import verify_password, hash_password, create_access_token, create_refresh_token, create_sso_mfa_pending_token, decode_token
 from app.core.rate_limit import check_rate_limit, record_failure, clear_failures
 from app.core.request import get_client_ip
-from app.models.user import AuthUser
+from app.models.user import AuthSession, AuthUser
+from app.models.system_settings import SystemSettings
+from app.services.auth_sessions import create_session, hash_refresh_jti, revoke_session
 from app.schemas.user import LoginRequest, TokenResponse, AuthUserResponse
 
 
@@ -34,7 +38,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _set_auth_cookies(response: Response, access_token: str, refresh_token: str) -> None:
+def _set_auth_cookies(
+    response: Response,
+    access_token: str,
+    refresh_token: str,
+    access_seconds: int,
+    session_seconds: int,
+) -> None:
     common = dict(
         httponly=True,
         secure=settings.COOKIE_SECURE,
@@ -44,13 +54,13 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
     response.set_cookie(
         key="sec360_token",
         value=access_token,
-        max_age=settings.JWT_EXPIRE_MINUTES * 60,
+        max_age=access_seconds,
         **common,
     )
     response.set_cookie(
         key="sec360_refresh",
         value=refresh_token,
-        max_age=settings.JWT_REFRESH_EXPIRE_HOURS * 3600,
+        max_age=session_seconds,
         path="/api/auth/refresh",
         **{k: v for k, v in common.items() if k != "path"},
     )
@@ -61,15 +71,54 @@ def _clear_auth_cookies(response: Response) -> None:
     response.delete_cookie("sec360_refresh", path="/api/auth/refresh")
 
 
-def _issue_login_response(user: AuthUser, response: Response) -> TokenResponse:
-    token_data = {"sub": str(user.id), "email": user.email, "role": user.role}
-    access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token(token_data)
-    _set_auth_cookies(response, access_token, refresh_token)
+async def _auth_policy(db: AsyncSession) -> tuple[SystemSettings | None, timedelta, timedelta]:
+    cfg = (await db.execute(
+        select(SystemSettings).where(SystemSettings.id == 1)
+    )).scalar_one_or_none()
+    timeout_hours = max(1, min(int(cfg.session_timeout_hours if cfg else settings.JWT_REFRESH_EXPIRE_HOURS), 720))
+    session_lifetime = timedelta(hours=timeout_hours)
+    access_lifetime = min(timedelta(minutes=settings.JWT_EXPIRE_MINUTES), session_lifetime)
+    return cfg, access_lifetime, session_lifetime
+
+
+def _user_response(user: AuthUser, cfg: SystemSettings | None) -> AuthUserResponse:
+    result = AuthUserResponse.model_validate(user)
+    result.mfa_setup_required = bool(
+        cfg
+        and (cfg.enforce_mfa or (user.auth_method == "sso" and cfg.saml_require_mfa))
+        and not user.mfa_enabled
+    )
+    return result
+
+
+async def _issue_login_response(
+    user: AuthUser,
+    response: Response,
+    db: AsyncSession,
+) -> TokenResponse:
+    cfg, access_lifetime, session_lifetime = await _auth_policy(db)
+    session, refresh_jti = await create_session(db, user, session_lifetime)
+    token_data = {
+        "sub": str(user.id),
+        "email": user.email,
+        "role": user.role,
+        "sid": str(session.id),
+    }
+    access_token = create_access_token(token_data, expires_delta=access_lifetime)
+    refresh_token = create_refresh_token(
+        {**token_data, "jti": refresh_jti}, expires_delta=session_lifetime
+    )
+    _set_auth_cookies(
+        response,
+        access_token,
+        refresh_token,
+        int(access_lifetime.total_seconds()),
+        int(session_lifetime.total_seconds()),
+    )
     return TokenResponse(
         access_token=access_token,
         token_type="bearer",
-        user=AuthUserResponse.model_validate(user),
+        user=_user_response(user, cfg),
     )
 
 
@@ -116,10 +165,13 @@ async def _authenticate_radius_user(
         logger.warning("RADIUS login rejected for %s from %s: %s", data.email, ip, reason)
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    require_mfa = bool(radius.get("require_mfa")) or user.mfa_enabled
+    require_mfa = bool(radius.get("require_mfa")) or bool(cfg.enforce_mfa) or user.mfa_enabled
     if require_mfa:
         if not user.mfa_enabled or not user.mfa_secret:
-            raise HTTPException(status_code=403, detail="SEC360 2FA is required but is not configured for this account")
+            # The authenticated session is restricted to MFA enrollment routes.
+            await clear_failures(data.email, ip)
+            await audit_action("radius_login_mfa_enrollment_required", "auth_user", str(user.id), request, db, user)
+            return await _issue_login_response(user, response, db)
         if not data.totp_code:
             return {"mfa_required": True}
         if not pyotp.TOTP(user.mfa_secret).verify(data.totp_code, valid_window=1):
@@ -129,7 +181,7 @@ async def _authenticate_radius_user(
     await clear_failures(data.email, ip)
     await audit_action("radius_login", "auth_user", str(user.id), request, db, user)
     logger.info("Successful RADIUS login for %s from %s", user.email, ip)
-    return _issue_login_response(user, response)
+    return await _issue_login_response(user, response, db)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -191,11 +243,27 @@ async def login(
     logger.info("Successful login for %s from %s", data.email, ip)
     await audit_action("login", "auth_user", str(user.id), request, db, user)
 
-    return _issue_login_response(user, response)
+    return await _issue_login_response(user, response, db)
 
 
 @router.post("/logout")
-async def logout(response: Response, _: AuthUser = Depends(get_current_user)):
+async def logout(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    _: AuthUser = Depends(get_current_user),
+):
+    token = request.cookies.get("sec360_token")
+    if not token:
+        authorization = request.headers.get("authorization", "")
+        if authorization.lower().startswith("bearer "):
+            token = authorization[7:].strip()
+    if token:
+        try:
+            session_id = uuid.UUID(decode_token(token).get("sid", ""))
+            await revoke_session(db, session_id)
+        except (ValueError, AttributeError):
+            pass
     _clear_auth_cookies(response)
     return {"message": "Logged out"}
 
@@ -219,19 +287,53 @@ async def refresh_token(request: Request, response: Response, db: AsyncSession =
         user_id = uuid.UUID(payload.get("sub", ""))
     except (ValueError, AttributeError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token payload")
+    try:
+        session_id = uuid.UUID(payload.get("sid", ""))
+        refresh_jti = payload["jti"]
+    except (ValueError, TypeError, KeyError, AttributeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token payload")
+
+    session = (await db.execute(
+        select(AuthSession).where(
+            AuthSession.id == session_id,
+            AuthSession.user_id == user_id,
+            AuthSession.revoked_at.is_(None),
+            AuthSession.expires_at > datetime.now(timezone.utc),
+        ).with_for_update()
+    )).scalar_one_or_none()
+    if session is None or not secrets.compare_digest(session.refresh_jti_hash, hash_refresh_jti(refresh_jti)):
+        _clear_auth_cookies(response)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired or already used")
+
     result = await db.execute(select(AuthUser).where(AuthUser.id == user_id))
     user = result.scalar_one_or_none()
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
-    token_data = {"sub": str(user.id), "email": user.email, "role": user.role}
-    new_access = create_access_token(token_data)
-    new_refresh = create_refresh_token(token_data)
-    _set_auth_cookies(response, new_access, new_refresh)
+    cfg, access_lifetime, _ = await _auth_policy(db)
+    expires_at = session.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    remaining = expires_at - datetime.now(timezone.utc)
+    if remaining <= timedelta(0):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+    new_jti = secrets.token_urlsafe(32)
+    session.refresh_jti_hash = hash_refresh_jti(new_jti)
+    session.last_used_at = datetime.now(timezone.utc)
+    token_data = {"sub": str(user.id), "email": user.email, "role": user.role, "sid": str(session.id)}
+    new_access = create_access_token(token_data, expires_delta=min(access_lifetime, remaining))
+    new_refresh = create_refresh_token({**token_data, "jti": new_jti}, expires_delta=remaining)
+    _set_auth_cookies(
+        response,
+        new_access,
+        new_refresh,
+        int(min(access_lifetime, remaining).total_seconds()),
+        int(remaining.total_seconds()),
+    )
 
     return TokenResponse(
         access_token=new_access,
-        user=AuthUserResponse.model_validate(user),
+        user=_user_response(user, cfg),
     )
 
 
@@ -275,8 +377,12 @@ async def radius_login(
 
 
 @router.get("/me", response_model=AuthUserResponse)
-async def get_me(current_user: AuthUser = Depends(get_current_user)):
-    return AuthUserResponse.model_validate(current_user)
+async def get_me(
+    db: AsyncSession = Depends(get_db),
+    current_user: AuthUser = Depends(get_current_user),
+):
+    cfg, _, _ = await _auth_policy(db)
+    return _user_response(current_user, cfg)
 
 
 # ── Invitation acceptance ─────────────────────────────────────────────────────
@@ -306,8 +412,10 @@ async def accept_invite(
     db: AsyncSession = Depends(get_db),
 ):
     """Public endpoint — set password and activate the invited account."""
-    if len(data.password) < 8:
-        raise HTTPException(400, "Password must be at least 8 characters")
+    cfg, _, _ = await _auth_policy(db)
+    minimum_length = max(8, min(int(cfg.min_password_length if cfg else 8), 128))
+    if len(data.password) < minimum_length:
+        raise HTTPException(400, f"Password must be at least {minimum_length} characters")
 
     now = datetime.now(timezone.utc)
     result = await db.execute(
@@ -329,16 +437,7 @@ async def accept_invite(
     await db.flush()
 
     logger.info("Invite accepted for %s", user.email)
-    token_data = {"sub": str(user.id), "email": user.email, "role": user.role}
-    access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token(token_data)
-    _set_auth_cookies(response, access_token, refresh_token)
-
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": AuthUserResponse.model_validate(user).model_dump(),
-    }
+    return await _issue_login_response(user, response, db)
 
 
 # ── SAML SSO ──────────────────────────────────────────────────────────────────
@@ -360,6 +459,16 @@ def _first_saml_value(value) -> str:
     if isinstance(value, (list, tuple)):
         value = value[0] if value else ""
     return str(value or "").strip()
+
+
+def _canonical_frontend_base() -> str:
+    base = settings.APP_URL.rstrip("/")
+    parsed = urlsplit(base)
+    if not parsed.netloc or parsed.scheme not in {"http", "https"}:
+        raise HTTPException(status_code=503, detail="APP_URL must be an absolute URL before SSO can be used")
+    if settings.ENVIRONMENT.strip().lower() == "production" and parsed.scheme != "https":
+        raise HTTPException(status_code=503, detail="APP_URL must use HTTPS before SSO can be used in production")
+    return base
 
 
 def _extract_saml_email(auth) -> str:
@@ -387,9 +496,10 @@ def _extract_saml_email(auth) -> str:
     return name_id.lower()
 
 def _build_saml_request(request: Request, post_data: dict | None = None) -> dict:
-    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-    host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
-    port = request.url.port
+    canonical = urlsplit(_canonical_frontend_base())
+    scheme = canonical.scheme
+    host = canonical.netloc
+    port = canonical.port
     return {
         "https": "on" if scheme == "https" else "off",
         "http_host": host,
@@ -400,7 +510,7 @@ def _build_saml_request(request: Request, post_data: dict | None = None) -> dict
     }
 
 
-async def _load_saml_cfg(db: AsyncSession, request: Request):
+async def _load_saml_cfg(db: AsyncSession):
     """Load SAML config from DB; raise 503 if not enabled or IdP fields are missing.
     SP Entity ID and ACS URL fall back to the current request origin if not set."""
     from app.models.system_settings import SystemSettings
@@ -410,10 +520,10 @@ async def _load_saml_cfg(db: AsyncSession, request: Request):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="SSO is not enabled. Configure it in Settings → SSO.",
         )
-    # Derive base URL from the incoming request (respects X-Forwarded-Proto/Host)
-    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-    host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
-    base = f"{scheme}://{host}"
+    # Use the configured canonical origin. Host headers are client-controlled and
+    # must never influence SAML entity IDs, ACS URLs, or browser redirects.
+    base = _canonical_frontend_base()
+    cfg = copy.copy(cfg)
     if not cfg.saml_sp_entity_id or not cfg.saml_sp_entity_id.strip():
         cfg.saml_sp_entity_id = base
     if not cfg.saml_sp_acs_url or not cfg.saml_sp_acs_url.strip():
@@ -485,7 +595,7 @@ async def saml_login(request: Request, db: AsyncSession = Depends(get_db)):
     """Initiate SAML SSO — redirects the browser to the configured IdP."""
     from onelogin.saml2.auth import OneLogin_Saml2_Auth
 
-    cfg = await _load_saml_cfg(db, request)
+    cfg = await _load_saml_cfg(db)
     auth = OneLogin_Saml2_Auth(_build_saml_request(request), old_settings=_saml_settings_dict(cfg))
     redirect_url = auth.login()
     return RedirectResponse(url=redirect_url, status_code=302)
@@ -496,7 +606,7 @@ async def saml_acs(request: Request, db: AsyncSession = Depends(get_db)):
     """Assertion Consumer Service — receives and validates the IdP SAML response."""
     from onelogin.saml2.auth import OneLogin_Saml2_Auth
 
-    cfg = await _load_saml_cfg(db, request)
+    cfg = await _load_saml_cfg(db)
     form = dict(await request.form())
     auth = OneLogin_Saml2_Auth(_build_saml_request(request, post_data=form), old_settings=_saml_settings_dict(cfg))
     auth.process_response()
@@ -516,10 +626,7 @@ async def saml_acs(request: Request, db: AsyncSession = Depends(get_db)):
 
     saml_subject = _first_saml_value(auth.get_nameid()) or email
 
-    # Build the frontend base URL early — needed for error redirects below
-    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
-    host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
-    frontend_base = f"{scheme}://{host}"
+    frontend_base = _canonical_frontend_base()
 
     result = await db.execute(select(AuthUser).where(func.lower(AuthUser.email) == email))
     user = result.scalar_one_or_none()
@@ -545,30 +652,41 @@ async def saml_acs(request: Request, db: AsyncSession = Depends(get_db)):
             status_code=302,
         )
 
+    if user.saml_subject and not secrets.compare_digest(user.saml_subject, saml_subject):
+        logger.warning("SSO subject mismatch for provisioned account %s", email)
+        return RedirectResponse(
+            url=f"{frontend_base}/login?sso_error=subject_mismatch",
+            status_code=302,
+        )
     if not user.saml_subject:
         user.saml_subject = saml_subject
 
     # If MFA is required globally or enabled on this account, redirect to TOTP step
-    if cfg.saml_require_mfa or user.mfa_enabled:
+    if user.mfa_enabled:
         pending = create_sso_mfa_pending_token(
             {"sub": str(user.id), "email": user.email, "role": user.role}
         )
-        return RedirectResponse(url=f"{frontend_base}/sso-mfa?token={pending}", status_code=302)
+        redirect_resp = RedirectResponse(url=f"{frontend_base}/sso-mfa", status_code=302)
+        redirect_resp.set_cookie(
+            "sec360_sso_pending",
+            pending,
+            max_age=600,
+            httponly=True,
+            secure=settings.COOKIE_SECURE,
+            samesite="lax",
+            path="/api/auth/saml/mfa-verify",
+        )
+        return redirect_resp
 
     await audit_action("saml_login", "auth_user", str(user.id), request, db, user)
     logger.info("Successful SSO login for %s", email)
 
-    token_data = {"sub": str(user.id), "email": user.email, "role": user.role}
-    access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token(token_data)
-
     redirect_resp = RedirectResponse(url=f"{frontend_base}/dashboard", status_code=302)
-    _set_auth_cookies(redirect_resp, access_token, refresh_token)
+    await _issue_login_response(user, redirect_resp, db)
     return redirect_resp
 
 
 class SsoMfaVerifyRequest(BaseModel):
-    token: str
     code: str
 
 
@@ -581,7 +699,7 @@ async def saml_mfa_verify(
 ):
     """Verify TOTP after SSO login when MFA is required."""
     try:
-        payload = decode_token(data.token)
+        payload = decode_token(request.cookies.get("sec360_sso_pending", ""))
     except ValueError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired — please sign in again.")
 
@@ -600,17 +718,19 @@ async def saml_mfa_verify(
     if not user.mfa_enabled or not user.mfa_secret:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="2FA is not set up on this account.")
 
+    ip = get_client_ip(request)
+    await check_rate_limit(f"sso-mfa:{user.email}", ip)
     if not pyotp.TOTP(user.mfa_secret).verify(data.code, valid_window=1):
+        await record_failure(f"sso-mfa:{user.email}", ip)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid 2FA code.")
 
+    await clear_failures(f"sso-mfa:{user.email}", ip)
     await audit_action("saml_login", "auth_user", str(user.id), request, db, user)
     logger.info("Successful SSO+MFA login for %s", user.email)
 
-    token_data = {"sub": str(user.id), "email": user.email, "role": user.role}
-    access_token = create_access_token(token_data)
-    refresh_token = create_refresh_token(token_data)
-    _set_auth_cookies(response, access_token, refresh_token)
-    return {"access_token": access_token, "token_type": "bearer", "user": AuthUserResponse.model_validate(user).model_dump()}
+    result = await _issue_login_response(user, response, db)
+    response.delete_cookie("sec360_sso_pending", path="/api/auth/saml/mfa-verify")
+    return result
 
 
 @router.get("/saml/metadata")
@@ -618,7 +738,7 @@ async def saml_metadata(request: Request, db: AsyncSession = Depends(get_db)):
     """Return this service provider's SAML metadata XML for the configured IdP."""
     from onelogin.saml2.auth import OneLogin_Saml2_Auth
 
-    cfg = await _load_saml_cfg(db, request)
+    cfg = await _load_saml_cfg(db)
     auth = OneLogin_Saml2_Auth(_build_saml_request(request), old_settings=_saml_settings_dict(cfg))
     sp_settings = auth.get_settings()
     metadata = sp_settings.get_sp_metadata()

@@ -1,13 +1,11 @@
 import React, { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { ShieldCheck, AlertCircle, Smartphone, ArrowRight } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
 import apiClient from '../api/client'
 import AuthLeftPanel from '../components/AuthLeftPanel'
 
 export default function SsoMfa() {
-  const [params] = useSearchParams()
-  const token = params.get('token') ?? ''
   const navigate = useNavigate()
   const { setAuth } = useAuthStore()
 
@@ -20,7 +18,7 @@ export default function SsoMfa() {
     setError('')
     setLoading(true)
     try {
-      const res = await apiClient.post('/auth/saml/mfa-verify', { token, code })
+      const res = await apiClient.post('/auth/saml/mfa-verify', { code })
       setAuth(res.data.user)
       navigate('/dashboard', { replace: true })
     } catch (err: unknown) {
@@ -29,11 +27,6 @@ export default function SsoMfa() {
     } finally {
       setLoading(false)
     }
-  }
-
-  if (!token) {
-    navigate('/login', { replace: true })
-    return null
   }
 
   const inputStyle: React.CSSProperties = {

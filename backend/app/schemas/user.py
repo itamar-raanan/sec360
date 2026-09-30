@@ -76,6 +76,8 @@ class AuthUserResponse(BaseModel):
     is_active: bool
     auth_method: str
     must_change_password: bool = False
+    mfa_enabled: bool = False
+    mfa_setup_required: bool = False
 
 
 class TokenResponse(BaseModel):

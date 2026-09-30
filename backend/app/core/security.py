@@ -34,9 +34,11 @@ def create_sso_mfa_pending_token(data: dict[str, Any]) -> str:
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
-def create_refresh_token(data: dict[str, Any]) -> str:
+def create_refresh_token(data: dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(hours=settings.JWT_REFRESH_EXPIRE_HOURS)
+    expire = datetime.now(timezone.utc) + (
+        expires_delta or timedelta(hours=settings.JWT_REFRESH_EXPIRE_HOURS)
+    )
     to_encode.update({"exp": expire, "iat": datetime.now(timezone.utc), "type": "refresh"})
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 

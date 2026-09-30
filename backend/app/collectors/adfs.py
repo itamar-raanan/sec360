@@ -4,6 +4,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.collectors.base import BaseCollector
+from app.core.outbound import validate_outbound_url
 
 
 class ADFSCollector(BaseCollector):
@@ -31,12 +32,18 @@ class ADFSCollector(BaseCollector):
                 "message": "ADFS service URL or federation metadata URL is required",
             }
         try:
+            await validate_outbound_url(self.metadata_url)
             async with httpx.AsyncClient(timeout=20.0, verify=self.verify_ssl) as client:
                 response = await client.get(
                     self.metadata_url,
                     headers={"Accept": "application/xml, text/xml"},
-                    follow_redirects=True,
+                    follow_redirects=False,
                 )
+                if response.is_redirect:
+                    return {
+                        "success": False,
+                        "message": "ADFS metadata URL must be the final HTTPS endpoint (redirects are not followed)",
+                    }
                 if response.status_code in (401, 403):
                     return {
                         "success": False,

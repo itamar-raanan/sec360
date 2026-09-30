@@ -1,10 +1,30 @@
 import asyncio
 import logging
+import re
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+_FORBIDDEN_SQL = re.compile(
+    r"\b(insert|update|delete|merge|alter|drop|truncate|create|grant|revoke|copy|call|execute|exec|do|into|pg_read_file|pg_read_binary_file|lo_import|lo_export|dblink|load_file|openrowset|xp_cmdshell)\b|\bfor\s+update\b",
+    re.IGNORECASE,
+)
+
+
+def validate_read_only_query(query: str) -> str:
+    """Accept one plain SELECT statement and reject comments or mutating SQL."""
+    candidate = query.strip()
+    if candidate.endswith(";"):
+        candidate = candidate[:-1].rstrip()
+    if not candidate or ";" in candidate:
+        raise ValueError("Custom database query must contain exactly one SELECT statement")
+    if "--" in candidate or "/*" in candidate or "*/" in candidate:
+        raise ValueError("SQL comments are not allowed in custom database queries")
+    if not re.match(r"^select\b", candidate, re.IGNORECASE) or _FORBIDDEN_SQL.search(candidate):
+        raise ValueError("Custom database query must be read-only and begin with SELECT")
+    return candidate
 
 
 def _default_port(db_type: str) -> int:
@@ -35,6 +55,10 @@ class CustomDbCollector:
             return {"success": False, "message": "No database host configured"}
         if not self.db_name:
             return {"success": False, "message": "No database name configured"}
+        try:
+            self.query = validate_read_only_query(self.query)
+        except ValueError as exc:
+            return {"success": False, "message": str(exc)}
 
         try:
             if self.db_type == "postgresql":
@@ -110,6 +134,7 @@ class CustomDbCollector:
             return {"records_synced": 0, "error": "Database host and name are required"}
 
         try:
+            self.query = validate_read_only_query(self.query)
             if self.db_type == "postgresql":
                 rows = await self._collect_postgresql()
             elif self.db_type in ("mssql", "sqlserver"):
@@ -136,7 +161,11 @@ class CustomDbCollector:
             timeout=30,
         )
         try:
-            rows = await conn.fetch(self.query)
+            async with conn.transaction(readonly=True):
+                rows = await conn.fetch(
+                    f"SELECT * FROM ({self.query}) AS sec360_source LIMIT 10000",
+                    timeout=30,
+                )
             return [dict(row) for row in rows]
         finally:
             await conn.close()
@@ -155,7 +184,7 @@ class CustomDbCollector:
         try:
             cursor = conn.cursor(as_dict=True)
             cursor.execute(self.query)
-            return cursor.fetchall()
+            return cursor.fetchmany(10_000)
         finally:
             conn.close()
 
@@ -173,8 +202,11 @@ class CustomDbCollector:
         )
         try:
             with conn.cursor() as cursor:
-                cursor.execute(self.query)
-                return cursor.fetchall()
+                cursor.execute("START TRANSACTION READ ONLY")
+                cursor.execute(f"SELECT * FROM ({self.query}) AS sec360_source LIMIT 10000")
+                rows = cursor.fetchmany(10_000)
+                conn.rollback()
+                return rows
         finally:
             conn.close()
 

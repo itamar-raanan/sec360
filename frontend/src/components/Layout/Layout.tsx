@@ -52,7 +52,7 @@ export default function Layout() {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
-  if (user?.must_change_password && location.pathname !== '/settings') {
+  if ((user?.must_change_password || user?.mfa_setup_required) && location.pathname !== '/settings') {
     return <Navigate to="/settings" replace />
   }
 

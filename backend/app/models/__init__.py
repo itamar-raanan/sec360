@@ -1,4 +1,4 @@
-from app.models.user import User, AuthUser
+from app.models.user import User, AuthUser, AuthSession
 from app.models.endpoint import Endpoint
 from app.models.agent import SecurityAgent
 from app.models.activity import ActivityEvent
@@ -13,6 +13,7 @@ from app.models.change_event import ChangeEvent, EntityStateSnapshot, SiemDelive
 __all__ = [
     "User",
     "AuthUser",
+    "AuthSession",
     "Endpoint",
     "SecurityAgent",
     "ActivityEvent",

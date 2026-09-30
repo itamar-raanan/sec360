@@ -79,7 +79,7 @@ that password before accessing the application.
 |--------|-----------|----------|
 | SentinelOne | Endpoints + EDR agents | GET /web/api/v2.1/agents |
 | JumpCloud | Users + managed devices | Admin API |
-| Active Directory | Users + computers | LDAP |
+| Active Directory | Users + computers | LDAPS |
 | Puppet | Nodes + operating systems | PuppetDB API v4 |
 | Google Workspace | Login activity | Reports API |
 | Symantec DLP | DLP agents + policy exclusions | Enforce database |

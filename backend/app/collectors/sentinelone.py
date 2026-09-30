@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.collectors.base import BaseCollector
 from app.core.config import settings
+from app.core.outbound import validate_outbound_url
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,7 @@ class SentinelOneCollector(BaseCollector):
                 "message": "Replace the example Console URL with your actual SentinelOne management-console URL",
             }
         try:
+            await validate_outbound_url(self.base_url)
             async with httpx.AsyncClient(timeout=15.0, verify=self.verify_ssl) as client:
                 resp = await client.get(
                     f"{self.base_url}/web/api/v2.1/agents",
@@ -123,6 +125,7 @@ class SentinelOneCollector(BaseCollector):
         if not self.api_token:
             return {"records_synced": 0, "error": "No API token configured"}
         try:
+            await validate_outbound_url(self.base_url)
             agents = await self._fetch_agents()
             count, agent_id_map = await self._upsert_agents(agents)
             if agent_id_map:

@@ -204,6 +204,7 @@ async def test_dlp_exclusion_event_contains_actor_and_added_scope(db_session):
             "removed": [],
             "reason": "Approved exception",
             "changed_by": "analyst@example.com",
+            "diff_only": True,
         },
     )
     await db_session.flush()
@@ -245,9 +246,11 @@ async def test_dlp_policy_pattern_edit_records_before_after_and_editor(db_sessio
     )).scalar_one()
     assert event.entity_name == "Approved senders"
     assert event.actor_email == "DLP Admin"
-    assert event.before["user_patterns"] == "old@example.com"
-    assert event.after["user_patterns"] == "old@example.com,new@example.com"
-    assert "user_patterns" in event.details["changed_fields"]
+    assert event.before == {"user_patterns": []}
+    assert event.after == {"user_patterns": ["new@example.com"]}
+    assert event.details["changed_fields"] == ["user_patterns"]
+    assert event.details["diff_only"] is True
+    assert "modified_date" not in event.details["changed_fields"]
     assert event.details["policies"] == ["Outbound PII"]
     delivery = (await db_session.execute(
         select(SiemDelivery).where(SiemDelivery.source_id == str(event.id))
@@ -257,3 +260,51 @@ async def test_dlp_policy_pattern_edit_records_before_after_and_editor(db_sessio
 
     # Reading the same policy state again must not create a duplicate.
     assert await capture_dlp_policy_changes(db_session, updated) == 0
+
+
+async def test_dlp_policy_metadata_only_update_does_not_create_noise(db_session):
+    original = [{
+        "object_id": 43,
+        "object_uuid": "pattern-43",
+        "object_name": "Approved recipients",
+        "user_patterns": "alice@example.com",
+        "modified_date": "2026-09-27T10:00:00",
+        "modified_by_id": 7,
+        "modified_by_name": "DLP Admin",
+    }]
+    metadata_only = [{
+        **original[0],
+        "modified_date": "2026-09-27T11:00:00",
+        "modified_by_id": 8,
+        "modified_by_name": "Another Admin",
+    }]
+
+    assert await capture_dlp_policy_changes(db_session, original) == 0
+    assert await capture_dlp_policy_changes(db_session, metadata_only) == 0
+    assert (await db_session.execute(
+        select(ChangeEvent).where(ChangeEvent.event_type == "dlp.policy_pattern_changed")
+    )).scalars().all() == []
+
+
+async def test_dlp_pattern_add_and_remove_store_presence_only(db_session):
+    pattern = [{
+        "object_id": 44,
+        "object_uuid": "pattern-44",
+        "object_name": "Temporary exception",
+        "user_patterns": "temporary@example.com",
+        "modified_by_name": "DLP Admin",
+    }]
+
+    assert await capture_dlp_policy_changes(db_session, []) == 0
+    assert await capture_dlp_policy_changes(db_session, pattern) == 1
+    assert await capture_dlp_policy_changes(db_session, []) == 1
+
+    events = (await db_session.execute(
+        select(ChangeEvent)
+        .where(ChangeEvent.entity_id == "pattern-44")
+        .order_by(ChangeEvent.timestamp)
+    )).scalars().all()
+    assert events[0].before == {"pattern_exists": False}
+    assert events[0].after == {"pattern_exists": True}
+    assert events[1].before == {"pattern_exists": True}
+    assert events[1].after == {"pattern_exists": False}

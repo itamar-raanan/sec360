@@ -23,9 +23,13 @@ def reset_in_memory_rate_limiter():
 
     with rate_limit._failed_lock:
         rate_limit._failed.clear()
+    rate_limit._redis_client = None
+    rate_limit._redis_unavailable = False
     yield
     with rate_limit._failed_lock:
         rate_limit._failed.clear()
+    rate_limit._redis_client = None
+    rate_limit._redis_unavailable = False
 
 @pytest_asyncio.fixture(scope="function")
 async def db_engine():

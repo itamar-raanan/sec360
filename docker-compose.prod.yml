@@ -54,6 +54,26 @@ services:
         limits:
           memory: 1g
 
+  # Shared, persistent authentication throttle state. Production login fails
+  # closed if this service is unavailable instead of silently losing lockouts.
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
   # ── Backend API ─────────────────────────────────────────────────────────────
   backend:
     build:
@@ -64,11 +84,17 @@ services:
       - .env
     environment:
       DB_URL: postgresql+asyncpg://${POSTGRES_USER:-sec360}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sec360}
+      ENVIRONMENT: production
+      TRUST_PROXY_HEADERS: "true"
+      REDIS_URL: redis://redis:6379/0
+      REQUIRE_REDIS_RATE_LIMIT: "true"
     # An empty HOST_DNS leaves Docker's automatically managed resolver intact.
     # Set an explicit resolver only for private on-premises DNS zones.
     dns: ${HOST_DNS:-}
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       certificates:
         condition: service_completed_successfully
@@ -124,4 +150,6 @@ volumes:
   postgres_data:
     driver: local
   tls_data:
+    driver: local
+  redis_data:
     driver: local

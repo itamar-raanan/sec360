@@ -75,6 +75,7 @@ class AuthUserResponse(BaseModel):
     role: str
     is_active: bool
     auth_method: str
+    must_change_password: bool = False
 
 
 class TokenResponse(BaseModel):

@@ -42,6 +42,7 @@ class AuthUserOut(BaseModel):
     is_active: bool
     mfa_enabled: bool
     invitation_pending: bool
+    must_change_password: bool
     created_at: datetime
 
     @classmethod
@@ -54,6 +55,7 @@ class AuthUserOut(BaseModel):
             is_active=u.is_active,
             mfa_enabled=u.mfa_enabled,
             invitation_pending=bool(u.invitation_token),
+            must_change_password=u.must_change_password,
             created_at=u.created_at,
         )
 
@@ -111,6 +113,34 @@ class SystemSettingsIn(BaseModel):
     min_dlp_version: Optional[str] = None
     min_wss_version: Optional[str] = None
     endpoint_product_tags: Optional[list[Literal["S1", "DLP", "WSS"]]] = None
+
+
+class SystemSettingsOut(BaseModel):
+    """Safe system-settings projection. Secret-bearing auth fields are excluded."""
+
+    model_config = {"from_attributes": True}
+
+    offline_threshold_hours: int
+    risk_weight_no_edr: float
+    risk_weight_edr_version: float
+    risk_weight_no_dlp: float
+    risk_weight_dlp_version: float
+    risk_weight_no_wss: float
+    risk_weight_wss_version: float
+    risk_weight_no_user: float
+    risk_weight_no_encryption: float
+    risk_weight_offline: float
+    risk_weight_outdated_agent: float
+    risk_weight_outdated_os: float
+    auto_correlation: bool
+    enforce_mfa: bool
+    min_password_length: int
+    session_timeout_hours: int
+    platform_name: str
+    min_s1_version: str
+    min_dlp_version: str
+    min_wss_version: str
+    endpoint_product_tags: list[str]
 
 
 class SamlSettingsIn(BaseModel):
@@ -414,9 +444,13 @@ async def change_password(
         raise HTTPException(400, f"Password changes are managed by {current.auth_method.upper()}")
     if not verify_password(data.current_password, current.hashed_password):
         raise HTTPException(400, "Current password is incorrect")
-    if len(data.new_password) < 8:
-        raise HTTPException(400, "New password must be at least 8 characters")
+    minimum_length = 12 if current.must_change_password else 8
+    if len(data.new_password) < minimum_length:
+        raise HTTPException(400, f"New password must be at least {minimum_length} characters")
+    if verify_password(data.new_password, current.hashed_password):
+        raise HTTPException(400, "New password must be different from the current password")
     current.hashed_password = hash_password(data.new_password)
+    current.must_change_password = False
     await db.flush()
     return {"message": "Password changed successfully"}
 
@@ -502,7 +536,7 @@ async def get_endpoint_product_tags(
     tags = normalize_product_tags(cfg.endpoint_product_tags if cfg else None)
     return {"tags": list(tags)}
 
-@router.get("/system")
+@router.get("/system", response_model=SystemSettingsOut)
 async def get_system_settings(
     db: AsyncSession = Depends(get_db),
     _: AuthUser = Depends(require_role("admin")),
@@ -512,10 +546,10 @@ async def get_system_settings(
         cfg = SystemSettings(id=1)
         db.add(cfg)
         await db.flush()
-    return cfg
+    return SystemSettingsOut.model_validate(cfg)
 
 
-@router.put("/system")
+@router.put("/system", response_model=SystemSettingsOut)
 async def update_system_settings(
     data: SystemSettingsIn,
     request: Request,
@@ -560,7 +594,7 @@ async def update_system_settings(
         from app.engines.risk import update_all_risk_scores
 
         await update_all_risk_scores(db)
-    return cfg
+    return SystemSettingsOut.model_validate(cfg)
 
 
 # ─── SAML SSO settings (admin) ───────────────────────────────────────────────

@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "Sec360"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
+    ENVIRONMENT: str = "development"
 
     # Database
     DB_URL: str = "postgresql+asyncpg://sec360:sec360pass@postgres:5432/sec360"
@@ -18,6 +19,12 @@ class Settings(BaseSettings):
     JWT_EXPIRE_MINUTES: int = 480  # 8 hour access token
     JWT_REFRESH_EXPIRE_HOURS: int = 168  # 7 day refresh token
     COOKIE_SECURE: bool = True  # Set to False only for local HTTP development
+    TRUST_PROXY_HEADERS: bool = False
+
+    # First-run administrator. These values are used only when auth_users is
+    # empty; the created account must change its password before using the app.
+    BOOTSTRAP_ADMIN_EMAIL: str = "admin@sec360.local"
+    BOOTSTRAP_ADMIN_PASSWORD: Optional[str] = None
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://frontend:3000"]
@@ -44,6 +51,7 @@ class Settings(BaseSettings):
 
     # Redis — optional; enables persistent brute-force rate limiting across restarts
     REDIS_URL: Optional[str] = None
+    REQUIRE_REDIS_RATE_LIMIT: bool = False
 
     # SentinelOne
     SENTINELONE_URL: Optional[str] = None
@@ -94,3 +102,29 @@ if settings.CREDENTIALS_ENCRYPTION_KEY is None:
         "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\" "
         "and set CREDENTIALS_ENCRYPTION_KEY in your environment."
     )
+
+
+def validate_runtime_security(config: Settings = settings) -> None:
+    """Refuse an unsafe production configuration instead of merely warning."""
+    if config.ENVIRONMENT.strip().lower() != "production":
+        return
+
+    errors: list[str] = []
+    if config.JWT_SECRET == _DEFAULT_JWT_SECRET or len(config.JWT_SECRET) < 32:
+        errors.append("JWT_SECRET must be a unique value of at least 32 characters")
+    if not config.COOKIE_SECURE:
+        errors.append("COOKIE_SECURE must be true")
+    if not config.CREDENTIALS_ENCRYPTION_KEY:
+        errors.append("CREDENTIALS_ENCRYPTION_KEY is required")
+    else:
+        try:
+            from cryptography.fernet import Fernet
+
+            Fernet(config.CREDENTIALS_ENCRYPTION_KEY.encode())
+        except Exception:
+            errors.append("CREDENTIALS_ENCRYPTION_KEY must be a valid Fernet key")
+    if config.REQUIRE_REDIS_RATE_LIMIT and not config.REDIS_URL:
+        errors.append("REDIS_URL is required when REQUIRE_REDIS_RATE_LIMIT is true")
+
+    if errors:
+        raise RuntimeError("Unsafe production configuration: " + "; ".join(errors))

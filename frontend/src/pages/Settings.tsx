@@ -42,6 +42,7 @@ interface AuthUserDetail {
   is_active: boolean
   mfa_enabled: boolean
   invitation_pending: boolean
+  must_change_password: boolean
   created_at: string
 }
 
@@ -448,7 +449,7 @@ function UsersTab() {
 // ── My Account tab ───────────────────────────────────────────────────────────
 
 function AccountTab() {
-  const { user } = useAuthStore()
+  const { user, setAuth } = useAuthStore()
   const [pwCurrent, setPwCurrent] = useState('')
   const [pwNew, setPwNew] = useState('')
   const [pwConfirm, setPwConfirm] = useState('')
@@ -473,9 +474,11 @@ function AccountTab() {
     e.preventDefault()
     setPwMsg(null)
     if (pwNew !== pwConfirm) { setPwMsg({ type: 'error', msg: 'New passwords do not match' }); return }
-    if (pwNew.length < 8) { setPwMsg({ type: 'error', msg: 'Password must be at least 8 characters' }); return }
+    const minimumLength = user?.must_change_password ? 12 : 8
+    if (pwNew.length < minimumLength) { setPwMsg({ type: 'error', msg: `Password must be at least ${minimumLength} characters` }); return }
     try {
       await apiClient.post('/settings/me/password', { current_password: pwCurrent, new_password: pwNew })
+      if (user) setAuth({ ...user, must_change_password: false })
       setPwMsg({ type: 'success', msg: 'Password changed successfully' })
       setPwCurrent(''); setPwNew(''); setPwConfirm('')
     } catch (e: unknown) {
@@ -1751,7 +1754,8 @@ function AuditTab() {
 export default function Settings() {
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin'
-  const [tab, setTab] = useState<Tab>(isAdmin ? 'users' : 'account')
+  const passwordChangeRequired = Boolean(user?.must_change_password)
+  const [tab, setTab] = useState<Tab>(passwordChangeRequired ? 'account' : isAdmin ? 'users' : 'account')
 
   const tabs: { id: Tab; label: string; icon: React.ElementType; adminOnly: boolean }[] = [
     { id: 'users', label: 'Users & Access', icon: Users, adminOnly: true },
@@ -1761,13 +1765,20 @@ export default function Settings() {
     { id: 'certificate', label: 'HTTPS Certificate', icon: FileKey2, adminOnly: true },
   ]
 
-  const visibleTabs = tabs.filter(t => !t.adminOnly || isAdmin)
+  const visibleTabs = passwordChangeRequired
+    ? tabs.filter(t => t.id === 'account')
+    : tabs.filter(t => !t.adminOnly || isAdmin)
 
   return (
     <div className="settings-page absolute inset-0 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="settings-page-header flex-shrink-0 px-6 pt-6 pb-0">
         <h1 className="text-[18px] font-semibold tracking-[-0.025em] text-white mb-4">Settings</h1>
+        {passwordChangeRequired && (
+          <div className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            Change the temporary bootstrap password before continuing to SEC360.
+          </div>
+        )}
         {/* Tab bar */}
         <div className="settings-tabs flex gap-0.5 overflow-x-auto border-b border-white/[0.06]">
           {visibleTabs.map(({ id, label, icon: Icon }) => (

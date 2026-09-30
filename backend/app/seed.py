@@ -4,14 +4,9 @@ Seed script for Sec360. Run with: python -m app.seed
 import asyncio
 
 from app.core.database import engine, Base, AsyncSessionLocal
+from app.core.config import settings
 from app.core.security import hash_password
 from app.models.user import AuthUser
-
-
-AUTH_USERS = [
-    ("admin@sec360.local", "Admin123!", "admin"),
-    ("analyst@sec360.local", "Analyst123!", "analyst"),
-]
 
 
 async def seed():
@@ -26,11 +21,21 @@ async def seed():
         from sqlalchemy import select
 
         # ── Auth users ──────────────────────────────────────────────────────
-        print("  Creating auth users...")
-        for email, password, role in AUTH_USERS:
-            existing = (await db.execute(select(AuthUser).where(AuthUser.email == email))).scalar_one_or_none()
-            if not existing:
-                db.add(AuthUser(email=email, hashed_password=hash_password(password), role=role))
+        print("  Checking bootstrap administrator...")
+        existing = (await db.execute(select(AuthUser))).scalars().first()
+        if existing is None:
+            password = settings.BOOTSTRAP_ADMIN_PASSWORD or ""
+            if len(password) < 12 or password.startswith("CHANGE_ME"):
+                raise RuntimeError(
+                    "Set BOOTSTRAP_ADMIN_PASSWORD to a unique value of at least "
+                    "12 characters before running the seed command."
+                )
+            db.add(AuthUser(
+                email=settings.BOOTSTRAP_ADMIN_EMAIL.strip().lower(),
+                hashed_password=hash_password(password),
+                role="admin",
+                must_change_password=True,
+            ))
 
         await db.flush()
 
@@ -54,9 +59,8 @@ async def seed():
         await db.commit()
 
     print("Seed complete!")
-    print("Auth users:")
-    for email, password, role in AUTH_USERS:
-        print(f"  {email} / {password} ({role})")
+    print(f"Bootstrap administrator: {settings.BOOTSTRAP_ADMIN_EMAIL.strip().lower()}")
+    print("The bootstrap password is never printed; change it at first login.")
 
 
 if __name__ == "__main__":

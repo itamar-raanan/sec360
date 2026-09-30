@@ -716,12 +716,20 @@ function changeValue(item: ChangeEventEntry, phase: 'before' | 'after') {
     return value.enabled ? 'Enabled' : 'Disabled'
   }
   if (item.event_type.includes('exclusion')) {
-    const exclusions = Array.isArray(value.excluded_agents) ? value.excluded_agents : []
-    return exclusions.length ? exclusions.map(productLabel).join(', ') : 'No exclusions'
+    const historicalDelta = phase === 'before' ? item.details?.removed : item.details?.added
+    const exclusions = Array.isArray(historicalDelta)
+      ? historicalDelta
+      : Array.isArray(value.excluded_agents) ? value.excluded_agents : []
+    const displayed = exclusions.length ? exclusions.map(productLabel).join(', ') : 'None'
+    if (item.details?.diff_only || Array.isArray(historicalDelta)) {
+      return `${phase === 'before' ? 'Removed' : 'Added'}: ${displayed}`
+    }
+    return exclusions.length ? displayed : 'No exclusions'
   }
   if (item.event_type.startsWith('dlp.policy_pattern_')) {
     const labels: Record<string, string> = {
       pattern: 'Pattern',
+      pattern_exists: 'Pattern',
       object_name: 'Name',
       object_description: 'Description',
       object_status: 'Status',
@@ -732,20 +740,29 @@ function changeValue(item: ChangeEventEntry, phase: 'before' | 'after') {
       personal_email_breadth: 'Personal email breadth',
       personal_email_excluded_domains: 'Excluded domains',
       personal_email_max_recipients: 'Max recipients',
-      modified_date: 'Modified date',
-      modified_by_id: 'Editor ID',
-      modified_by_name: 'Editor',
       policies: 'Policies',
     }
+    const deltaFields = new Set([
+      'user_patterns',
+      'ip_addresses',
+      'url_domains',
+      'personal_email_excluded_domains',
+      'policies',
+    ])
     const fields = Array.isArray(item.details?.changed_fields)
       ? item.details.changed_fields.map(String)
       : Object.keys(value)
     return fields.map(field => {
       const raw = value[field]
       if (field === 'pattern' && raw === undefined) return `${labels[field]}: ${phase === 'before' ? 'Not present' : 'Present'}`
+      if (field === 'pattern_exists') return `${labels[field]}: ${raw ? 'Present' : 'Not present'}`
       const displayed = Array.isArray(raw)
         ? raw.map(entry => typeof entry === 'object' && entry !== null ? String((entry as Record<string, unknown>).policy_name ?? JSON.stringify(entry)) : String(entry)).join(', ')
         : raw === null || raw === undefined || raw === '' ? 'Empty' : String(raw)
+      if (item.details?.diff_only && deltaFields.has(field)) {
+        const direction = phase === 'before' ? 'Removed' : 'Added'
+        return `${labels[field] ?? field} — ${direction}: ${displayed || 'None'}`
+      }
       return `${labels[field] ?? field}: ${displayed}`
     }).join(' · ')
   }

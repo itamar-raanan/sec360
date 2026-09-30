@@ -605,13 +605,14 @@ async def update_compliance_exclusions(
             severity="warning" if added_keys else "info",
             source="analyst",
             actor_email=current.email,
-            before={"excluded_agents": sorted(previous_keys)},
-            after={"excluded_agents": sorted(new_keys)},
+            before={"excluded_agents": removed_keys},
+            after={"excluded_agents": added_keys},
             details={
                 "added": added_keys,
                 "removed": removed_keys,
                 "reason": body.reason,
                 "changed_by": current.email,
+                "diff_only": True,
             },
         )
     await audit_action(

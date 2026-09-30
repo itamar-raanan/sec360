@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import re
 from typing import Any
 
 from sqlalchemy import or_, select
@@ -23,10 +24,20 @@ PATTERN_FIELDS = (
     "personal_email_breadth",
     "personal_email_excluded_domains",
     "personal_email_max_recipients",
+)
+
+AUDIT_FIELDS = (
     "modified_date",
     "modified_by_id",
     "modified_by_name",
 )
+
+LIST_FIELDS = {
+    "user_patterns",
+    "ip_addresses",
+    "url_domains",
+    "personal_email_excluded_domains",
+}
 
 
 def _pattern_key(row: dict[str, Any]) -> str | None:
@@ -46,7 +57,7 @@ def _normalise_patterns(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]
             patterns[key] = {
                 "object_id": row.get("object_id"),
                 "object_uuid": row.get("object_uuid"),
-                **{field: row.get(field) for field in PATTERN_FIELDS},
+                **{field: row.get(field) for field in (*PATTERN_FIELDS, *AUDIT_FIELDS)},
                 "policies": [],
             }
             policy_sets[key] = set()
@@ -88,6 +99,65 @@ def _policy_names(state: dict[str, Any] | None) -> list[str]:
     })
 
 
+def _split_values(value: Any) -> list[str]:
+    if value is None:
+        return []
+    return sorted({
+        item.strip()
+        for item in re.split(r"[\r\n;,]+", str(value))
+        if item.strip()
+    })
+
+
+def _policy_values(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return sorted({
+        " · ".join(filter(None, (
+            str(item.get("policy_name") or item.get("policy_id") or "Unknown policy"),
+            str(item.get("used_as") or ""),
+            f"status {item.get('active_status')}" if item.get("active_status") not in (None, "") else "",
+        )))
+        for item in value
+        if isinstance(item, dict)
+    })
+
+
+def _exact_diff(old: dict[str, Any], new: dict[str, Any]) -> tuple[dict, dict, list[str]]:
+    """Return only the values removed/added or the scalar fields truly changed."""
+    before: dict[str, Any] = {}
+    after: dict[str, Any] = {}
+    changed_fields: list[str] = []
+    for field in (*PATTERN_FIELDS, "policies"):
+        previous = old.get(field)
+        current = new.get(field)
+        if previous == current:
+            continue
+        if field in LIST_FIELDS:
+            previous_values = set(_split_values(previous))
+            current_values = set(_split_values(current))
+            removed = sorted(previous_values - current_values)
+            added = sorted(current_values - previous_values)
+            if not removed and not added:
+                continue
+            before[field] = removed
+            after[field] = added
+        elif field == "policies":
+            previous_values = set(_policy_values(previous))
+            current_values = set(_policy_values(current))
+            removed = sorted(previous_values - current_values)
+            added = sorted(current_values - previous_values)
+            if not removed and not added:
+                continue
+            before[field] = removed
+            after[field] = added
+        else:
+            before[field] = previous
+            after[field] = current
+        changed_fields.append(field)
+    return before, after, changed_fields
+
+
 async def capture_dlp_policy_changes(
     db: AsyncSession,
     rows: list[dict[str, Any]],
@@ -125,38 +195,43 @@ async def capture_dlp_policy_changes(
                 action="added",
                 source="symantec_dlp",
                 actor_email=_actor(state),
-                after=state,
+                before={"pattern_exists": False},
+                after={"pattern_exists": True},
                 details={
-                    "changed_fields": ["pattern"],
+                    "changed_fields": ["pattern_exists"],
                     "policies": _policy_names(state),
+                    "modified_by_id": state.get("modified_by_id"),
+                    "modified_by_name": state.get("modified_by_name"),
+                    "diff_only": True,
                 },
             )
             emitted += 1
         elif marker and old != state:
-            changed_fields = [
-                field
-                for field in (*PATTERN_FIELDS, "policies")
-                if old.get(field) != state.get(field)
-            ]
-            await record_change_event(
-                db,
-                event_type="dlp.policy_pattern_changed",
-                entity_type="dlp_policy_pattern",
-                entity_id=key,
-                entity_name=state.get("object_name") or old.get("object_name"),
-                action="changed",
-                source="symantec_dlp",
-                actor_email=_actor(state),
-                before={field: old.get(field) for field in changed_fields},
-                after={field: state.get(field) for field in changed_fields},
-                details={
-                    "changed_fields": changed_fields,
-                    "policies": _policy_names(state),
-                    "modified_by_id": state.get("modified_by_id"),
-                    "modified_by_name": state.get("modified_by_name"),
-                },
-            )
-            emitted += 1
+            before, after, changed_fields = _exact_diff(old, state)
+            # MODIFIED_DATE/editor changes are audit metadata, not a policy
+            # content diff. Do not create noise when only those values move.
+            if changed_fields:
+                await record_change_event(
+                    db,
+                    event_type="dlp.policy_pattern_changed",
+                    entity_type="dlp_policy_pattern",
+                    entity_id=key,
+                    entity_name=state.get("object_name") or old.get("object_name"),
+                    action="changed",
+                    source="symantec_dlp",
+                    actor_email=_actor(state),
+                    before=before,
+                    after=after,
+                    details={
+                        "changed_fields": changed_fields,
+                        "policies": _policy_names(state),
+                        "modified_by_id": state.get("modified_by_id"),
+                        "modified_by_name": state.get("modified_by_name"),
+                        "modified_date": state.get("modified_date"),
+                        "diff_only": True,
+                    },
+                )
+                emitted += 1
 
         if snapshot:
             snapshot.state = state
@@ -184,10 +259,14 @@ async def capture_dlp_policy_changes(
                 severity="warning",
                 source="symantec_dlp",
                 actor_email=_actor(old),
-                before=old,
+                before={"pattern_exists": True},
+                after={"pattern_exists": False},
                 details={
-                    "changed_fields": ["pattern"],
+                    "changed_fields": ["pattern_exists"],
                     "policies": _policy_names(old),
+                    "modified_by_id": old.get("modified_by_id"),
+                    "modified_by_name": old.get("modified_by_name"),
+                    "diff_only": True,
                 },
             )
             await db.delete(snapshot)

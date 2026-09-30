@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
 import uuid
@@ -12,7 +13,7 @@ from app.models.integration import IntegrationConfig
 from app.models.user import User
 from app.services.change_tracking import capture_inventory_changes, record_change_event
 from app.services.dlp_policy_tracking import capture_dlp_policy_changes
-from app.services.siem import audit_log_to_ecs, change_event_to_ecs
+from app.services.siem import _syslog_destination, audit_log_to_ecs, change_event_to_ecs, send_ecs_document
 
 
 pytestmark = pytest.mark.asyncio
@@ -59,6 +60,60 @@ def test_audit_log_maps_actor_and_source_ip_to_ecs():
     assert document["event"]["category"] == ["configuration"]
     assert document["user"]["email"] == "admin@example.com"
     assert document["source"]["ip"] == "192.0.2.10"
+
+
+def test_syslog_loopback_is_routed_to_docker_host_gateway():
+    assert _syslog_destination("127.0.0.1") == "host.docker.internal"
+    assert _syslog_destination("localhost") == "host.docker.internal"
+    assert _syslog_destination("::1") == "host.docker.internal"
+    assert _syslog_destination("elastic-agent.internal") == "elastic-agent.internal"
+
+
+async def test_tcp_syslog_sends_rfc5424_with_ecs_json(monkeypatch):
+    written = bytearray()
+
+    class Writer:
+        def write(self, value):
+            written.extend(value)
+
+        async def drain(self):
+            return None
+
+        def close(self):
+            return None
+
+        async def wait_closed(self):
+            return None
+
+    async def allow_host(host, port):
+        assert (host, port) == ("elastic-agent", 514)
+        return host
+
+    async def open_connection(host, port):
+        assert (host, port) == ("elastic-agent", 514)
+        return object(), Writer()
+
+    monkeypatch.setattr("app.core.outbound.validate_outbound_host", allow_host)
+    monkeypatch.setattr("asyncio.open_connection", open_connection)
+    document = {
+        "@timestamp": "2026-09-30T12:00:00Z",
+        "ecs": {"version": "8.11.0"},
+        "event": {"action": "endpoint.product_missing"},
+        "log": {"level": "warning"},
+        "message": "DLP missing",
+    }
+
+    await send_ecs_document({
+        "transport": "syslog",
+        "syslog_host": "elastic-agent",
+        "syslog_port": 514,
+        "syslog_protocol": "tcp",
+        "timeout_seconds": 5,
+    }, document)
+
+    line = written.decode("utf-8")
+    assert line.startswith("<132>1 2026-09-30T12:00:00Z sec360 SEC360 - endpoint_product_missing - ")
+    assert json.loads(line.split(" - ", 2)[2]) == document
 
 
 async def test_inventory_changes_create_events_and_siem_deliveries(db_session):

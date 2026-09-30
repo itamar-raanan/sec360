@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
@@ -142,6 +143,11 @@ def _headers(config: dict) -> dict[str, str]:
 
 
 async def send_ecs_document(config: dict, document: dict[str, Any]) -> None:
+    transport = str(config.get("transport", "http"))
+    if transport == "syslog":
+        await _send_syslog(config, document)
+        return
+
     from app.core.outbound import validate_outbound_url
 
     url = str(config.get("url", "")).strip()
@@ -174,6 +180,62 @@ async def send_ecs_document(config: dict, document: dict[str, Any]) -> None:
                 result = None
             if isinstance(result, dict) and result.get("errors") is True:
                 raise RuntimeError("Elastic bulk endpoint reported one or more rejected events")
+
+
+def _rfc5424_message(document: dict[str, Any]) -> bytes:
+    severity = str(document.get("log", {}).get("level", "info")).lower()
+    severity_number = {"error": 3, "warning": 4, "info": 6}.get(severity, 5)
+    priority = 16 * 8 + severity_number  # local0 facility
+    timestamp = str(document.get("@timestamp") or _iso(datetime.now(timezone.utc)))
+    action = str(document.get("event", {}).get("action") or "sec360_event")
+    message_id = "".join(character if character.isalnum() or character in "_-" else "_" for character in action)[:32] or "sec360_event"
+    payload = json.dumps(document, separators=(",", ":"), ensure_ascii=False)
+    return f"<{priority}>1 {timestamp} sec360 SEC360 - {message_id} - {payload}\n".encode("utf-8")
+
+
+def _syslog_destination(host: str) -> str:
+    """Route a configured server-loopback target through Docker's host gateway."""
+    normalized = host.strip().rstrip(".").lower()
+    if normalized in {"localhost", "127.0.0.1", "::1", "[::1]"}:
+        return "host.docker.internal"
+    return host.strip()
+
+
+async def _send_syslog(config: dict, document: dict[str, Any]) -> None:
+    from app.core.outbound import validate_outbound_host
+
+    host = _syslog_destination(str(config.get("syslog_host", "")))
+    port = int(config.get("syslog_port", 514))
+    protocol = str(config.get("syslog_protocol", "udp")).lower()
+    timeout = float(config.get("timeout_seconds", 10))
+    await validate_outbound_host(host, port)
+    message = _rfc5424_message(document)
+    if protocol == "udp":
+        if len(message) > 60_000:
+            raise ValueError("ECS event is too large for UDP syslog; use TCP syslog")
+        loop = asyncio.get_running_loop()
+        transport, _ = await asyncio.wait_for(
+            loop.create_datagram_endpoint(
+                asyncio.DatagramProtocol,
+                remote_addr=(host, port),
+            ),
+            timeout=timeout,
+        )
+        try:
+            transport.sendto(message)
+        finally:
+            transport.close()
+        return
+    if protocol != "tcp":
+        raise ValueError("Syslog protocol must be UDP or TCP")
+    reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=timeout)
+    del reader
+    try:
+        writer.write(message)
+        await asyncio.wait_for(writer.drain(), timeout=timeout)
+    finally:
+        writer.close()
+        await writer.wait_closed()
 
 
 async def flush_siem_deliveries(*, limit: int = 100) -> dict[str, int]:

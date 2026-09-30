@@ -246,12 +246,12 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
   active_directory: {
     label: 'Active Directory',
     category: 'directory',
-    description: 'Microsoft Active Directory — live LDAP inventory or a minimal offline user CSV',
+    description: 'Microsoft Active Directory — live LDAPS inventory or a minimal offline user CSV',
     color: '#0ea5e9',
     icon: Building2,
     dataProduces: ['Users', 'Endpoints', 'Departments'],
     unlocks: ['Activity'],
-    docsHint: 'Choose live LDAP synchronization or upload an offline CSV snapshot.',
+    docsHint: 'Choose secure live LDAPS synchronization or upload an offline CSV snapshot.',
     fields: [
       {
         name: 'import_mode',
@@ -276,8 +276,8 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
         name: 'ldap_port',
         label: 'Port',
         type: 'number',
-        placeholder: '389',
-        defaultValue: '389',
+        placeholder: '636',
+        defaultValue: '636',
         group: 'server',
         showWhen: { field: 'import_mode', value: 'live' },
       },
@@ -285,10 +285,9 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
         name: 'use_ssl',
         label: 'Use LDAPS',
         type: 'select',
-        defaultValue: 'false',
+        defaultValue: 'true',
         options: [
-          { value: 'false', label: 'No (LDAP port 389)' },
-          { value: 'true', label: 'Yes (LDAPS port 636)' },
+          { value: 'true', label: 'Required (LDAPS port 636)' },
         ],
         showWhen: { field: 'import_mode', value: 'live' },
       },

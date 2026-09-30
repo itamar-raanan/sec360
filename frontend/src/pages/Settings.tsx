@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Users,
   Settings2,
-  ClipboardList,
   User,
   Plus,
   Trash2,
@@ -43,6 +42,7 @@ interface AuthUserDetail {
   mfa_enabled: boolean
   invitation_pending: boolean
   must_change_password: boolean
+  mfa_setup_required?: boolean
   created_at: string
 }
 
@@ -449,7 +449,7 @@ function UsersTab() {
 // ── My Account tab ───────────────────────────────────────────────────────────
 
 function AccountTab() {
-  const { user, setAuth } = useAuthStore()
+  const { user, logout } = useAuthStore()
   const [pwCurrent, setPwCurrent] = useState('')
   const [pwNew, setPwNew] = useState('')
   const [pwConfirm, setPwConfirm] = useState('')
@@ -465,7 +465,7 @@ function AccountTab() {
   const [mfaLoading, setMfaLoading] = useState(false)
 
   // We re-fetch "me" to get current mfa_enabled state
-  const { data: me, refetch: refetchMe } = useQuery({
+  const { data: me } = useQuery({
     queryKey: ['settings-me'],
     queryFn: () => apiClient.get('/settings/me').then(r => r.data as AuthUserDetail),
   })
@@ -478,9 +478,7 @@ function AccountTab() {
     if (pwNew.length < minimumLength) { setPwMsg({ type: 'error', msg: `Password must be at least ${minimumLength} characters` }); return }
     try {
       await apiClient.post('/settings/me/password', { current_password: pwCurrent, new_password: pwNew })
-      if (user) setAuth({ ...user, must_change_password: false })
-      setPwMsg({ type: 'success', msg: 'Password changed successfully' })
-      setPwCurrent(''); setPwNew(''); setPwConfirm('')
+      await logout()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Failed to change password'
       setPwMsg({ type: 'error', msg })
@@ -508,11 +506,7 @@ function AccountTab() {
     setMfaMsg(null)
     try {
       await apiClient.post('/settings/me/mfa/enable', { code: mfaCode })
-      setMfaMsg({ type: 'success', msg: '2FA enabled! You will be prompted for a code at each login.' })
-      setMfaStep('idle')
-      setMfaCode('')
-      setQrData(null)
-      refetchMe()
+      await logout()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Invalid code'
       setMfaMsg({ type: 'error', msg })
@@ -526,10 +520,7 @@ function AccountTab() {
     setMfaMsg(null)
     try {
       await apiClient.delete('/settings/me/mfa', { data: { code: mfaCode } })
-      setMfaMsg({ type: 'success', msg: '2FA disabled' })
-      setMfaStep('idle')
-      setMfaCode('')
-      refetchMe()
+      await logout()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Invalid code'
       setMfaMsg({ type: 'error', msg })
@@ -905,7 +896,7 @@ function PlatformTab() {
           <Toggle checked={form.enforce_mfa} onChange={v => set('enforce_mfa', v)} />
         </Field>
         <Field label="Minimum password length">
-          <NumberInput value={form.min_password_length} min={6} max={64} onChange={v => set('min_password_length', v)} suffix="chars" />
+          <NumberInput value={form.min_password_length} min={8} max={128} onChange={v => set('min_password_length', v)} suffix="chars" />
         </Field>
         <Field label="Session timeout">
           <NumberInput value={form.session_timeout_hours} min={1} max={720} onChange={v => set('session_timeout_hours', v)} suffix="hours" />
@@ -1648,6 +1639,8 @@ function CertificateTab() {
 
 // ── Audit log tab ─────────────────────────────────────────────────────────────
 
+// Kept temporarily while audit logs are consolidated under Security.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function AuditTab() {
   const [page, setPage] = useState(0)
   const limit = 25
@@ -1755,7 +1748,9 @@ export default function Settings() {
   const { user } = useAuthStore()
   const isAdmin = user?.role === 'admin'
   const passwordChangeRequired = Boolean(user?.must_change_password)
-  const [tab, setTab] = useState<Tab>(passwordChangeRequired ? 'account' : isAdmin ? 'users' : 'account')
+  const mfaSetupRequired = Boolean(user?.mfa_setup_required)
+  const accountSetupRequired = passwordChangeRequired || mfaSetupRequired
+  const [tab, setTab] = useState<Tab>(accountSetupRequired ? 'account' : isAdmin ? 'users' : 'account')
 
   const tabs: { id: Tab; label: string; icon: React.ElementType; adminOnly: boolean }[] = [
     { id: 'users', label: 'Users & Access', icon: Users, adminOnly: true },
@@ -1765,7 +1760,7 @@ export default function Settings() {
     { id: 'certificate', label: 'HTTPS Certificate', icon: FileKey2, adminOnly: true },
   ]
 
-  const visibleTabs = passwordChangeRequired
+  const visibleTabs = accountSetupRequired
     ? tabs.filter(t => t.id === 'account')
     : tabs.filter(t => !t.adminOnly || isAdmin)
 
@@ -1777,6 +1772,11 @@ export default function Settings() {
         {passwordChangeRequired && (
           <div className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
             Change the temporary bootstrap password before continuing to SEC360.
+          </div>
+        )}
+        {mfaSetupRequired && (
+          <div className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            Set up two-factor authentication before continuing to SEC360.
           </div>
         )}
         {/* Tab bar */}

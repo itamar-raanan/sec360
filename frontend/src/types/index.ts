@@ -13,6 +13,8 @@ export interface AuthUser {
   is_active: boolean
   auth_method: 'local' | 'sso' | 'radius'
   must_change_password: boolean
+  mfa_enabled: boolean
+  mfa_setup_required: boolean
 }
 
 export interface UserSources {

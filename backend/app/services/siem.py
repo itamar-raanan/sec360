@@ -137,9 +137,12 @@ def _headers(config: dict) -> dict[str, str]:
 
 
 async def send_ecs_document(config: dict, document: dict[str, Any]) -> None:
+    from app.core.outbound import validate_outbound_url
+
     url = str(config.get("url", "")).strip()
     if not url:
         raise ValueError("SIEM URL is not configured")
+    await validate_outbound_url(url)
     auth = None
     if config.get("auth_type") == "basic":
         auth = (str(config.get("username", "")), str(config.get("secret", "")))

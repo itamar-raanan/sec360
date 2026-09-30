@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Users,
   ClipboardList,
   Plus,
   Trash2,
@@ -136,6 +135,8 @@ const ACTION_CATEGORIES = [
 
 // ── Users tab ──────────────────────────────────────────────────────────────────
 
+// Kept temporarily while access management is consolidated under Settings.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function UsersTab() {
   const qc = useQueryClient()
   const { user: me } = useAuthStore()

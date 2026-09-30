@@ -8,7 +8,8 @@ from datetime import datetime, timezone
 
 from app.core.database import AsyncSessionLocal
 from app.core.security import decode_token, has_role
-from app.models.user import AuthUser
+from app.models.user import AuthSession, AuthUser
+from app.models.system_settings import SystemSettings
 from app.models.audit import AuditLog
 from app.core.request import get_client_ip
 
@@ -59,7 +60,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    if payload.get("type") == "refresh":
+    if payload.get("type") != "access":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token cannot be used as access token",
@@ -79,6 +80,24 @@ async def get_current_user(
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
+    session_id_raw = payload.get("sid")
+    if not session_id_raw:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session is no longer valid")
+    try:
+        session_id = uuid.UUID(session_id_raw)
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
+    active_session = (await db.execute(
+        select(AuthSession).where(
+            AuthSession.id == session_id,
+            AuthSession.user_id == user.id,
+            AuthSession.revoked_at.is_(None),
+            AuthSession.expires_at > datetime.now(timezone.utc),
+        )
+    )).scalar_one_or_none()
+    if active_session is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or revoked")
+
     password_change_paths = {
         "/api/auth/me",
         "/api/auth/logout",
@@ -89,6 +108,23 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Password change required before continuing",
+        )
+
+    cfg = (await db.execute(
+        select(SystemSettings).where(SystemSettings.id == 1)
+    )).scalar_one_or_none()
+    mfa_setup_paths = password_change_paths | {
+        "/api/settings/me/mfa/setup",
+        "/api/settings/me/mfa/enable",
+    }
+    requires_mfa = bool(
+        cfg
+        and (cfg.enforce_mfa or (user.auth_method == "sso" and cfg.saml_require_mfa))
+    )
+    if requires_mfa and not user.mfa_enabled and request.url.path not in mfa_setup_paths:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="MFA setup required before continuing",
         )
 
     return user

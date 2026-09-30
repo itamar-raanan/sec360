@@ -3,6 +3,7 @@ from typing import Any
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.outbound import validate_outbound_url
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +57,7 @@ class CustomApiCollector:
 
         url = f"{self.base_url}{self.endpoint_path}"
         try:
+            await validate_outbound_url(url)
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.get(url, headers=self._headers())
                 if resp.status_code == 401:
@@ -85,6 +87,7 @@ class CustomApiCollector:
 
         url = f"{self.base_url}{self.endpoint_path}"
         try:
+            await validate_outbound_url(url)
             async with httpx.AsyncClient(timeout=60.0) as client:
                 resp = await client.get(url, headers=self._headers())
                 resp.raise_for_status()

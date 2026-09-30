@@ -14,13 +14,14 @@ import pyotp
 import qrcode
 import qrcode.image.svg
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, status, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, status, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, func, not_, or_, select
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_db, get_current_user, require_role, audit_action
 from app.core.security import hash_password, verify_password
+from app.services.auth_sessions import revoke_user_sessions
 from app.models.user import AuthUser
 from app.models.system_settings import SystemSettings
 from app.models.audit import AuditLog
@@ -106,8 +107,8 @@ class SystemSettingsIn(BaseModel):
     risk_weight_outdated_os: Optional[float] = None
     auto_correlation: Optional[bool] = None
     enforce_mfa: Optional[bool] = None
-    min_password_length: Optional[int] = None
-    session_timeout_hours: Optional[int] = None
+    min_password_length: Optional[int] = Field(default=None, ge=8, le=128)
+    session_timeout_hours: Optional[int] = Field(default=None, ge=1, le=720)
     platform_name: Optional[str] = None
     min_s1_version: Optional[str] = None
     min_dlp_version: Optional[str] = None
@@ -221,8 +222,10 @@ async def create_auth_user(
 ):
     if data.role not in ("admin", "analyst", "viewer"):
         raise HTTPException(400, "role must be admin, analyst, or viewer")
-    if len(data.password) < 8:
-        raise HTTPException(400, "Password must be at least 8 characters")
+    cfg = (await db.execute(select(SystemSettings).where(SystemSettings.id == 1))).scalar_one_or_none()
+    minimum_length = max(8, min(int(cfg.min_password_length if cfg else 8), 128))
+    if len(data.password) < minimum_length:
+        raise HTTPException(400, f"Password must be at least {minimum_length} characters")
 
     existing = (await db.execute(select(AuthUser).where(AuthUser.email == data.email))).scalar_one_or_none()
     if existing:
@@ -367,6 +370,8 @@ async def update_auth_user(
         user.role = data.role
     if data.is_active is not None:
         user.is_active = data.is_active
+    if previous != {"role": user.role, "is_active": user.is_active}:
+        await revoke_user_sessions(db, user.id)
     await db.flush()
     updated = {"role": user.role, "is_active": user.is_active}
     if previous != updated:
@@ -423,6 +428,7 @@ async def admin_reset_mfa(
         raise HTTPException(404, "User not found")
     user.mfa_secret = None
     user.mfa_enabled = False
+    await revoke_user_sessions(db, user.id)
     await db.flush()
     return {"message": "2FA reset successfully"}
 
@@ -437,6 +443,7 @@ async def get_my_settings(current: AuthUser = Depends(get_current_user)):
 @router.post("/me/password")
 async def change_password(
     data: ChangePasswordRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current: AuthUser = Depends(get_current_user),
 ):
@@ -444,13 +451,18 @@ async def change_password(
         raise HTTPException(400, f"Password changes are managed by {current.auth_method.upper()}")
     if not verify_password(data.current_password, current.hashed_password):
         raise HTTPException(400, "Current password is incorrect")
-    minimum_length = 12 if current.must_change_password else 8
+    cfg = (await db.execute(select(SystemSettings).where(SystemSettings.id == 1))).scalar_one_or_none()
+    configured_minimum = int(cfg.min_password_length if cfg else 8)
+    minimum_length = max(12 if current.must_change_password else 8, min(configured_minimum, 128))
     if len(data.new_password) < minimum_length:
         raise HTTPException(400, f"New password must be at least {minimum_length} characters")
     if verify_password(data.new_password, current.hashed_password):
         raise HTTPException(400, "New password must be different from the current password")
     current.hashed_password = hash_password(data.new_password)
     current.must_change_password = False
+    await revoke_user_sessions(db, current.id)
+    response.delete_cookie("sec360_token", path="/")
+    response.delete_cookie("sec360_refresh", path="/api/auth/refresh")
     await db.flush()
     return {"message": "Password changed successfully"}
 
@@ -486,6 +498,7 @@ async def mfa_setup(
 @router.post("/me/mfa/enable")
 async def mfa_enable(
     data: MfaVerifyRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current: AuthUser = Depends(get_current_user),
 ):
@@ -500,6 +513,9 @@ async def mfa_enable(
         raise HTTPException(400, "Invalid verification code")
 
     current.mfa_enabled = True
+    await revoke_user_sessions(db, current.id)
+    response.delete_cookie("sec360_token", path="/")
+    response.delete_cookie("sec360_refresh", path="/api/auth/refresh")
     await db.flush()
     return {"message": "2FA enabled successfully"}
 
@@ -507,6 +523,7 @@ async def mfa_enable(
 @router.delete("/me/mfa")
 async def mfa_disable(
     data: MfaVerifyRequest,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     current: AuthUser = Depends(get_current_user),
 ):
@@ -514,12 +531,19 @@ async def mfa_disable(
     if not current.mfa_enabled:
         raise HTTPException(400, "2FA is not enabled")
 
+    cfg = (await db.execute(select(SystemSettings).where(SystemSettings.id == 1))).scalar_one_or_none()
+    if cfg and (cfg.enforce_mfa or (current.auth_method == "sso" and cfg.saml_require_mfa)):
+        raise HTTPException(400, "2FA is required by the authentication policy")
+
     totp = pyotp.TOTP(current.mfa_secret)
     if not totp.verify(data.code, valid_window=1):
         raise HTTPException(400, "Invalid verification code")
 
     current.mfa_secret = None
     current.mfa_enabled = False
+    await revoke_user_sessions(db, current.id)
+    response.delete_cookie("sec360_token", path="/")
+    response.delete_cookie("sec360_refresh", path="/api/auth/refresh")
     await db.flush()
     return {"message": "2FA disabled"}
 

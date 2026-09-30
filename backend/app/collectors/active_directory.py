@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import ssl
 from datetime import datetime, timezone
 from typing import Any
 
@@ -29,15 +30,18 @@ class ActiveDirectoryCollector:
     def __init__(self, credentials: dict, db: AsyncSession):
         self.credentials_mode = str(credentials.get("import_mode", "live"))
         self.ldap_host = credentials.get("ldap_host", "")
-        self.ldap_port = int(credentials.get("ldap_port") or 389)
+        self.ldap_port = int(credentials.get("ldap_port") or 636)
         self.base_dn = credentials.get("base_dn", "")
         self.bind_dn = credentials.get("bind_dn", "")
         self.bind_password = credentials.get("bind_password", "")
-        self.use_ssl = str(credentials.get("use_ssl", "false")).lower() == "true"
+        self.use_ssl = str(credentials.get("use_ssl", "true")).lower() == "true"
         self.db = db
 
     def _make_connection(self):
-        from ldap3 import Server, Connection, ALL, SAFE_SYNC
+        from ldap3 import Server, Connection, ALL, SAFE_SYNC, Tls
+
+        if not self.use_ssl:
+            raise ValueError("Unencrypted LDAP is disabled. Configure LDAPS on port 636.")
 
         server = Server(
             self.ldap_host,
@@ -45,6 +49,7 @@ class ActiveDirectoryCollector:
             use_ssl=self.use_ssl,
             get_info=ALL,
             connect_timeout=15,
+            tls=Tls(validate=ssl.CERT_REQUIRED),
         )
         conn = Connection(
             server,
@@ -65,6 +70,8 @@ class ActiveDirectoryCollector:
             return {"success": False, "message": "Bind DN and password are required"}
         if not self.base_dn:
             return {"success": False, "message": "Base DN is required"}
+        if not self.use_ssl:
+            return {"success": False, "message": "Unencrypted LDAP is disabled. Configure LDAPS on port 636."}
 
         loop = asyncio.get_event_loop()
         try:
@@ -92,6 +99,8 @@ class ActiveDirectoryCollector:
             return {"records_synced": 0, "manual": True}
         if not self.ldap_host or not self.base_dn or not self.bind_dn:
             return {"records_synced": 0, "error": "LDAP host, base DN, and bind DN are required"}
+        if not self.use_ssl:
+            return {"records_synced": 0, "error": "Unencrypted LDAP is disabled. Configure LDAPS on port 636."}
 
         loop = asyncio.get_event_loop()
         try:

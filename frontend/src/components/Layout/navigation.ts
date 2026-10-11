@@ -10,6 +10,7 @@ import {
   Plug,
   ShieldCheck,
   Settings,
+  ScanSearch,
   Users,
   type LucideIcon,
 } from 'lucide-react'
@@ -39,6 +40,7 @@ export const NAV_ITEMS: NavigationItem[] = [
   { to: '/application-vulnerabilities', icon: Bug, label: 'App Vulnerabilities', shortLabel: 'Vulnerabilities', minRole: 'viewer', group: 'Analyze', requiredFeature: 'application_vulnerabilities' },
   { to: '/puppet-facts', icon: Braces, label: 'Puppet Facts', minRole: 'analyst', group: 'Analyze', requiredFeature: 'puppet_facts' },
   { to: '/dlp-user-policy-search', icon: Database, label: 'DLP Policy Search', minRole: 'analyst', group: 'Analyze', requiredIntegration: 'symantec_dlp' },
+  { to: '/url-investigation', icon: ScanSearch, label: 'URL Investigation', minRole: 'analyst', group: 'Analyze' },
   { to: '/reports', icon: FileText, label: 'Reports', minRole: 'analyst', group: 'Manage' },
   { to: '/integrations', icon: Plug, label: 'Integration Store', shortLabel: 'Integrations', minRole: 'admin', group: 'Manage' },
   { to: '/security', icon: ShieldCheck, label: 'Security', minRole: 'admin', group: 'Manage' },

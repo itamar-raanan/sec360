@@ -9,6 +9,11 @@ from app.models.integration import IntegrationConfig
 from app.models.note import Note
 from app.models.puppet import PuppetFact, PuppetFactFavorite, PuppetFactSavedView, PuppetNode
 from app.models.change_event import ChangeEvent, EntityStateSnapshot, SiemDelivery
+from app.models.url_investigation import (
+    UrlInvestigation,
+    UrlInvestigationArtifact,
+    UrlInvestigationProviderResult,
+)
 
 __all__ = [
     "User",
@@ -31,4 +36,7 @@ __all__ = [
     "ChangeEvent",
     "EntityStateSnapshot",
     "SiemDelivery",
+    "UrlInvestigation",
+    "UrlInvestigationArtifact",
+    "UrlInvestigationProviderResult",
 ]

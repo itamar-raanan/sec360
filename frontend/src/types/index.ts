@@ -234,7 +234,7 @@ export interface IntegrationConfig {
   integration_type: string
   display_name: string
   is_enabled: boolean
-  status: 'unconfigured' | 'connected' | 'error'
+  status: 'unconfigured' | 'connected' | 'error' | 'unverified'
   last_sync: string | null
   last_error: string | null
   records_synced: string | null

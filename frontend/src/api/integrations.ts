@@ -29,6 +29,11 @@ export const deleteIntegrationCredentials = async (type: string): Promise<void> 
   await apiClient.delete(`/integrations/${type}/credentials`)
 }
 
+export const setIntegrationEnabled = async (type: string, enabled: boolean): Promise<IntegrationConfig> => {
+  const { data } = await apiClient.patch(`/integrations/${type}/enabled`, { enabled })
+  return data
+}
+
 export const createCustomIntegration = async (body: {
   integration_type: string
   display_name: string

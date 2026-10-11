@@ -24,6 +24,7 @@ from app.integrations.registry import get_collector_class
 from app.schemas.integration import (
     IntegrationConfigResponse,
     IntegrationConfigUpdate,
+    IntegrationEnabledUpdate,
     SyncResult,
     CustomIntegrationCreate,
 )
@@ -31,6 +32,50 @@ from app.schemas.integration import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
+
+THREAT_INTELLIGENCE_PROVIDERS = {
+    "virustotal", "abuseipdb", "cloudflare_url_scanner", "site_shot", "cisco_talos"
+}
+
+
+def _validate_threat_intelligence_credentials(integration_type: str, credentials: dict) -> dict:
+    if integration_type not in THREAT_INTELLIGENCE_PROVIDERS:
+        return credentials
+    required = {
+        "virustotal": ("api_key",),
+        "abuseipdb": ("api_key",),
+        "cloudflare_url_scanner": ("account_id", "api_token"),
+        "site_shot": ("api_key",),
+        "cisco_talos": ("mode",),
+    }[integration_type]
+    for field in required:
+        value = str(credentials.get(field, "")).strip()
+        if not value:
+            raise HTTPException(400, f"{field.replace('_', ' ').title()} is required")
+        if len(value) > 2000:
+            raise HTTPException(400, f"{field.replace('_', ' ').title()} is too long")
+    bounds = {
+        "timeout_seconds": (2, 60),
+        "cache_ttl_minutes": (0, 10080),
+        "rate_limit_per_minute": (1, 600),
+        "fresh_days": (1, 365),
+        "max_ips": (1, 20),
+        "max_age_days": (1, 365),
+    }
+    validated = dict(credentials)
+    for field, (minimum, maximum) in bounds.items():
+        if field not in validated:
+            continue
+        try:
+            value = int(validated[field])
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(400, f"{field.replace('_', ' ').title()} must be a number") from exc
+        if not minimum <= value <= maximum:
+            raise HTTPException(400, f"{field.replace('_', ' ').title()} must be between {minimum} and {maximum}")
+        validated[field] = value
+    if integration_type == "cisco_talos" and validated.get("mode") != "manual":
+        raise HTTPException(400, "Cisco Talos supports manual lookup mode only")
+    return validated
 
 def _to_response(config: IntegrationConfig) -> IntegrationConfigResponse:
     return IntegrationConfigResponse(
@@ -260,7 +305,7 @@ async def update_integration(
         )
         db.add(config)
 
-    config.credentials = body.credentials
+    config.credentials = _validate_threat_intelligence_credentials(integration_type, body.credentials)
     config.is_enabled = body.is_enabled
     # New or changed credentials must be verified before product features unlock.
     config.status = "unconfigured"
@@ -273,8 +318,9 @@ async def update_integration(
 @router.delete("/{integration_type}/credentials", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_integration_credentials(
     integration_type: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
-    _: AuthUser = Depends(require_role("admin")),
+    current: AuthUser = Depends(require_role("admin")),
 ):
     config = (await db.execute(
         select(IntegrationConfig).where(IntegrationConfig.integration_type == integration_type)
@@ -290,6 +336,33 @@ async def delete_integration_credentials(
     config.last_sync = None
     config.records_synced = None
     await db.flush()
+    await audit_action(
+        "delete_integration_credentials", "integration", integration_type, request, db, current, {}
+    )
+
+
+@router.patch("/{integration_type}/enabled", response_model=IntegrationConfigResponse)
+async def set_integration_enabled(
+    integration_type: str,
+    body: IntegrationEnabledUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_role("admin")),
+):
+    config = (await db.execute(
+        select(IntegrationConfig).where(IntegrationConfig.integration_type == integration_type)
+    )).scalar_one_or_none()
+    if not config:
+        raise HTTPException(404, "Integration not found")
+    if body.enabled and not config.credentials:
+        raise HTTPException(400, "Configure credentials before enabling this integration")
+    config.is_enabled = body.enabled
+    await db.flush()
+    await audit_action(
+        "set_integration_enabled", "integration", integration_type, request, db, current,
+        {"enabled": body.enabled},
+    )
+    return _to_response(config)
 
 
 @router.post("/{integration_type}/test")
@@ -312,7 +385,7 @@ async def test_integration(
 
     # A successful connection test installs the product's gated capabilities.
     if result.get("success"):
-        config.status = "connected"
+        config.status = result.get("status", "connected")
         config.last_error = None
     else:
         config.status = "error"
@@ -329,6 +402,10 @@ async def sync_integration(
     db: AsyncSession = Depends(get_db),
     current: AuthUser = Depends(require_role("admin")),
 ):
+    if integration_type in {
+        "virustotal", "abuseipdb", "cloudflare_url_scanner", "site_shot", "cisco_talos"
+    }:
+        raise HTTPException(400, "Threat-intelligence providers run from URL & Domain Investigation; they do not perform inventory sync")
     config = (await db.execute(
         select(IntegrationConfig).where(IntegrationConfig.integration_type == integration_type)
     )).scalar_one_or_none()
@@ -384,6 +461,12 @@ async def sync_integration(
 
 async def _run_test(integration_type: str, credentials: dict, db: AsyncSession) -> dict:
     try:
+        if integration_type in {
+            "virustotal", "abuseipdb", "cloudflare_url_scanner", "site_shot", "cisco_talos"
+        }:
+            from app.investigations.providers import PROVIDER_ADAPTERS
+
+            return await PROVIDER_ADAPTERS[integration_type](credentials).test_connection()
         collector_class = get_collector_class(integration_type)
         if collector_class is None:
             return {"success": False, "message": f"Unknown integration type: {integration_type}"}

@@ -27,3 +27,4 @@ pytest-asyncio
 aiosqlite
 cryptography>=42.0.0
 redis[asyncio]>=5.0.0
+tldextract==5.1.2

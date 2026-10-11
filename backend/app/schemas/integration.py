@@ -30,6 +30,10 @@ class IntegrationConfigUpdate(BaseModel):
     is_enabled: bool = True
 
 
+class IntegrationEnabledUpdate(BaseModel):
+    enabled: bool
+
+
 class IntegrationConfigResponse(BaseModel):
     model_config = {"from_attributes": True}
 

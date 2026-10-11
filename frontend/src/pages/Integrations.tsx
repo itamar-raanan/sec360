@@ -32,6 +32,10 @@ import {
   Upload,
   FileText,
   Copy,
+  Camera,
+  Cloud,
+  Radar,
+  Network,
 } from 'lucide-react'
 import {
   fetchIntegrations,
@@ -39,6 +43,7 @@ import {
   testIntegration,
   syncIntegration,
   deleteIntegrationCredentials,
+  setIntegrationEnabled,
   createCustomIntegration,
   deleteIntegration,
   importActiveDirectoryCsv,
@@ -71,6 +76,7 @@ type CatalogEntry = {
   unlocks?: string[]
   fields: FieldDef[]
   docsHint?: string
+  supportsSync?: boolean
 }
 
 // ─── Catalog ─────────────────────────────────────────────────────────────────
@@ -383,6 +389,87 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
       },
     ],
   },
+  virustotal: {
+    label: 'VirusTotal',
+    category: 'threat_intelligence',
+    description: 'URL and domain reputation with explicit URL scan submission',
+    color: '#3b82f6',
+    icon: Radar,
+    dataProduces: ['URL Reputation', 'Domain Context', 'Detection Details'],
+    supportsSync: false,
+    docsHint: 'Requires a VirusTotal API v3 key. Queries disclose indicators to VirusTotal and are subject to account quotas, licensing, and API terms. Connection testing uses one domain lookup.',
+    fields: [
+      { name: 'api_key', label: 'API Key', type: 'password', required: true, placeholder: 'VirusTotal API v3 key' },
+      { name: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', defaultValue: '15' },
+      { name: 'cache_ttl_minutes', label: 'Cache TTL (minutes)', type: 'number', defaultValue: '60' },
+      { name: 'rate_limit_per_minute', label: 'Maximum requests per minute', type: 'number', defaultValue: '4' },
+      { name: 'fresh_days', label: 'Evidence freshness (days)', type: 'number', defaultValue: '30' },
+    ],
+  },
+  abuseipdb: {
+    label: 'AbuseIPDB',
+    category: 'threat_intelligence',
+    description: 'Resolved-IP reputation used as infrastructure context',
+    color: '#ef4444',
+    icon: Network,
+    dataProduces: ['IP Reputation', 'Abuse Reports', 'Infrastructure Context'],
+    supportsSync: false,
+    docsHint: 'Requires an AbuseIPDB API v2 key. Connection testing checks one public IP and consumes account quota. Results never determine URL risk by themselves.',
+    fields: [
+      { name: 'api_key', label: 'API Key', type: 'password', required: true, placeholder: 'AbuseIPDB API key' },
+      { name: 'max_ips', label: 'Maximum resolved IPs per investigation', type: 'number', defaultValue: '5' },
+      { name: 'max_age_days', label: 'Report lookback (days)', type: 'number', defaultValue: '90' },
+      { name: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', defaultValue: '15' },
+      { name: 'cache_ttl_minutes', label: 'Cache TTL (minutes)', type: 'number', defaultValue: '60' },
+      { name: 'rate_limit_per_minute', label: 'Maximum requests per minute', type: 'number', defaultValue: '10' },
+    ],
+  },
+  cloudflare_url_scanner: {
+    label: 'Cloudflare URL Scanner',
+    category: 'threat_intelligence',
+    description: 'Existing URL scans, explicit unlisted scans, and screenshots',
+    color: '#f97316',
+    icon: Cloud,
+    dataProduces: ['URL Verdicts', 'Redirects', 'Contacted Infrastructure', 'Screenshots'],
+    supportsSync: false,
+    docsHint: 'Requires a Cloudflare account ID and API token with URL Scanner Read; explicit scans also require URL Scanner Write. Sec360 requests Unlisted visibility, which is not equivalent to private.',
+    fields: [
+      { name: 'account_id', label: 'Cloudflare Account ID', type: 'text', required: true },
+      { name: 'api_token', label: 'API Token', type: 'password', required: true },
+      { name: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', defaultValue: '20' },
+      { name: 'cache_ttl_minutes', label: 'Cache TTL (minutes)', type: 'number', defaultValue: '60' },
+      { name: 'rate_limit_per_minute', label: 'Maximum requests per minute', type: 'number', defaultValue: '10' },
+      { name: 'fresh_days', label: 'Evidence freshness (days)', type: 'number', defaultValue: '30' },
+    ],
+  },
+  site_shot: {
+    label: 'Site-Shot',
+    category: 'threat_intelligence',
+    description: 'Explicit screenshot capture for visual evidence only',
+    color: '#a855f7',
+    icon: Camera,
+    dataProduces: ['Static Screenshots'],
+    supportsSync: false,
+    docsHint: 'Site-Shot API access requires a paid plan. There is no documented zero-capture credential test, so the key is verified only during an explicitly approved capture. Screenshots never affect risk scoring.',
+    fields: [
+      { name: 'api_key', label: 'API Key', type: 'password', required: true, placeholder: 'Site-Shot user key' },
+      { name: 'timeout_seconds', label: 'Capture timeout (seconds)', type: 'number', defaultValue: '30' },
+      { name: 'rate_limit_per_minute', label: 'Maximum captures per minute', type: 'number', defaultValue: '5' },
+    ],
+  },
+  cisco_talos: {
+    label: 'Cisco Talos',
+    category: 'threat_intelligence',
+    description: 'Manual reputation lookup without unsupported scraping or invented API access',
+    color: '#06b6d4',
+    icon: Shield,
+    dataProduces: ['Manual Lookup Link'],
+    supportsSync: false,
+    docsHint: 'Sec360 does not assume the public Talos website accepts a generic API token. This enables a safely constructed manual lookup link and is excluded from automated scoring.',
+    fields: [
+      { name: 'mode', label: 'Lookup mode', type: 'select', defaultValue: 'manual', options: [{ value: 'manual', label: 'Manual lookup (supported)' }] },
+    ],
+  },
 }
 
 const FEATURE_LABELS: Record<string, string> = {
@@ -415,6 +502,7 @@ const CATEGORIES: CategoryDef[] = [
   { id: 'dlp', label: 'Data Protection', icon: Lock },
   { id: 'config', label: 'Config Management', icon: GitBranch },
   { id: 'productivity', label: 'Productivity', icon: Globe },
+  { id: 'threat_intelligence', label: 'Threat Intelligence', icon: Radar },
   { id: 'custom', label: 'Custom', icon: Puzzle },
 ]
 
@@ -590,6 +678,22 @@ function StatusDot({ status }: { status: string }) {
       </span>
     )
   }
+  if (status === 'disabled') {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <span className="w-2 h-2 rounded-full bg-zinc-600" />
+        <span className="text-xs font-medium text-zinc-500">Disabled</span>
+      </span>
+    )
+  }
+  if (status === 'unverified') {
+    return (
+      <span className="inline-flex items-center gap-1.5">
+        <span className="w-2 h-2 rounded-full bg-amber-400" />
+        <span className="text-xs font-medium text-amber-400">Saved · Unverified</span>
+      </span>
+    )
+  }
   return (
     <span className="inline-flex items-center gap-1.5">
       <span className="w-2 h-2 rounded-full bg-zinc-600" />
@@ -676,7 +780,7 @@ function IntegrationCard({
 
         {/* Right: status + sync time */}
         <div className="flex flex-col items-end gap-1 flex-shrink-0">
-          <StatusDot status={config.status} />
+          <StatusDot status={config.is_enabled ? config.status : 'disabled'} />
           {relativeSync && (
             <span className="text-[10px] text-zinc-600 flex items-center gap-1">
               <Clock size={9} />
@@ -888,6 +992,14 @@ function IntegrationPanel({
     },
   })
 
+  const enabledMutation = useMutation({
+    mutationFn: (enabled: boolean) => setIntegrationEnabled(config!.integration_type, enabled),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['integrations'] })
+      setTestResult({ success: true, message: config?.is_enabled ? 'Integration disabled. Saved credentials were retained.' : 'Integration enabled.' })
+    },
+  })
+
   const deleteIntegrationMutation = useMutation({
     mutationFn: () => deleteIntegration(config!.integration_type),
     onSuccess: () => {
@@ -985,7 +1097,7 @@ function IntegrationPanel({
                   <div className="rounded-xl bg-[var(--surface-2)] border border-[var(--border)] p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-zinc-500 font-medium uppercase tracking-wide">Status</span>
-                      <StatusDot status={config.status} />
+                      <StatusDot status={config.is_enabled ? config.status : 'disabled'} />
                     </div>
                     {relativeSync && (
                       <div className="flex items-center justify-between text-xs">
@@ -1078,11 +1190,20 @@ function IntegrationPanel({
                           <button onClick={() => testMutation.mutate()} disabled={testMutation.isPending} className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] hover:border-[var(--accent)]/50 text-sm text-zinc-300 hover:text-white transition-colors disabled:opacity-50">
                             {testMutation.isPending ? <Loader2 size={14} className="animate-spin text-zinc-400" /> : <Settings2 size={14} className="text-zinc-400" />} Test Connection
                           </button>
-                          <button onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending} className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--accent)]/10 border border-[var(--accent)]/30 hover:bg-[var(--accent)]/20 text-sm text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50">
+                          {catalog?.supportsSync !== false && <button onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending} className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--accent)]/10 border border-[var(--accent)]/30 hover:bg-[var(--accent)]/20 text-sm text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50">
                             {syncMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncMutation.isPending ? 'Syncing...' : 'Sync Now'}
-                          </button>
+                          </button>}
                         </>
                       )}
+
+                      <button
+                        onClick={() => enabledMutation.mutate(!config.is_enabled)}
+                        disabled={enabledMutation.isPending}
+                        className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-sm text-zinc-300 hover:text-white transition-colors disabled:opacity-50"
+                      >
+                        {config.is_enabled ? <XCircle size={14} /> : <CheckCircle2 size={14} />}
+                        {config.is_enabled ? 'Disable (keep credentials)' : 'Enable'}
+                      </button>
 
                       <button
                         onClick={async () => {

@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.investigations.indicators import normalize_indicator
+from app.investigations.indicators import _registrable_domain, normalize_indicator
 from app.investigations.providers.adapters import AbuseIPDBAdapter, CloudflareUrlScannerAdapter, SiteShotAdapter
 from app.investigations.providers.base import ProviderError
 from app.investigations.scoring import score_results
@@ -19,6 +19,18 @@ async def _headers(client, email: str, password: str) -> dict[str, str]:
     response = await client.post("/api/auth/login", json={"email": email, "password": password})
     assert response.status_code == 200
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+async def test_registrable_domain_supports_pinned_tldextract_api(monkeypatch):
+    class ExtractResult:
+        registered_domain = "example.co.uk"
+
+    class Extractor:
+        def __call__(self, _hostname: str):
+            return ExtractResult()
+
+    monkeypatch.setattr("tldextract.TLDExtract", lambda **_kwargs: Extractor())
+    assert _registrable_domain("login.example.co.uk") == "example.co.uk"
 
 
 async def test_normalizes_defanged_url_without_losing_path_case_or_query(monkeypatch):

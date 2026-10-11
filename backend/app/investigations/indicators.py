@@ -50,7 +50,14 @@ def _registrable_domain(hostname: str) -> str:
         import tldextract
 
         extracted = tldextract.TLDExtract(suffix_list_urls=())(hostname)
-        return extracted.top_domain_under_public_suffix or hostname
+        # tldextract 5.1 (the version pinned by SEC360) exposes
+        # ``registered_domain``. Newer releases renamed that value to
+        # ``top_domain_under_public_suffix``. Support both APIs so a provider
+        # dependency update cannot turn indicator preview into a HTTP 500.
+        registrable = getattr(extracted, "top_domain_under_public_suffix", None)
+        if not registrable:
+            registrable = getattr(extracted, "registered_domain", None)
+        return registrable or hostname
     except ImportError:
         # The production image installs tldextract. This conservative fallback
         # keeps local tooling usable without pretending uncommon suffixes are exact.

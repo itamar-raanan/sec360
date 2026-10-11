@@ -138,7 +138,8 @@ export default function UrlInvestigation() {
 
   useEffect(() => { setPreview(null); setAcknowledged(false) }, [input])
   const enabledCount = useMemo(() => preview?.providers.filter(provider => provider.enabled).length ?? 0, [preview])
-  return <div className="mx-auto max-w-6xl space-y-6 pb-12">
+  return <div className="h-full overflow-y-auto">
+    <div className="mx-auto max-w-6xl space-y-6 px-4 py-5 pb-12 sm:px-6 lg:px-8">
     <div><div className="flex items-center gap-2"><Globe2 size={18} className="text-emerald-400" /><h1 className="text-xl font-bold text-white">URL & Domain Investigation</h1></div><p className="mt-1 text-sm text-zinc-500">Correlate direct reputation, infrastructure context, and static screenshot evidence in one explainable assessment.</p></div>
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] p-5">
       <form onSubmit={event => { event.preventDefault(); previewMutation.mutate() }} className="flex flex-col gap-3 sm:flex-row">
@@ -160,6 +161,7 @@ export default function UrlInvestigation() {
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-1)]">
       <div className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-3"><History size={14} className="text-zinc-500" /><h2 className="text-sm font-semibold text-white">Investigation history</h2></div>
       <div className="divide-y divide-[var(--border)]">{history.data?.map(item => <div key={item.id} className="flex items-center gap-3 px-4 py-3"><button onClick={() => setSelectedId(item.id)} className="min-w-0 flex-1 text-left"><div className="flex items-center gap-2"><span className="truncate text-xs font-medium text-zinc-200">{item.indicator_preview}</span><StatusPill status={item.status === 'completed' ? 'completed' : 'running'} /></div><p className="mt-1 text-[10px] text-zinc-600">{new Date(item.created_at).toLocaleString()} · {item.requested_by} · {item.coverage.label ?? 'No coverage yet'}</p></button><span className="text-sm font-bold tabular-nums text-zinc-300">{item.risk_score ?? '—'}</span>{(user?.role === 'admin' || item.requested_by === user?.email) && <button onClick={() => { if (window.confirm('Delete this investigation snapshot and its screenshots?')) remove.mutate(item.id) }} className="rounded-md p-1.5 text-zinc-700 hover:text-red-400" aria-label="Delete investigation"><Trash2 size={13} /></button>}</div>)}{history.data?.length === 0 && <p className="px-4 py-8 text-center text-xs text-zinc-600">No investigations yet.</p>}</div>
+    </div>
     </div>
   </div>
 }

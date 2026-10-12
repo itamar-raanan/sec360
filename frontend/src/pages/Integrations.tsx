@@ -502,9 +502,19 @@ const CATEGORIES: CategoryDef[] = [
   { id: 'dlp', label: 'Data Protection', icon: Lock },
   { id: 'config', label: 'Config Management', icon: GitBranch },
   { id: 'productivity', label: 'Productivity', icon: Globe },
-  { id: 'threat_intelligence', label: 'Threat Intelligence', icon: Radar },
   { id: 'custom', label: 'Custom', icon: Puzzle },
 ]
+
+// These providers are managed in context on URL & Domain Investigation.
+// Keep their catalog and backend records intact so existing encrypted
+// credentials continue to work; only remove them from this general store.
+const URL_INVESTIGATION_PROVIDER_TYPES = new Set([
+  'virustotal',
+  'abuseipdb',
+  'cloudflare_url_scanner',
+  'site_shot',
+  'cisco_talos',
+])
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1676,8 +1686,12 @@ export default function Integrations() {
     },
   })
 
+  const storeIntegrations = integrations.filter(
+    config => !URL_INVESTIGATION_PROVIDER_TYPES.has(config.integration_type)
+  )
+
   // Category filtering
-  const filtered = integrations.filter((config) => {
+  const filtered = storeIntegrations.filter((config) => {
     if (category === 'all') return true
     if (category === 'connected') return config.status === 'connected'
     if (category === 'custom') return config.integration_type.startsWith('custom_')
@@ -1685,13 +1699,13 @@ export default function Integrations() {
     return cat === category
   })
 
-  const selectedConfig = integrations.find((c) => c.integration_type === selectedType) ?? null
+  const selectedConfig = storeIntegrations.find((c) => c.integration_type === selectedType) ?? null
 
   // Category counts
   const counts: Record<string, number> = {
-    all: integrations.length,
-    connected: integrations.filter((c) => c.status === 'connected').length,
-    custom: integrations.filter((c) => c.integration_type.startsWith('custom_')).length,
+    all: storeIntegrations.length,
+    connected: storeIntegrations.filter((c) => c.status === 'connected').length,
+    custom: storeIntegrations.filter((c) => c.integration_type.startsWith('custom_')).length,
   }
   const unlockedFeatureCount = new Set(
     integrations
@@ -1718,7 +1732,7 @@ export default function Integrations() {
         <nav className="settings-split-tabs flex-1 p-3 space-y-0.5">
           {CATEGORIES.map((cat) => {
             const CatIcon = cat.icon
-            const count = counts[cat.id] ?? integrations.filter((c) => {
+            const count = counts[cat.id] ?? storeIntegrations.filter((c) => {
               if (cat.id === 'custom') return c.integration_type.startsWith('custom_')
               return getCatalogEntry(c.integration_type)?.category === cat.id
             }).length
@@ -1787,7 +1801,7 @@ export default function Integrations() {
             </div>
             <div className="mt-5 grid grid-cols-3 divide-x divide-[var(--border)] border-t border-[var(--border)] pt-4">
               <div>
-                <div className="text-lg font-semibold text-white">{integrations.length}</div>
+                <div className="text-lg font-semibold text-white">{storeIntegrations.length}</div>
                 <div className="text-[10px] uppercase tracking-wider text-zinc-600">Available</div>
               </div>
               <div className="pl-4">

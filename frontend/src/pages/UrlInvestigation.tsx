@@ -11,6 +11,7 @@ import {
   type Investigation, type InvestigationPreview, type ProviderResult,
 } from '../api/urlInvestigations'
 import { useAuthStore } from '../store/auth'
+import ThreatIntelligenceSetup from '../components/ThreatIntelligenceSetup'
 
 const TERMINAL = new Set(['completed', 'no_data', 'not_configured', 'unsupported', 'awaiting_consent', 'rate_limited', 'timeout', 'authentication_error', 'failed'])
 
@@ -141,6 +142,7 @@ export default function UrlInvestigation() {
   return <div className="h-full overflow-y-auto">
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-5 pb-12 sm:px-6 lg:px-8">
     <div><div className="flex items-center gap-2"><Globe2 size={18} className="text-emerald-400" /><h1 className="text-xl font-bold text-white">URL & Domain Investigation</h1></div><p className="mt-1 text-sm text-zinc-500">Correlate direct reputation, infrastructure context, and static screenshot evidence in one explainable assessment.</p></div>
+    <ThreatIntelligenceSetup />
     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] p-5">
       <form onSubmit={event => { event.preventDefault(); previewMutation.mutate() }} className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1"><Search size={15} className="absolute left-3 top-3 text-zinc-600" /><input value={input} onChange={event => setInput(event.target.value)} placeholder="example.com or https://example.com/path?query=value" className="w-full rounded-xl border border-white/[0.08] bg-zinc-950 py-2.5 pl-9 pr-3 text-sm text-white outline-none focus:border-emerald-500" /></div>

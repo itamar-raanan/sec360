@@ -58,46 +58,6 @@ INTEGRATION_PRODUCTS: Final[tuple[dict, ...]] = (
         "capabilities": ["users", "endpoints", "departments"],
         "features": ["activity"],
     },
-    {
-        "integration_type": "virustotal",
-        "display_name": "VirusTotal",
-        "category": "threat_intelligence",
-        "description": "Existing URL and domain intelligence with explicit URL submissions.",
-        "capabilities": ["url_reputation", "domain_reputation", "url_scan"],
-        "features": [],
-    },
-    {
-        "integration_type": "abuseipdb",
-        "display_name": "AbuseIPDB",
-        "category": "threat_intelligence",
-        "description": "Resolved-IP abuse reputation used as bounded infrastructure context.",
-        "capabilities": ["ip_reputation"],
-        "features": [],
-    },
-    {
-        "integration_type": "cloudflare_url_scanner",
-        "display_name": "Cloudflare URL Scanner",
-        "category": "threat_intelligence",
-        "description": "Existing URL scans, unlisted submissions, redirects, resources, and screenshots.",
-        "capabilities": ["url_reputation", "url_scan", "screenshots"],
-        "features": [],
-    },
-    {
-        "integration_type": "site_shot",
-        "display_name": "Site-Shot",
-        "category": "threat_intelligence",
-        "description": "Explicit website screenshot capture for visual evidence only.",
-        "capabilities": ["screenshots"],
-        "features": [],
-    },
-    {
-        "integration_type": "cisco_talos",
-        "display_name": "Cisco Talos",
-        "category": "threat_intelligence",
-        "description": "Manual reputation lookup; no generic supported API is assumed.",
-        "capabilities": ["manual_lookup"],
-        "features": [],
-    },
 )
 
 INTEGRATION_DEFAULTS: Final[tuple[tuple[str, str], ...]] = tuple(
@@ -109,7 +69,15 @@ INTEGRATION_TYPES: Final[frozenset[str]] = frozenset(
     product["integration_type"] for product in INTEGRATION_PRODUCTS
 )
 
-RETIRED_INTEGRATION_TYPES: Final[tuple[str, ...]] = ("hibob", "cloudsoc")
+RETIRED_INTEGRATION_TYPES: Final[tuple[str, ...]] = (
+    "hibob",
+    "cloudsoc",
+    "virustotal",
+    "abuseipdb",
+    "cloudflare_url_scanner",
+    "site_shot",
+    "cisco_talos",
+)
 
 FEATURE_INTEGRATIONS: Final[dict[str, tuple[str, ...]]] = {
     feature: tuple(

@@ -32,10 +32,6 @@ import {
   Upload,
   FileText,
   Copy,
-  Camera,
-  Cloud,
-  Radar,
-  Network,
 } from 'lucide-react'
 import {
   fetchIntegrations,
@@ -389,87 +385,6 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
       },
     ],
   },
-  virustotal: {
-    label: 'VirusTotal',
-    category: 'threat_intelligence',
-    description: 'URL and domain reputation with explicit URL scan submission',
-    color: '#3b82f6',
-    icon: Radar,
-    dataProduces: ['URL Reputation', 'Domain Context', 'Detection Details'],
-    supportsSync: false,
-    docsHint: 'Requires a VirusTotal API v3 key. Queries disclose indicators to VirusTotal and are subject to account quotas, licensing, and API terms. Connection testing uses one domain lookup.',
-    fields: [
-      { name: 'api_key', label: 'API Key', type: 'password', required: true, placeholder: 'VirusTotal API v3 key' },
-      { name: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', defaultValue: '15' },
-      { name: 'cache_ttl_minutes', label: 'Cache TTL (minutes)', type: 'number', defaultValue: '60' },
-      { name: 'rate_limit_per_minute', label: 'Maximum requests per minute', type: 'number', defaultValue: '4' },
-      { name: 'fresh_days', label: 'Evidence freshness (days)', type: 'number', defaultValue: '30' },
-    ],
-  },
-  abuseipdb: {
-    label: 'AbuseIPDB',
-    category: 'threat_intelligence',
-    description: 'Resolved-IP reputation used as infrastructure context',
-    color: '#ef4444',
-    icon: Network,
-    dataProduces: ['IP Reputation', 'Abuse Reports', 'Infrastructure Context'],
-    supportsSync: false,
-    docsHint: 'Requires an AbuseIPDB API v2 key. Connection testing checks one public IP and consumes account quota. Results never determine URL risk by themselves.',
-    fields: [
-      { name: 'api_key', label: 'API Key', type: 'password', required: true, placeholder: 'AbuseIPDB API key' },
-      { name: 'max_ips', label: 'Maximum resolved IPs per investigation', type: 'number', defaultValue: '5' },
-      { name: 'max_age_days', label: 'Report lookback (days)', type: 'number', defaultValue: '90' },
-      { name: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', defaultValue: '15' },
-      { name: 'cache_ttl_minutes', label: 'Cache TTL (minutes)', type: 'number', defaultValue: '60' },
-      { name: 'rate_limit_per_minute', label: 'Maximum requests per minute', type: 'number', defaultValue: '10' },
-    ],
-  },
-  cloudflare_url_scanner: {
-    label: 'Cloudflare URL Scanner',
-    category: 'threat_intelligence',
-    description: 'Existing URL scans, explicit unlisted scans, and screenshots',
-    color: '#f97316',
-    icon: Cloud,
-    dataProduces: ['URL Verdicts', 'Redirects', 'Contacted Infrastructure', 'Screenshots'],
-    supportsSync: false,
-    docsHint: 'Requires a Cloudflare account ID and API token with URL Scanner Read; explicit scans also require URL Scanner Write. Sec360 requests Unlisted visibility, which is not equivalent to private.',
-    fields: [
-      { name: 'account_id', label: 'Cloudflare Account ID', type: 'text', required: true },
-      { name: 'api_token', label: 'API Token', type: 'password', required: true },
-      { name: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', defaultValue: '20' },
-      { name: 'cache_ttl_minutes', label: 'Cache TTL (minutes)', type: 'number', defaultValue: '60' },
-      { name: 'rate_limit_per_minute', label: 'Maximum requests per minute', type: 'number', defaultValue: '10' },
-      { name: 'fresh_days', label: 'Evidence freshness (days)', type: 'number', defaultValue: '30' },
-    ],
-  },
-  site_shot: {
-    label: 'Site-Shot',
-    category: 'threat_intelligence',
-    description: 'Explicit screenshot capture for visual evidence only',
-    color: '#a855f7',
-    icon: Camera,
-    dataProduces: ['Static Screenshots'],
-    supportsSync: false,
-    docsHint: 'Site-Shot API access requires a paid plan. There is no documented zero-capture credential test, so the key is verified only during an explicitly approved capture. Screenshots never affect risk scoring.',
-    fields: [
-      { name: 'api_key', label: 'API Key', type: 'password', required: true, placeholder: 'Site-Shot user key' },
-      { name: 'timeout_seconds', label: 'Capture timeout (seconds)', type: 'number', defaultValue: '30' },
-      { name: 'rate_limit_per_minute', label: 'Maximum captures per minute', type: 'number', defaultValue: '5' },
-    ],
-  },
-  cisco_talos: {
-    label: 'Cisco Talos',
-    category: 'threat_intelligence',
-    description: 'Manual reputation lookup without unsupported scraping or invented API access',
-    color: '#06b6d4',
-    icon: Shield,
-    dataProduces: ['Manual Lookup Link'],
-    supportsSync: false,
-    docsHint: 'Sec360 does not assume the public Talos website accepts a generic API token. This enables a safely constructed manual lookup link and is excluded from automated scoring.',
-    fields: [
-      { name: 'mode', label: 'Lookup mode', type: 'select', defaultValue: 'manual', options: [{ value: 'manual', label: 'Manual lookup (supported)' }] },
-    ],
-  },
 }
 
 const FEATURE_LABELS: Record<string, string> = {
@@ -504,17 +419,6 @@ const CATEGORIES: CategoryDef[] = [
   { id: 'productivity', label: 'Productivity', icon: Globe },
   { id: 'custom', label: 'Custom', icon: Puzzle },
 ]
-
-// These providers are managed in context on URL & Domain Investigation.
-// Keep their catalog and backend records intact so existing encrypted
-// credentials continue to work; only remove them from this general store.
-const URL_INVESTIGATION_PROVIDER_TYPES = new Set([
-  'virustotal',
-  'abuseipdb',
-  'cloudflare_url_scanner',
-  'site_shot',
-  'cisco_talos',
-])
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1686,12 +1590,8 @@ export default function Integrations() {
     },
   })
 
-  const storeIntegrations = integrations.filter(
-    config => !URL_INVESTIGATION_PROVIDER_TYPES.has(config.integration_type)
-  )
-
   // Category filtering
-  const filtered = storeIntegrations.filter((config) => {
+  const filtered = integrations.filter((config) => {
     if (category === 'all') return true
     if (category === 'connected') return config.status === 'connected'
     if (category === 'custom') return config.integration_type.startsWith('custom_')
@@ -1699,13 +1599,13 @@ export default function Integrations() {
     return cat === category
   })
 
-  const selectedConfig = storeIntegrations.find((c) => c.integration_type === selectedType) ?? null
+  const selectedConfig = integrations.find((c) => c.integration_type === selectedType) ?? null
 
   // Category counts
   const counts: Record<string, number> = {
-    all: storeIntegrations.length,
-    connected: storeIntegrations.filter((c) => c.status === 'connected').length,
-    custom: storeIntegrations.filter((c) => c.integration_type.startsWith('custom_')).length,
+    all: integrations.length,
+    connected: integrations.filter((c) => c.status === 'connected').length,
+    custom: integrations.filter((c) => c.integration_type.startsWith('custom_')).length,
   }
   const unlockedFeatureCount = new Set(
     integrations
@@ -1732,7 +1632,7 @@ export default function Integrations() {
         <nav className="settings-split-tabs flex-1 p-3 space-y-0.5">
           {CATEGORIES.map((cat) => {
             const CatIcon = cat.icon
-            const count = counts[cat.id] ?? storeIntegrations.filter((c) => {
+            const count = counts[cat.id] ?? integrations.filter((c) => {
               if (cat.id === 'custom') return c.integration_type.startsWith('custom_')
               return getCatalogEntry(c.integration_type)?.category === cat.id
             }).length
@@ -1801,7 +1701,7 @@ export default function Integrations() {
             </div>
             <div className="mt-5 grid grid-cols-3 divide-x divide-[var(--border)] border-t border-[var(--border)] pt-4">
               <div>
-                <div className="text-lg font-semibold text-white">{storeIntegrations.length}</div>
+                <div className="text-lg font-semibold text-white">{integrations.length}</div>
                 <div className="text-[10px] uppercase tracking-wider text-zinc-600">Available</div>
               </div>
               <div className="pl-4">

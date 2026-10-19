@@ -1,6 +1,6 @@
 # SEC360
 
-SEC360 is a self-hosted security visibility and posture-management platform. It combines identity, endpoint, security-agent, activity, vulnerability, DLP, and threat-intelligence data in one analyst interface. The platform correlates records from multiple systems, evaluates endpoint compliance, calculates risk, records security-relevant changes, and can forward audit and change events to a SIEM.
+SEC360 is a self-hosted security visibility and posture-management platform. It combines identity, endpoint, security-agent, activity, vulnerability, and DLP data in one analyst interface. The platform correlates records from multiple systems, evaluates endpoint compliance, calculates risk, records security-relevant changes, and can forward audit and change events to a SIEM.
 
 This document describes the current implementation: its components, features, integrations, security controls, deployment model, configuration, and operational workflows.
 
@@ -93,7 +93,6 @@ PostgreSQL stores the canonical inventory and operational state, including:
 - DLP search and policy-tracking state.
 - Puppet nodes, facts, favorites, and saved views.
 - Application vulnerabilities.
-- URL investigations, provider results, and artifacts.
 - Reports, system settings, analyst notes, audit logs, change events, and SIEM deliveries.
 
 Database tables are created on application startup, and startup code applies idempotent compatibility patches required by the current release. Back up PostgreSQL before upgrading an existing installation.
@@ -106,7 +105,7 @@ APScheduler runs inside the backend. A normal collection cycle is deliberately o
 2. Google Workspace and ADFS run in parallel.
 3. Correlation runs, followed by compliance evaluation and risk calculation.
 
-Other scheduled jobs handle report delivery, data retention, SIEM retries, and pending URL investigations. The default full collection interval is 15 minutes and is configurable.
+Other scheduled jobs handle report delivery, data retention, and SIEM retries. The default full collection interval is 15 minutes and is configurable.
 
 ### Correlation engine
 
@@ -171,12 +170,10 @@ The backend also runs these recurring tasks:
 
 - Scheduled-report scan every 30 minutes.
 - SIEM outbox delivery every minute.
-- Pending URL-investigation recovery every minute.
-- Daily URL-investigation retention cleanup.
 - Google activity and raw-data retention cleanup.
 - Audit-log and delivered-SIEM-record cleanup.
 
-Current defaults retain Google activity/raw records for 7 days, audit logs for 90 days, successfully delivered SIEM queue records for 30 days, and URL investigations for 90 days.
+Current defaults retain Google activity/raw records for 7 days, audit logs for 90 days, and successfully delivered SIEM queue records for 30 days.
 
 ## Features
 
@@ -270,24 +267,6 @@ The DLP policy search connects to the configured Symantec DLP Enforce Oracle dat
 
 Searches also refresh the DLP policy snapshot used by the change tracker. On the first observation SEC360 creates a baseline; subsequent observations record patterns that were added, removed, or changed.
 
-### URL and domain investigation
-
-The investigation workspace accepts standard or defanged HTTP(S) URLs and domain names. It normalizes internationalized domain names, retains the exact URL scope where required, derives the registrable domain, and resolves public IP addresses.
-
-Safety controls reject embedded credentials, fragments, localhost, private/reserved targets, and destinations that do not resolve to public addresses. Sensitive query-parameter values are masked in display and logs.
-
-Investigation results are progressive and include:
-
-- Normalized target and investigation scopes.
-- Provider state, timestamps, errors, and evidence.
-- Risk score, confidence, coverage, reasons, and per-provider contributions.
-- Historical runs and manual reruns.
-- Stored screenshots or other provider artifacts when available.
-
-Active operations require explicit analyst confirmation. Configuration for all intelligence providers is on the same URL Investigation page; administrators can edit credentials and analysts have read-only visibility into provider availability.
-
-The risk score is a deterministic prioritization aid, not a probability that a target is malicious.
-
 ### Reports
 
 Analysts can preview and export these report types:
@@ -315,8 +294,6 @@ Administrators use the Integration Store to:
 - Run an immediate synchronization.
 - Review the latest synchronization status and error.
 - Create and remove supported custom integration definitions.
-
-Threat-intelligence integrations are intentionally not duplicated in the Integration Store; they are managed from URL Investigation.
 
 ### Security
 
@@ -356,18 +333,6 @@ Settings includes:
 
 HiBob and CloudSOC are retired integrations and are not presented as active catalog choices.
 
-### URL intelligence providers
-
-| Provider | Behavior | Effect on scoring |
-| --- | --- | --- |
-| VirusTotal | Existing exact-URL and related-domain intelligence; optional explicit active scan | Contributes evidence when configured and successful |
-| AbuseIPDB | Reputation context for the bounded set of resolved public IPs | Contextual contribution; never the sole malicious verdict |
-| Cloudflare URL Scanner | Existing scan lookup; optional explicit unlisted scan and screenshot | Contributes scan evidence |
-| Site-Shot | Explicit screenshot capture only | Artifact only; never affects risk score |
-| Cisco Talos | Opens a manual Talos investigation link | No automatic result and no risk contribution |
-
-Provider API keys are configured by an administrator on the URL Investigation page. They are not configured in the general Integration Store.
-
 ## Data collection and processing
 
 ### Integration lifecycle
@@ -391,7 +356,7 @@ Last-seen age does not remove an endpoint from inventory. An endpoint remains cu
 
 ### Credentials
 
-Integration and provider credentials are encrypted at rest with Fernet using `CREDENTIALS_ENCRYPTION_KEY`. Secret values are treated as write-only by the API and are not sent back to the browser after storage.
+Integration credentials are encrypted at rest with Fernet using `CREDENTIALS_ENCRYPTION_KEY`. Secret values are treated as write-only by the API and are not sent back to the browser after storage.
 
 Do not change `CREDENTIALS_ENCRYPTION_KEY` on an existing installation without first migrating the encrypted values. Changing it makes previously stored credentials unreadable.
 
@@ -437,7 +402,6 @@ Backend authorization is enforced independently of whether a page is visible in 
 - Server-side role checks on protected endpoints.
 - SAML audience/signature/configuration validation.
 - Outbound-target validation to reduce SSRF risk.
-- Private/reserved target rejection for URL investigations.
 - CSV formula-injection protection in security exports.
 - TLS 1.2/1.3 and security headers at Nginx.
 - A 25 MB request-body limit at the reverse proxy.
@@ -546,9 +510,8 @@ After the first administrator login:
 5. Open Integration Store, enter one source's credentials, run its connection test, enable it, and sync it.
 6. Configure minimum product versions, required product tags, and risk weights.
 7. Provision local, RADIUS, or SSO users and assign least-privilege roles.
-8. Configure URL intelligence providers on the URL Investigation page.
-9. Configure and test the SIEM destination on the Security page.
-10. Validate the resulting endpoint, user, compliance, and risk populations before enabling operational alerts.
+8. Configure and test the SIEM destination on the Security page.
+9. Validate the resulting endpoint, user, compliance, and risk populations before enabling operational alerts.
 
 ## Environment configuration
 
@@ -588,10 +551,6 @@ Changing bootstrap values does not reset an existing administrator. They are onl
 | `HTTPS_PORT` | Published HTTPS port | `443` |
 | `HOST_DNS` | Optional DNS server for private on-premises zones | Empty; Docker-managed DNS |
 | `COLLECTOR_INTERVAL_MINUTES` | Full integration collection interval | `15` |
-| `URL_INVESTIGATION_RETENTION_DAYS` | Investigation history retention | `90` |
-| `URL_RISK_MODERATE_THRESHOLD` | Moderate investigation threshold | `25` |
-| `URL_RISK_HIGH_THRESHOLD` | High investigation threshold | `50` |
-| `URL_RISK_CRITICAL_THRESHOLD` | Critical investigation threshold | `75` |
 
 Leave `HOST_DNS` empty for normal cloud integrations. Set it only when containers must resolve a private corporate hostname. The resolver must be reachable from Docker.
 
@@ -627,7 +586,7 @@ Production Docker log rotation is configured for the backend and frontend. Appli
 
 ### Manual integration checks
 
-Use **Integration Store → Test** to validate network access and credentials without waiting for a scheduled collection. Use **Sync** to run that integration immediately. URL provider connection state and credentials are managed from URL Investigation instead.
+Use **Integration Store → Test** to validate network access and credentials without waiting for a scheduled collection. Use **Sync** to run that integration immediately.
 
 For container-level DNS troubleshooting:
 
@@ -729,7 +688,6 @@ All application APIs are mounted under `/api` except the backend health endpoint
 | `/api/dlp-policy-search` | Live Symantec DLP policy search |
 | `/api/application-vulnerabilities` | SentinelOne vulnerability summaries, facets, records, detail, and CSV |
 | `/api/puppet-facts` | Puppet summaries, facts, favorites, saved views, and export |
-| `/api/url-investigations` | Preview, run, history, detail, active provider actions, artifacts, and deletion |
 | `/api/search` | Global application search |
 | `/api/notes` | Analyst notes |
 | `/health` | Direct backend database/scheduler health check |
@@ -772,9 +730,6 @@ sec360/
 - Inventory is not limited to recently seen endpoints. Retire or remove stale records deliberately.
 - Compliance requirements follow connected product scope; a disabled or never-connected integration is not automatically treated as missing everywhere.
 - SentinelOne application vulnerabilities require a supported cloud deployment and are unavailable for on-premises SentinelOne.
-- Cisco Talos is a manual investigation link, not an automated query provider.
-- Site-Shot screenshots never affect the URL risk score.
-- URL investigation scores are decision-support signals and should be reviewed with their evidence and coverage.
 - The first entity or DLP policy observation creates a baseline and should not create a change event.
 - SIEM transport is HTTP(S), not native syslog on port 514.
 - RADIUS users can sign in through the standard form and do not need invitation acceptance.

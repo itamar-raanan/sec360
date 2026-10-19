@@ -781,3 +781,25 @@
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: 0.45; transform: scale(0.75); }
 }
+
+/* The Network Map is a cinematic dark workspace in both application themes. */
+[data-theme="light"] .network-map-dark .text-white { color: #f5fbff !important; }
+[data-theme="light"] .network-map-dark .text-zinc-100,
+[data-theme="light"] .network-map-dark .text-zinc-200,
+[data-theme="light"] .network-map-dark .text-zinc-300 { color: #d9e6ee !important; }
+[data-theme="light"] .network-map-dark .text-zinc-400,
+[data-theme="light"] .network-map-dark .text-slate-400 { color: #91a5b5 !important; }
+[data-theme="light"] .network-map-dark .text-zinc-500,
+[data-theme="light"] .network-map-dark .text-slate-500 { color: #6f8495 !important; }
+[data-theme="light"] .network-map-dark .text-zinc-600,
+[data-theme="light"] .network-map-dark .text-zinc-700 { color: #4e6475 !important; }
+[data-theme="light"] .network-map-dark .text-cyan-200,
+[data-theme="light"] .network-map-dark .text-cyan-300 { color: #93f6ff !important; }
+[data-theme="light"] .network-map-dark .text-emerald-300,
+[data-theme="light"] .network-map-dark .text-emerald-400 { color: #6ee7c2 !important; }
+[data-theme="light"] .network-map-dark input:not([type="checkbox"]):not([type="radio"]) {
+  background: rgba(0, 0, 0, 0.22) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #d9e6ee !important;
+}
+[data-theme="light"] .network-map-dark input::placeholder { color: #4e6475 !important; }

@@ -63,7 +63,7 @@ export default function NetworkMapScene(props: Props) {
         // architectural reference instead of hiding furniture behind perimeter walls.
         const detailPosition = new THREE.Vector3(22, 40, 42)
         const overviewLook = new THREE.Vector3(-2.5, 10.7, 0)
-        const detailLook = new THREE.Vector3(9.1, 7.65, -0.35)
+        const detailLook = new THREE.Vector3(3.4, 7.65, -0.35)
         camera.position.copy(overviewPosition)
         camera.lookAt(overviewLook)
 
@@ -273,7 +273,7 @@ export default function NetworkMapScene(props: Props) {
         // for live devices on the extracted floor.
         interactive = []
 
-        const slabMaterial = () => new THREE.MeshStandardMaterial({ color: 0x273745, metalness: 0.18, roughness: 0.48, transparent: true })
+        const slabMaterial = () => new THREE.MeshStandardMaterial({ color: 0x8da2ae, metalness: 0.12, roughness: 0.46, transparent: true })
         const wallMaterial = () => new THREE.MeshPhysicalMaterial({ color: 0xb9d3dc, transparent: true, opacity: 0.68, roughness: 0.44, side: THREE.DoubleSide })
         const accentMaterial = () => new THREE.MeshBasicMaterial({ color: 0x16e4ef, transparent: true, opacity: 0.82 })
         const addFloorPlan = (parent: any) => {
@@ -291,6 +291,9 @@ export default function NetworkMapScene(props: Props) {
           const plant = new THREE.MeshStandardMaterial({ color: 0x4ca16d, roughness: 0.88, metalness: 0 })
           const porcelain = new THREE.MeshStandardMaterial({ color: 0xd9e5e7, roughness: 0.3, metalness: 0.02 })
           const serverGlow = new THREE.MeshStandardMaterial({ color: 0x132331, emissive: 0x0878d8, emissiveIntensity: 1.65, roughness: 0.32, metalness: 0.62 })
+          const floorTile = new THREE.MeshStandardMaterial({ color: 0xaeb9c1, roughness: 0.72, metalness: 0.03 })
+          const whiteStructure = new THREE.MeshStandardMaterial({ color: 0xdce6e9, roughness: 0.38, metalness: 0.08 })
+          const warmPanel = new THREE.MeshStandardMaterial({ color: 0xffe2b5, emissive: 0xffa43b, emissiveIntensity: 1.35, roughness: 0.3, metalness: 0.04 })
 
           const addZone = (width: number, depth: number, x: number, z: number, material: any, elevation = 0.2) => {
             const zone = addBox(parent, [width, 0.055, depth], [x, elevation, z], material)
@@ -380,6 +383,54 @@ export default function NetworkMapScene(props: Props) {
             parent.add(group)
           }
 
+          // The approved visual is an open operations floor: a pale slab, glass edge,
+          // sparse work settings, and one compact service core. Network devices remain
+          // the strongest objects in the scene rather than competing with a room grid.
+          addZone(22.2, 12.18, 0, 0, floorTile)
+          ;[
+            [0.11, 0.9, 12.25, -11.08, 0], [0.11, 0.9, 12.25, 11.08, 0],
+            [22.2, 0.9, 0.11, 0, -6.03], [22.2, 0.9, 0.11, 0, 6.03],
+          ].forEach(([width, height, depth, x, z]) => addWall(width, depth, x, z, glass, height))
+          for (const x of [-9.6, -7.2, -4.8, -2.4, 0, 2.4, 4.8, 7.2, 9.6]) {
+            addWall(0.045, 0.12, x, -6, structural, 0.9).castShadow = false
+            addWall(0.045, 0.12, x, 6, structural, 0.9).castShadow = false
+          }
+          for (const z of [-4.5, -3, -1.5, 0, 1.5, 3, 4.5]) {
+            addWall(0.12, 0.045, -11.05, z, structural, 0.9).castShadow = false
+            addWall(0.12, 0.045, 11.05, z, structural, 0.9).castShadow = false
+          }
+
+          const addLitColumn = (x: number, z: number) => {
+            addBox(parent, [0.42, 1.35, 0.42], [x, 0.89, z], whiteStructure)
+            const panel = addBox(parent, [0.12, 0.72, 0.025], [x, 0.91, z + 0.225], warmPanel)
+            panel.castShadow = false
+          }
+          for (const [x, z] of [[-9.2, -4.75], [-5.5, 4.75], [-2.5, -2.9], [3.85, -3.45], [6.6, 3.95], [9.1, -2.5], [9.4, 4.75]] as const) addLitColumn(x, z)
+
+          addZone(5.25, 3.5, 1.4, 0.05, coreFloor, 0.225)
+          addWall(5.25, 0.15, 1.4, -1.7, charcoal, 1.08)
+          addWall(5.25, 0.15, 1.4, 1.8, charcoal, 1.08)
+          addWall(0.15, 3.65, -1.22, 0.05, charcoal, 1.08)
+          addWall(0.15, 3.65, 4.02, 0.05, charcoal, 1.08)
+          for (const x of [-0.1, 1.15, 2.4]) addWall(0.12, 2.9, x, 0.05, wall, 0.82)
+          for (const [x, z] of [[-0.65, -0.95], [0.55, -0.95], [1.8, -0.95], [3.25, -0.95], [-0.65, 1.05], [0.55, 1.05], [1.8, 1.05], [3.25, 1.05]] as const) {
+            const fixture = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 0.24, 14), porcelain)
+            fixture.position.set(x, 0.4, z)
+            parent.add(fixture)
+          }
+
+          for (const [x, z, rotation] of [
+            [-7.8, -3.55, 0], [-6.2, 1.25, 0], [-4.7, 4.05, 0], [5.9, -3.45, 0], [7.75, 0.4, Math.PI / 2], [7.1, 3.95, 0], [9.2, 3.15, Math.PI / 2],
+          ] as const) addDeskCluster(x, z, rotation)
+          addMeetingTable(-1.9, -4.65, 2.25)
+          addBox(parent, [2.8, 0.68, 0.52], [7.9, 0.56, -4.85], paleWood)
+          addBox(parent, [1.5, 0.08, 0.62], [7.7, 0.64, -3.95], paleWood)
+          for (const [x, z] of [[-9.9, -4.9], [-8.7, 4.9], [-4.2, -4.85], [4.7, -4.85], [5.05, 4.8], [9.8, -4.65], [9.75, 4.85]] as const) addPlanter(x, z)
+
+          // Kept as a dormant layout option for customers that later choose to import
+          // the full architectural room plan instead of the approved open-floor style.
+          const architecturalRooms = false
+          if (architecturalRooms) {
           // Glazed perimeter with a deliberately lower cutaway edge for a legible 2.5D plan.
           ;[
             [0.14, 0.98, 12.7, -11.25, 0], [0.14, 0.98, 12.7, 11.25, 0],
@@ -458,6 +509,7 @@ export default function NetworkMapScene(props: Props) {
           addSofa(0.15, -2.82, -Math.PI / 2)
           addBox(parent, [0.72, 0.11, 0.46], [-0.68, 0.43, -2.82], paleWood)
           for (const [x, z] of [[-10.6, -5.65], [-8.95, 5.65], [-5.95, -3.38], [4.82, -3.35], [7.05, 2.5], [10.65, 4.95], [6.65, 5.65], [3.95, -5.65]] as const) addPlanter(x, z)
+          }
         }
 
         type Detail = { group: any; floorId: string; opacity: number; leaving: boolean; interactive: any[]; born: number }
@@ -478,11 +530,11 @@ export default function NetworkMapScene(props: Props) {
           const slab = addBox(group, [22.7, 0.34, 12.7], [0, 0, 0], slabMaterial())
           addEdges(group, slab, 0x5cebf1, 0.78)
           addFloorPlan(group)
-          const floorGrid = new THREE.GridHelper(22.3, 24, 0x78b5c7, 0x314b5b)
+          const floorGrid = new THREE.GridHelper(22.3, 24, 0xaec2cc, 0x718792)
           floorGrid.scale.z = 0.56
-          floorGrid.position.y = 0.2
+          floorGrid.position.y = 0.232
           floorGrid.material.transparent = true
-          floorGrid.material.opacity = 0.22
+          floorGrid.material.opacity = 0.34
           group.add(floorGrid)
           const floorLight = new THREE.PointLight(0xbfefff, 44, 28, 2)
           floorLight.position.set(0, 7, 0)
@@ -630,7 +682,7 @@ export default function NetworkMapScene(props: Props) {
 
           const smooth = (speed: number) => reduceMotion ? 1 : 1 - Math.exp(-speed * delta)
           details.forEach(detail => {
-            const target = detail.leaving ? new THREE.Vector3(16.5, 7, -1.8) : new THREE.Vector3(9.35, 7.55, -0.35)
+            const target = detail.leaving ? new THREE.Vector3(16.5, 7, -1.8) : new THREE.Vector3(9.75, 7.55, -0.35)
             detail.group.position.lerp(target, smooth(detail.leaving ? 5.5 : 4.2))
             const scale = detail.leaving ? 1.02 : 1.12
             detail.group.scale.lerp(new THREE.Vector3(scale, scale, scale), smooth(5.2))
@@ -686,11 +738,11 @@ export default function NetworkMapScene(props: Props) {
   return <div className="relative h-full w-full overflow-hidden bg-[#030913]" aria-label="Interactive 31-floor Network Map">
     <div
       className={`absolute inset-0 z-0 transition-[transform,filter] duration-1000 ease-[cubic-bezier(.22,1,.36,1)] motion-reduce:transition-none ${selectedFloor ? 'brightness-[.78] saturate-[.9]' : 'brightness-100 saturate-100'}`}
-      style={{ transform: selectedFloor ? 'translate3d(-7%, 0, 0) scale(1.035)' : 'translate3d(0, 0, 0) scale(1)' }}
+      style={{ transform: selectedFloor ? 'translate3d(-17%, 0, 0) scale(1.045)' : 'translate3d(0, 0, 0) scale(1)' }}
     >
       <img src="/assets/network-map/building-night.png" alt="" className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-center" />
     </div>
-    <div className="pointer-events-none absolute inset-0 z-[5] transition-transform duration-1000 ease-[cubic-bezier(.22,1,.36,1)] motion-reduce:transition-none" style={{ transform: selectedFloor ? 'translate3d(-7%, 0, 0) scale(1.035)' : 'translate3d(0, 0, 0) scale(1)' }}>
+    <div className="pointer-events-none absolute inset-0 z-[5] transition-transform duration-1000 ease-[cubic-bezier(.22,1,.36,1)] motion-reduce:transition-none" style={{ transform: selectedFloor ? 'translate3d(-17%, 0, 0) scale(1.045)' : 'translate3d(0, 0, 0) scale(1)' }}>
       <div className="absolute bottom-[13.2%] left-[26.25%] top-[8.6%] z-[5] grid w-[13.9%] grid-rows-[repeat(31,minmax(0,1fr))]">
         {props.floors.slice().reverse().map(floor => {
           const selected = floor.id === props.selectedFloorId
@@ -703,10 +755,23 @@ export default function NetworkMapScene(props: Props) {
           ><span className={`pointer-events-none absolute -right-9 top-1/2 -translate-y-1/2 text-[8px] font-semibold tabular-nums transition-opacity ${selected ? 'text-cyan-100 opacity-100' : 'text-slate-500 opacity-0 group-hover:opacity-100'}`}>{String(floor.ordinal).padStart(2, '0')}</span></button>
         })}
       </div>
-      {selectedFloor && <div className="pointer-events-none absolute left-[40.1%] right-[39%] z-[4] h-px origin-left bg-gradient-to-r from-cyan-100 via-cyan-300/60 to-transparent shadow-[0_0_14px_rgba(34,211,238,.58)] transition-[top,opacity] duration-700 ease-out" style={{ top: `${guideTop}%` }} />}
     </div>
+    {selectedFloor && <svg className="pointer-events-none absolute inset-0 z-[3] h-full w-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="floor-guide" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stopColor="#67f7ff" stopOpacity=".95" />
+          <stop offset="1" stopColor="#22d3ee" stopOpacity=".2" />
+        </linearGradient>
+        <filter id="floor-guide-glow" x="-20%" y="-30%" width="140%" height="160%">
+          <feGaussianBlur stdDeviation=".22" result="blur" />
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+      </defs>
+      <line x1="22" y1={guideTop} x2="45" y2="33" stroke="url(#floor-guide)" strokeWidth=".18" vectorEffect="non-scaling-stroke" filter="url(#floor-guide-glow)" />
+      <line x1="22" y1={guideTop} x2="45" y2="67" stroke="url(#floor-guide)" strokeWidth=".18" vectorEffect="non-scaling-stroke" filter="url(#floor-guide-glow)" />
+    </svg>}
     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_34%_44%,transparent_0%,transparent_27%,rgba(3,9,19,.08)_48%,rgba(3,9,19,.35)_100%)]" />
-    <div className={`pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_at_73%_51%,rgba(3,9,19,.96)_0%,rgba(3,9,19,.82)_34%,rgba(3,9,19,.18)_62%,transparent_78%)] transition-opacity duration-1000 ease-[cubic-bezier(.22,1,.36,1)] motion-reduce:transition-none ${selectedFloor ? 'opacity-100' : 'opacity-0'}`} />
+    <div className={`pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_at_73%_51%,rgba(3,9,19,.76)_0%,rgba(3,9,19,.58)_34%,rgba(3,9,19,.12)_64%,transparent_80%)] transition-opacity duration-1000 ease-[cubic-bezier(.22,1,.36,1)] motion-reduce:transition-none ${selectedFloor ? 'opacity-100' : 'opacity-0'}`} />
     {!failed && <div ref={hostRef} className="absolute inset-0 z-[2] h-full w-full" />}
     {failed && <div className="absolute right-[8%] top-1/2 z-[3] -translate-y-1/2 text-center"><p className="text-sm font-medium text-zinc-300">Live floor rendering is unavailable</p><p className="mt-1 text-xs text-zinc-600">The building and floor directory remain available.</p></div>}
   </div>

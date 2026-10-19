@@ -176,6 +176,81 @@ export default function NetworkMapScene(props: Props) {
           return sprite
         }
 
+        const loadGlbAsset = async (url: string) => {
+          const response = await fetch(url)
+          if (!response.ok) throw new Error(`Floor asset request failed with ${response.status}`)
+          const file = await response.arrayBuffer()
+          const view = new DataView(file)
+          if (view.getUint32(0, true) !== 0x46546c67 || view.getUint32(4, true) !== 2) throw new Error('Floor asset is not a glTF 2.0 binary')
+          let offset = 12
+          let document: any = null
+          let binary: ArrayBuffer | null = null
+          while (offset < file.byteLength) {
+            const length = view.getUint32(offset, true)
+            const type = view.getUint32(offset + 4, true)
+            const start = offset + 8
+            if (type === 0x4e4f534a) document = JSON.parse(new TextDecoder().decode(new Uint8Array(file, start, length)).trim())
+            if (type === 0x004e4942) binary = file.slice(start, start + length)
+            offset = start + length
+          }
+          if (!document || !binary) throw new Error('Floor asset is missing its JSON or binary chunk')
+          const componentCount: Record<string, number> = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 }
+          const readAccessor = (index: number) => {
+            const accessor = document.accessors[index]
+            const bufferView = document.bufferViews[accessor.bufferView]
+            const length = accessor.count * componentCount[accessor.type]
+            const byteOffset = (bufferView.byteOffset || 0) + (accessor.byteOffset || 0)
+            if (accessor.componentType === 5126) return new Float32Array(binary!, byteOffset, length)
+            if (accessor.componentType === 5125) return new Uint32Array(binary!, byteOffset, length)
+            if (accessor.componentType === 5123) return new Uint16Array(binary!, byteOffset, length)
+            throw new Error(`Unsupported floor asset component type ${accessor.componentType}`)
+          }
+          const loadedMaterials = document.materials.map((entry: any) => {
+            const pbr = entry.pbrMetallicRoughness || {}
+            const factor = pbr.baseColorFactor || [1, 1, 1, 1]
+            const common = {
+              color: new THREE.Color().setRGB(factor[0], factor[1], factor[2]),
+              roughness: pbr.roughnessFactor ?? 1,
+              metalness: pbr.metallicFactor ?? 0,
+              transparent: factor[3] < 1,
+              opacity: factor[3],
+            }
+            const loaded = entry.extras?.sec360Material === 'glass'
+              ? new THREE.MeshPhysicalMaterial({ ...common, transmission: 0.34, thickness: 0.08, clearcoat: 0.76, side: THREE.DoubleSide, depthWrite: false })
+              : new THREE.MeshStandardMaterial(common)
+            loaded.name = entry.name || ''
+            if (entry.emissiveFactor) {
+              loaded.emissive.setRGB(...entry.emissiveFactor)
+              loaded.emissiveIntensity = entry.extras?.emissiveIntensity ?? 1
+            }
+            return loaded
+          })
+          const asset = new THREE.Group()
+          asset.name = 'SEC360 open office floor asset'
+          document.meshes.forEach((meshEntry: any) => {
+            meshEntry.primitives.forEach((primitive: any) => {
+              const geometry = new THREE.BufferGeometry()
+              geometry.setAttribute('position', new THREE.BufferAttribute(readAccessor(primitive.attributes.POSITION), 3))
+              geometry.setAttribute('normal', new THREE.BufferAttribute(readAccessor(primitive.attributes.NORMAL), 3))
+              geometry.setIndex(new THREE.BufferAttribute(readAccessor(primitive.indices), 1))
+              geometry.computeBoundingSphere()
+              const mesh = new THREE.Mesh(geometry, loadedMaterials[primitive.material])
+              mesh.name = meshEntry.name || ''
+              mesh.castShadow = mesh.name !== 'Blue curtain glass'
+              mesh.receiveShadow = true
+              asset.add(mesh)
+            })
+          })
+          return asset
+        }
+
+        let floorAssetTemplate: any = null
+        try {
+          floorAssetTemplate = await loadGlbAsset('/assets/network-map/open-office-floor.glb')
+        } catch (assetError) {
+          console.error('Network Map floor asset failed to load; using procedural fallback', assetError)
+        }
+
         const random = seededRandom(360)
         const cityMaterial = new THREE.MeshStandardMaterial({ color: 0x07111d, roughness: 0.94, metalness: 0.05 })
         const cityGlow = new THREE.MeshBasicMaterial({ color: 0x0d3a4b, transparent: true, opacity: 0.2 })
@@ -527,15 +602,28 @@ export default function NetworkMapScene(props: Props) {
           group.scale.setScalar(reduceMotion ? 1 : 0.52)
           world.add(group)
           const localInteractive: any[] = []
-          const slab = addBox(group, [22.7, 0.34, 12.7], [0, 0, 0], slabMaterial())
-          addEdges(group, slab, 0x5cebf1, 0.78)
-          addFloorPlan(group)
-          const floorGrid = new THREE.GridHelper(22.3, 24, 0xaec2cc, 0x718792)
-          floorGrid.scale.z = 0.56
-          floorGrid.position.y = 0.232
-          floorGrid.material.transparent = true
-          floorGrid.material.opacity = 0.34
-          group.add(floorGrid)
+          if (floorAssetTemplate) {
+            const floorModel = floorAssetTemplate.clone(true)
+            floorModel.traverse((object: any) => {
+              if (!object.isMesh) return
+              object.geometry = object.geometry.clone()
+              object.material = object.material.clone()
+            })
+            group.add(floorModel)
+            const outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(22.7, 0.44, 12.7)), new THREE.LineBasicMaterial({ color: 0x69eaf4, transparent: true, opacity: 0.64 }))
+            outline.position.y = -0.22
+            group.add(outline)
+          } else {
+            const slab = addBox(group, [22.7, 0.34, 12.7], [0, 0, 0], slabMaterial())
+            addEdges(group, slab, 0x5cebf1, 0.78)
+            addFloorPlan(group)
+            const floorGrid = new THREE.GridHelper(22.3, 24, 0xaec2cc, 0x718792)
+            floorGrid.scale.z = 0.56
+            floorGrid.position.y = 0.232
+            floorGrid.material.transparent = true
+            floorGrid.material.opacity = 0.34
+            group.add(floorGrid)
+          }
           const floorLight = new THREE.PointLight(0xbfefff, 44, 28, 2)
           floorLight.position.set(0, 7, 0)
           group.add(floorLight)

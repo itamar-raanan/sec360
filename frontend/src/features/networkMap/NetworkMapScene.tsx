@@ -59,7 +59,7 @@ export default function NetworkMapScene(props: Props) {
 
         const camera = new THREE.PerspectiveCamera(33, 1, 0.1, 260)
         const overviewPosition = new THREE.Vector3(31, 22, 50)
-        const detailPosition = new THREE.Vector3(31, 20, 43)
+        const detailPosition = new THREE.Vector3(30, 18.5, 38.5)
         const overviewLook = new THREE.Vector3(-2.5, 10.7, 0)
         const detailLook = new THREE.Vector3(1.4, 8.5, 0)
         camera.position.copy(overviewPosition)
@@ -403,7 +403,7 @@ export default function NetworkMapScene(props: Props) {
           setPointer(event)
           const hit = raycaster.intersectObjects(interactive, false)[0]?.object || null
           hovered = hit
-          renderer.domElement.style.cursor = hovered ? 'pointer' : 'grab'
+            renderer.domElement.style.cursor = hovered ? 'pointer' : 'default'
         }
         const onPointerUp = (event: PointerEvent) => {
           if (Math.hypot(event.clientX - downX, event.clientY - downY) > 7) return
@@ -449,9 +449,9 @@ export default function NetworkMapScene(props: Props) {
 
           const smooth = (speed: number) => reduceMotion ? 1 : 1 - Math.exp(-speed * delta)
           details.forEach(detail => {
-            const target = detail.leaving ? new THREE.Vector3(15.5, 7.2, -1.8) : new THREE.Vector3(8.7, 8.2, -0.4)
+            const target = detail.leaving ? new THREE.Vector3(16.5, 7, -1.8) : new THREE.Vector3(9.9, 8.15, -0.4)
             detail.group.position.lerp(target, smooth(detail.leaving ? 5.5 : 4.2))
-            const scale = detail.leaving ? 0.92 : 1
+            const scale = detail.leaving ? 1.05 : 1.24
             detail.group.scale.lerp(new THREE.Vector3(scale, scale, scale), smooth(5.2))
             detail.opacity += ((detail.leaving ? 0 : 1) - detail.opacity) * smooth(detail.leaving ? 6.5 : 5.5)
             setGroupOpacity(detail.group, detail.opacity)
@@ -503,24 +503,29 @@ export default function NetworkMapScene(props: Props) {
   const guideTop = selectedFloor ? 84.6 - ((selectedFloor.ordinal - 1) / 30) * 75 : 50
 
   return <div className="relative h-full w-full overflow-hidden bg-[#030913]" aria-label="Interactive 31-floor Network Map">
-    <img src="/assets/network-map/building-night.png" alt="" className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-center" />
+    <div
+      className={`absolute inset-0 z-0 transition-[transform,filter] duration-1000 ease-[cubic-bezier(.22,1,.36,1)] motion-reduce:transition-none ${selectedFloor ? 'brightness-[.78] saturate-[.9]' : 'brightness-100 saturate-100'}`}
+      style={{ transform: selectedFloor ? 'translate3d(-7%, 0, 0) scale(1.035)' : 'translate3d(0, 0, 0) scale(1)' }}
+    >
+      <img src="/assets/network-map/building-night.png" alt="" className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-center" />
+    </div>
+    <div className="pointer-events-none absolute inset-0 z-[5] transition-transform duration-1000 ease-[cubic-bezier(.22,1,.36,1)] motion-reduce:transition-none" style={{ transform: selectedFloor ? 'translate3d(-7%, 0, 0) scale(1.035)' : 'translate3d(0, 0, 0) scale(1)' }}>
+      <div className="absolute bottom-[13.2%] left-[26.25%] top-[8.6%] z-[5] grid w-[13.9%] grid-rows-[repeat(31,minmax(0,1fr))]">
+        {props.floors.slice().reverse().map(floor => {
+          const selected = floor.id === props.selectedFloorId
+          return <button
+            key={floor.id}
+            onClick={() => props.onSelectFloor(floor.id)}
+            aria-label={`Open ${floor.label}, floor ${floor.ordinal}`}
+            title={`${floor.ordinal} · ${floor.label}${floor.managed ? '' : ' · available'}`}
+            className={`pointer-events-auto group relative w-full border-y transition-[background-color,border-color,box-shadow,transform] duration-300 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-200 ${selected ? 'z-10 scale-x-[1.045] border-cyan-100 bg-cyan-300/45 shadow-[0_0_28px_rgba(34,211,238,.72)]' : floor.managed ? 'border-cyan-300/15 bg-cyan-300/[0.045] hover:border-cyan-200/55 hover:bg-cyan-300/20' : 'border-transparent bg-transparent hover:border-white/25 hover:bg-white/[0.06]'}`}
+          ><span className={`pointer-events-none absolute -right-9 top-1/2 -translate-y-1/2 text-[8px] font-semibold tabular-nums transition-opacity ${selected ? 'text-cyan-100 opacity-100' : 'text-slate-500 opacity-0 group-hover:opacity-100'}`}>{String(floor.ordinal).padStart(2, '0')}</span></button>
+        })}
+      </div>
+      {selectedFloor && <div className="pointer-events-none absolute left-[40.1%] right-[39%] z-[4] h-px origin-left bg-gradient-to-r from-cyan-100 via-cyan-300/60 to-transparent shadow-[0_0_14px_rgba(34,211,238,.58)] transition-[top,opacity] duration-700 ease-out" style={{ top: `${guideTop}%` }} />}
+    </div>
     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_34%_44%,transparent_0%,transparent_27%,rgba(3,9,19,.08)_48%,rgba(3,9,19,.35)_100%)]" />
     {!failed && <div ref={hostRef} className="absolute inset-0 z-[2] h-full w-full" />}
     {failed && <div className="absolute right-[8%] top-1/2 z-[3] -translate-y-1/2 text-center"><p className="text-sm font-medium text-zinc-300">Live floor rendering is unavailable</p><p className="mt-1 text-xs text-zinc-600">The building and floor directory remain available.</p></div>}
-
-    <div className="absolute bottom-[13.2%] left-[26.25%] top-[8.6%] z-[5] grid w-[13.9%] grid-rows-[repeat(31,minmax(0,1fr))]">
-      {props.floors.slice().reverse().map(floor => {
-        const selected = floor.id === props.selectedFloorId
-        return <button
-          key={floor.id}
-          onClick={() => props.onSelectFloor(floor.id)}
-          aria-label={`Open ${floor.label}, floor ${floor.ordinal}`}
-          title={`${floor.ordinal} · ${floor.label}${floor.managed ? '' : ' · available'}`}
-          className={`group relative w-full border-y transition-[background-color,border-color,box-shadow,transform] duration-300 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-200 ${selected ? 'z-10 scale-x-[1.035] border-cyan-200/80 bg-cyan-300/30 shadow-[0_0_22px_rgba(34,211,238,.55)]' : floor.managed ? 'border-cyan-300/15 bg-cyan-300/[0.045] hover:border-cyan-200/55 hover:bg-cyan-300/20' : 'border-transparent bg-transparent hover:border-white/25 hover:bg-white/[0.06]'}`}
-        ><span className={`pointer-events-none absolute -right-9 top-1/2 -translate-y-1/2 text-[8px] font-semibold tabular-nums transition-opacity ${selected ? 'text-cyan-100 opacity-100' : 'text-slate-500 opacity-0 group-hover:opacity-100'}`}>{String(floor.ordinal).padStart(2, '0')}</span></button>
-      })}
-    </div>
-
-    {selectedFloor && <div className="pointer-events-none absolute left-[40.1%] right-[48%] z-[4] h-px origin-left bg-gradient-to-r from-cyan-200/80 to-cyan-300/10 shadow-[0_0_12px_rgba(34,211,238,.5)] transition-[top,opacity] duration-700 ease-out" style={{ top: `${guideTop}%` }} />}
   </div>
 }

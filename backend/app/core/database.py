@@ -39,7 +39,7 @@ async def get_db() -> AsyncSession:
 async def init_db():
     """Create all tables and apply incremental schema patches."""
     async with engine.begin() as conn:
-        from app.models import user, endpoint, agent, activity, compliance, application, audit, system_settings, report, note, puppet, change_event  # noqa
+        from app.models import user, endpoint, agent, activity, compliance, application, audit, system_settings, report, note, puppet, change_event, network_map  # noqa
         await conn.run_sync(Base.metadata.create_all)
         # Incremental patches — safe to run repeatedly
         from sqlalchemy import text
@@ -113,6 +113,9 @@ async def init_db():
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS radius_config JSONB",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS siem_enabled BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS siem_config JSONB",
+            "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS network_map_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_network_map_single_wlc ON network_map_connections (connection_type) WHERE connection_type = 'cisco_wlc'",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_network_map_single_fortigate ON network_map_connections (connection_type) WHERE connection_type = 'fortigate'",
             """
             CREATE TABLE IF NOT EXISTS change_events (
                 id UUID PRIMARY KEY,

@@ -19,6 +19,8 @@ const SsoMfa = lazy(() => import('./pages/SsoMfa'))
 const DlpUserPolicySearch = lazy(() => import('./pages/DlpUserPolicySearch'))
 const ApplicationVulnerabilities = lazy(() => import('./pages/ApplicationVulnerabilities'))
 const PuppetFacts = lazy(() => import('./pages/PuppetFacts'))
+const NetworkMap = lazy(() => import('./pages/NetworkMap'))
+const NetworkMapConnections = lazy(() => import('./pages/NetworkMapConnections'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 function RouteLoader() {
@@ -99,6 +101,8 @@ export default function App() {
         <Route path="/activity" element={<AnyIntegrationOnly integrations={['adfs', 'active_directory', 'google_workspace']}><Activity /></AnyIntegrationOnly>} />
         <Route path="/application-vulnerabilities" element={<FeatureOnly feature="application_vulnerabilities"><ApplicationVulnerabilities /></FeatureOnly>} />
         <Route path="/puppet-facts" element={<AnalystOnly><FeatureOnly feature="puppet_facts"><PuppetFacts /></FeatureOnly></AnalystOnly>} />
+        <Route path="/network-map" element={<FeatureOnly feature="network_map"><NetworkMap /></FeatureOnly>} />
+        <Route path="/network-map/connections" element={<AdminOnly><NetworkMapConnections /></AdminOnly>} />
         <Route path="/dlp-user-policy-search" element={<AnalystOnly><IntegrationOnly integration="symantec_dlp"><DlpUserPolicySearch /></IntegrationOnly></AnalystOnly>} />
         <Route path="/reports" element={<AnalystOnly><Reports /></AnalystOnly>} />
         <Route path="/integrations" element={<AdminOnly><Integrations /></AdminOnly>} />

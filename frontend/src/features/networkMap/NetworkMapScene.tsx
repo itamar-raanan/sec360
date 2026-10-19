@@ -195,38 +195,71 @@ export default function NetworkMapScene(props: Props) {
 
         const tower = new THREE.Group()
         tower.position.set(-8.8, 0, 0.6)
+        tower.rotation.y = -0.08
         world.add(tower)
         const structural = new THREE.MeshStandardMaterial({ color: 0xa9bcc7, metalness: 0.68, roughness: 0.27 })
         const darkGlass = new THREE.MeshPhysicalMaterial({ color: 0x061725, metalness: 0.36, roughness: 0.2, transparent: true, opacity: 0.9, clearcoat: 0.8 })
-        addBox(tower, [11.2, 0.85, 7.6], [0, -0.55, 0], darkGlass)
-        addBox(tower, [10.4, 0.18, 7], [0, -0.04, 0], structural)
+        // A stepped illuminated podium and the split-wing shell reproduce the supplied tower,
+        // instead of treating the building as a generic rectangular stack.
+        addBox(tower, [13.2, 0.32, 9.6], [0.2, -0.92, 0.35], structural)
+        addBox(tower, [12.6, 0.78, 9.1], [0.2, -0.48, 0.35], darkGlass)
+        addBox(tower, [11.4, 0.16, 8.2], [0, -0.02, 0.1], structural)
+        const podiumGlow = new THREE.MeshBasicMaterial({ color: 0xffd7a1, transparent: true, opacity: 0.2 })
+        for (const x of [-4.8, -3.2, -1.6, 0, 1.6, 3.2, 4.8]) addBox(tower, [0.045, 0.62, 0.04], [x, -0.48, 4.92], podiumGlow).castShadow = false
 
         const floorStep = 0.76
-        const floorMeshes = new Map<string, { mesh: any; glow: any; floor: MapFloor }>()
+        const towerHeight = propsRef.current.floors.length * floorStep
+        const floorMeshes = new Map<string, { meshes: any[]; glows: any[]; floor: MapFloor }>()
         propsRef.current.floors.forEach((floor, index) => {
           const y = 0.18 + index * floorStep
-          const taper = 1 - index * 0.0055
-          const width = 10.2 * taper
-          const depth = 6.8 * taper
-          const material = new THREE.MeshPhysicalMaterial({ color: 0x102b3d, metalness: 0.26, roughness: 0.18, transparent: true, opacity: 0.86, clearcoat: 0.72 })
-          const mesh = addBox(tower, [width, 0.63, depth], [0, y + 0.3, 0], material)
-          mesh.userData = { type: 'floor', id: floor.id }
-          interactive.push(mesh)
+          const progress = index / Math.max(propsRef.current.floors.length - 1, 1)
+          const taper = 1 - progress * 0.075
+          const bow = Math.sin(progress * Math.PI) * 0.22
+          const leftWidth = 5.45 * taper
+          const rightWidth = 4.65 * taper
+          const depth = (7.1 + bow) * taper
+          const makeWing = (width: number, x: number, rotation: number, z: number) => {
+            const material = new THREE.MeshPhysicalMaterial({ color: 0x102b3d, metalness: 0.3, roughness: 0.14, transparent: true, opacity: 0.88, clearcoat: 0.82, clearcoatRoughness: 0.16 })
+            const mesh = addBox(tower, [width, 0.64, depth], [x, y + 0.3, z], material)
+            mesh.rotation.y = rotation
+            mesh.userData = { type: 'floor', id: floor.id }
+            interactive.push(mesh)
+            return mesh
+          }
+          const left = makeWing(leftWidth, -2.55 * taper, -0.045, 0)
+          const right = makeWing(rightWidth, 2.35 * taper, 0.075, -0.18)
+          const seamMaterial = darkGlass.clone()
+          seamMaterial.color.setHex(0x020b13)
+          const seam = addBox(tower, [0.78, 0.66, depth - 0.28], [0.1, y + 0.3, -0.3], seamMaterial)
+          seam.userData = { type: 'floor', id: floor.id }
+          interactive.push(seam)
           const glowMaterial = new THREE.MeshBasicMaterial({ color: 0x16e4ef, transparent: true, opacity: 0.08 })
-          const glow = addBox(tower, [width + 0.16, 0.035, depth + 0.16], [0, y, 0], glowMaterial)
-          glow.castShadow = false
-          floorMeshes.set(floor.id, { mesh, glow, floor })
-          for (const x of [-width / 2, width / 2]) addBox(tower, [0.035, 0.69, depth + 0.12], [x, y + 0.31, 0], structural).castShadow = false
+          const leftGlow = addBox(tower, [leftWidth + 0.08, 0.035, depth + 0.12], [-2.55 * taper, y, 0], glowMaterial)
+          leftGlow.rotation.y = -0.045
+          leftGlow.castShadow = false
+          const rightGlow = addBox(tower, [rightWidth + 0.08, 0.035, depth + 0.12], [2.35 * taper, y, -0.18], glowMaterial.clone())
+          rightGlow.rotation.y = 0.075
+          rightGlow.castShadow = false
+          floorMeshes.set(floor.id, { meshes: [left, right, seam], glows: [leftGlow, rightGlow], floor })
         })
-        const crownY = 0.18 + propsRef.current.floors.length * floorStep
-        const crown = new THREE.Mesh(new THREE.ConeGeometry(4.8, 3.8, 4), darkGlass)
-        crown.rotation.y = Math.PI / 4
-        crown.scale.z = 0.68
-        crown.position.set(0, crownY + 1.75, 0)
-        tower.add(crown)
-        for (const x of [-5.1, 5.1]) {
-          const fin = addBox(tower, [0.09, crownY + 4, 0.22], [x, crownY / 2 + 1.1, 0], structural)
-          fin.rotation.z = x < 0 ? -0.025 : 0.025
+        const crownY = 0.18 + towerHeight
+        // Continuous white rails are the strongest recognizable feature in the reference.
+        for (const [x, z, lean] of [[-5.18, 0.18, -0.025], [5.02, -0.18, 0.025], [-0.48, 3.45, -0.008], [0.72, 3.25, 0.008]] as const) {
+          const rail = addBox(tower, [0.1, towerHeight + 3.5, 0.2], [x, towerHeight / 2 + 1.25, z], structural)
+          rail.rotation.z = lean
+        }
+        // Dense vertical mullions make the glass facade read as the real building at overview scale.
+        for (const x of [-4.25, -3.15, -2.05, 1.55, 2.55, 3.55, 4.45]) {
+          addBox(tower, [0.035, towerHeight, 0.04], [x, towerHeight / 2 + 0.18, 3.55 - Math.abs(x) * 0.035], structural).castShadow = false
+        }
+        // Split asymmetric crown: the front wing rises higher and the return wing steps down.
+        const leftCrown = addBox(tower, [5.2, 1.28, 6.65], [-2.4, crownY + 0.56, -0.02], darkGlass.clone())
+        leftCrown.rotation.y = -0.045
+        const rightCrown = addBox(tower, [4.35, 0.72, 6.25], [2.3, crownY + 0.28, -0.22], darkGlass.clone())
+        rightCrown.rotation.y = 0.075
+        for (const [x, height] of [[-5.15, 3.1], [-0.5, 3.6], [0.75, 3.2], [5.0, 2.75]] as const) {
+          const fin = addBox(tower, [0.12, height, 0.34], [x, crownY + height / 2, x > 0 ? -0.15 : 0.1], structural)
+          fin.rotation.z = x < 0 ? -0.018 : 0.018
         }
 
         const slabMaterial = () => new THREE.MeshStandardMaterial({ color: 0x607785, metalness: 0.18, roughness: 0.42, transparent: true })
@@ -341,7 +374,7 @@ export default function NetworkMapScene(props: Props) {
           })
           const detail = { group, floorId: floor.id, opacity: reduceMotion ? 1 : 0, leaving: false, interactive: localInteractive, born: now }
           details.push(detail)
-          interactive = [...floorMeshes.values()].map(item => item.mesh).concat(localInteractive)
+          interactive = [...floorMeshes.values()].flatMap(item => item.meshes).concat(localInteractive)
           activeFloorId = floor.id
           cameraTransitionUntil = now + (reduceMotion ? 0 : 1.25)
         }
@@ -401,7 +434,7 @@ export default function NetworkMapScene(props: Props) {
             details.forEach(detail => { detail.leaving = true })
             activeFloorId = null
             detailSignature = ''
-            interactive = [...floorMeshes.values()].map(item => item.mesh)
+            interactive = [...floorMeshes.values()].flatMap(item => item.meshes)
             cameraTransitionUntil = elapsed + (reduceMotion ? 0 : 1.1)
           }
 
@@ -409,10 +442,12 @@ export default function NetworkMapScene(props: Props) {
             const visual = floorMeshes.get(floor.id)
             if (!visual) return
             const isSelected = floor.id === state.selectedFloorId
-            visual.mesh.material.color.setHex(isSelected ? 0x1a6274 : floor.managed ? 0x123f50 : 0x102534)
-            visual.mesh.material.emissive.setHex(isSelected ? 0x0a7480 : floor.managed ? 0x063542 : 0x01080d)
-            visual.mesh.material.emissiveIntensity = isSelected ? 1.3 : floor.managed ? 0.65 : 0.15
-            visual.glow.material.opacity = isSelected ? 0.94 : floor.managed ? 0.42 + Math.sin(elapsed * 1.1 + floor.ordinal) * 0.06 : 0.055
+            visual.meshes.forEach(mesh => {
+              mesh.material.color.setHex(isSelected ? 0x1a6274 : floor.managed ? 0x123f50 : 0x102534)
+              mesh.material.emissive.setHex(isSelected ? 0x0a7480 : floor.managed ? 0x063542 : 0x01080d)
+              mesh.material.emissiveIntensity = isSelected ? 1.3 : floor.managed ? 0.65 : 0.15
+            })
+            visual.glows.forEach(glow => { glow.material.opacity = isSelected ? 0.94 : floor.managed ? 0.42 + Math.sin(elapsed * 1.1 + floor.ordinal) * 0.06 : 0.055 })
           })
 
           const smooth = (speed: number) => reduceMotion ? 1 : 1 - Math.exp(-speed * delta)

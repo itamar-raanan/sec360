@@ -59,9 +59,11 @@ export default function NetworkMapScene(props: Props) {
 
         const camera = new THREE.PerspectiveCamera(33, 1, 0.1, 260)
         const overviewPosition = new THREE.Vector3(31, 22, 50)
-        const detailPosition = new THREE.Vector3(30, 18.5, 38.5)
+        // A high three-quarter view keeps the entire cutaway readable, matching the
+        // architectural reference instead of hiding furniture behind perimeter walls.
+        const detailPosition = new THREE.Vector3(22, 40, 42)
         const overviewLook = new THREE.Vector3(-2.5, 10.7, 0)
-        const detailLook = new THREE.Vector3(1.4, 8.5, 0)
+        const detailLook = new THREE.Vector3(9.1, 7.65, -0.35)
         camera.position.copy(overviewPosition)
         camera.lookAt(overviewLook)
 
@@ -277,10 +279,10 @@ export default function NetworkMapScene(props: Props) {
         const addFloorPlan = (parent: any) => {
           const wall = wallMaterial()
           const glass = new THREE.MeshPhysicalMaterial({ color: 0x76c5e8, metalness: 0.08, roughness: 0.16, transmission: 0.36, transparent: true, opacity: 0.48, clearcoat: 0.8, side: THREE.DoubleSide })
-          const workFloor = new THREE.MeshStandardMaterial({ color: 0x315f76, roughness: 0.8, metalness: 0.04 })
-          const meetingFloor = new THREE.MeshStandardMaterial({ color: 0x8a6135, roughness: 0.74, metalness: 0.02 })
-          const loungeFloor = new THREE.MeshStandardMaterial({ color: 0x496a56, roughness: 0.82, metalness: 0.01 })
-          const serverFloor = new THREE.MeshStandardMaterial({ color: 0x173a68, roughness: 0.58, metalness: 0.18 })
+          const workFloor = new THREE.MeshStandardMaterial({ color: 0x315f76, emissive: 0x071d29, emissiveIntensity: 0.28, roughness: 0.8, metalness: 0.04 })
+          const meetingFloor = new THREE.MeshStandardMaterial({ color: 0x8a6135, emissive: 0x402000, emissiveIntensity: 0.34, roughness: 0.74, metalness: 0.02 })
+          const loungeFloor = new THREE.MeshStandardMaterial({ color: 0x496a56, emissive: 0x102a18, emissiveIntensity: 0.26, roughness: 0.82, metalness: 0.01 })
+          const serverFloor = new THREE.MeshStandardMaterial({ color: 0x173a68, emissive: 0x061d4e, emissiveIntensity: 0.44, roughness: 0.58, metalness: 0.18 })
           const coreFloor = new THREE.MeshStandardMaterial({ color: 0x3d4a55, roughness: 0.8, metalness: 0.08 })
           const corridorFloor = new THREE.MeshStandardMaterial({ color: 0x82909a, roughness: 0.84, metalness: 0.02 })
           const paleWood = new THREE.MeshStandardMaterial({ color: 0xb98e5d, roughness: 0.64, metalness: 0.02 })
@@ -295,7 +297,7 @@ export default function NetworkMapScene(props: Props) {
             zone.castShadow = false
             return zone
           }
-          const addWall = (width: number, depth: number, x: number, z: number, material = wall, height = 1.02) =>
+          const addWall = (width: number, depth: number, x: number, z: number, material = wall, height = 0.78) =>
             addBox(parent, [width, height, depth], [x, 0.22 + height / 2, z], material)
           const addChair = (group: any, x: number, z: number, rotation = 0) => {
             const chair = new THREE.Group()
@@ -380,8 +382,8 @@ export default function NetworkMapScene(props: Props) {
 
           // Glazed perimeter with a deliberately lower cutaway edge for a legible 2.5D plan.
           ;[
-            [0.14, 1.22, 12.7, -11.25, 0], [0.14, 1.22, 12.7, 11.25, 0],
-            [22.65, 1.22, 0.14, 0, -6.28], [22.65, 1.22, 0.14, 0, 6.28],
+            [0.14, 0.98, 12.7, -11.25, 0], [0.14, 0.98, 12.7, 11.25, 0],
+            [22.65, 0.98, 0.14, 0, -6.28], [22.65, 0.98, 0.14, 0, 6.28],
           ].forEach(([width, height, depth, x, z]) => addWall(width, depth, x, z, glass, height))
 
           // Functional color zones follow the supplied plan without exposing team or room names.
@@ -485,6 +487,19 @@ export default function NetworkMapScene(props: Props) {
           const floorLight = new THREE.PointLight(0xbfefff, 44, 28, 2)
           floorLight.position.set(0, 7, 0)
           group.add(floorLight)
+          // Small pools of light make the functional zones read like the rendered
+          // reference while keeping fixtures and live network overlays unobstructed.
+          for (const [x, z] of [[-7.15, -4.96], [-2.45, -4.96], [2.95, -4.96], [7.8, 4.96]] as const) {
+            const meetingLight = new THREE.PointLight(0xffbd72, 7.5, 4.2, 2)
+            meetingLight.position.set(x, 2.1, z)
+            group.add(meetingLight)
+          }
+          const socialLight = new THREE.PointLight(0xc4e8a6, 8, 5.5, 2)
+          socialLight.position.set(8.7, 2.4, 2.3)
+          group.add(socialLight)
+          const serverLight = new THREE.PointLight(0x237dff, 8, 4.8, 2)
+          serverLight.position.set(-4.8, 2.2, -0.6)
+          group.add(serverLight)
 
           const state = propsRef.current
           const floorEquipment = floor.managed ? state.equipment.filter(item => item.floor_id === floor.id) : []
@@ -615,9 +630,9 @@ export default function NetworkMapScene(props: Props) {
 
           const smooth = (speed: number) => reduceMotion ? 1 : 1 - Math.exp(-speed * delta)
           details.forEach(detail => {
-            const target = detail.leaving ? new THREE.Vector3(16.5, 7, -1.8) : new THREE.Vector3(9.9, 8.15, -0.4)
+            const target = detail.leaving ? new THREE.Vector3(16.5, 7, -1.8) : new THREE.Vector3(9.35, 7.55, -0.35)
             detail.group.position.lerp(target, smooth(detail.leaving ? 5.5 : 4.2))
-            const scale = detail.leaving ? 1.05 : 1.24
+            const scale = detail.leaving ? 1.02 : 1.12
             detail.group.scale.lerp(new THREE.Vector3(scale, scale, scale), smooth(5.2))
             detail.opacity += ((detail.leaving ? 0 : 1) - detail.opacity) * smooth(detail.leaving ? 6.5 : 5.5)
             setGroupOpacity(detail.group, detail.opacity)
@@ -691,6 +706,7 @@ export default function NetworkMapScene(props: Props) {
       {selectedFloor && <div className="pointer-events-none absolute left-[40.1%] right-[39%] z-[4] h-px origin-left bg-gradient-to-r from-cyan-100 via-cyan-300/60 to-transparent shadow-[0_0_14px_rgba(34,211,238,.58)] transition-[top,opacity] duration-700 ease-out" style={{ top: `${guideTop}%` }} />}
     </div>
     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_34%_44%,transparent_0%,transparent_27%,rgba(3,9,19,.08)_48%,rgba(3,9,19,.35)_100%)]" />
+    <div className={`pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_at_73%_51%,rgba(3,9,19,.96)_0%,rgba(3,9,19,.82)_34%,rgba(3,9,19,.18)_62%,transparent_78%)] transition-opacity duration-1000 ease-[cubic-bezier(.22,1,.36,1)] motion-reduce:transition-none ${selectedFloor ? 'opacity-100' : 'opacity-0'}`} />
     {!failed && <div ref={hostRef} className="absolute inset-0 z-[2] h-full w-full" />}
     {failed && <div className="absolute right-[8%] top-1/2 z-[3] -translate-y-1/2 text-center"><p className="text-sm font-medium text-zinc-300">Live floor rendering is unavailable</p><p className="mt-1 text-xs text-zinc-600">The building and floor directory remain available.</p></div>}
   </div>

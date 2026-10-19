@@ -63,7 +63,7 @@ export default function NetworkMapPage() {
   if (isError || !data) return <div className="flex h-full items-center justify-center p-8"><div className="max-w-md text-center"><AlertTriangle className="mx-auto text-red-400" /><h1 className="mt-3 text-lg font-semibold text-white">Network Map could not load</h1><p className="mt-1 text-sm text-zinc-500">{(error as { response?: { data?: { detail?: string } } })?.response?.data?.detail || 'The latest retained topology is temporarily unavailable.'}</p></div></div>
 
   return (
-    <div className="relative h-full overflow-hidden bg-[#070b12]">
+    <div className="network-map-dark relative h-full overflow-hidden bg-[#070b12]">
       <NetworkMapScene
         floors={data.floors}
         equipment={data.equipment}
@@ -71,20 +71,21 @@ export default function NetworkMapPage() {
         selectedFloorId={floorId}
         selectedEquipmentId={equipmentId}
         selectedAttachmentId={attachmentId}
+        onSelectFloor={id => { setFloorId(id); setEquipmentId(null); setAttachmentId(null) }}
         onSelectEquipment={id => { setEquipmentId(id); setAttachmentId(null) }}
         onSelectAttachment={selectAttachment}
       />
 
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-4 bg-gradient-to-b from-[#070b12] via-[#070b12]/85 to-transparent px-5 pb-12 pt-5 lg:px-7">
-        <div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-400"><Network size={13} /> Network Map</div><h1 className="mt-1 text-2xl font-semibold tracking-tight text-white">{selectedFloor ? selectedFloor.label : 'Building overview'}</h1><p className="mt-1 text-xs text-zinc-500">{selectedFloor ? `${floorAttachments.length} observed endpoints · ${floorEquipment.length} infrastructure devices` : `${data.summary.floors} floors · ${data.summary.endpoints} observed endpoints`}</p></div>
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-4 bg-gradient-to-b from-[#030913] via-[#030913]/88 to-transparent px-5 pb-16 pt-5 lg:px-7">
+        <div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300"><Network size={13} /> 3D Network Map <span className="ml-1 rounded border border-cyan-300/20 bg-cyan-300/[0.06] px-1.5 py-0.5 text-[8px] tracking-[0.12em] text-cyan-200/80">Live</span></div><h1 className="mt-1.5 text-[28px] font-semibold leading-none tracking-[-0.03em] text-white">{selectedFloor ? selectedFloor.label : 'Building overview'}</h1><p className="mt-2 text-xs text-slate-400">{selectedFloor ? `${floorAttachments.length} observed endpoints · ${floorEquipment.length} infrastructure devices` : `${data.summary.floors} floors · ${data.summary.endpoints} observed endpoints`}</p></div>
         <div className="pointer-events-auto flex items-center gap-2">
-          <div className="hidden rounded-lg border border-white/[0.08] bg-black/35 px-3 py-2 text-[10px] text-zinc-400 backdrop-blur md:flex md:items-center md:gap-4"><span className="flex items-center gap-1.5"><span className="h-px w-7 border-t border-dashed border-cyan-400" /> Wi-Fi</span><span className="flex items-center gap-1.5"><span className="h-px w-7 bg-teal-400" /> Ethernet</span></div>
-          {user?.role === 'admin' && <a href="/network-map/connections" className="rounded-lg border border-white/[0.08] bg-black/35 p-2.5 text-zinc-400 backdrop-blur hover:text-white" title="Network Map connections"><Settings2 size={15} /></a>}
-          {user?.role !== 'viewer' && <button onClick={() => collectMutation.mutate()} disabled={collectMutation.isPending || !data.connections.some(item => item.enabled)} className="rounded-lg border border-white/[0.08] bg-black/35 p-2.5 text-zinc-400 backdrop-blur hover:text-white disabled:opacity-40" title="Refresh topology"><RefreshCw size={15} className={collectMutation.isPending ? 'animate-spin' : ''} /></button>}
+          <div className="hidden rounded-xl border border-cyan-100/[0.09] bg-[#07111c]/65 px-3.5 py-2.5 text-[10px] text-slate-400 shadow-[0_16px_50px_rgba(0,0,0,.28)] backdrop-blur-xl md:flex md:items-center md:gap-4"><span className="flex items-center gap-1.5"><span className="h-px w-7 border-t border-dashed border-cyan-300" /> Wi-Fi</span><span className="flex items-center gap-1.5"><span className="h-px w-7 bg-teal-300" /> Ethernet</span></div>
+          {user?.role === 'admin' && <a href="/network-map/connections" className="rounded-xl border border-cyan-100/[0.09] bg-[#07111c]/65 p-2.5 text-slate-400 shadow-[0_16px_50px_rgba(0,0,0,.28)] backdrop-blur-xl transition-[color,transform,border-color] duration-200 hover:border-cyan-300/25 hover:text-white active:scale-[.97]" title="Network Map connections"><Settings2 size={15} /></a>}
+          {user?.role !== 'viewer' && <button onClick={() => collectMutation.mutate()} disabled={collectMutation.isPending || !data.connections.some(item => item.enabled)} className="rounded-xl border border-cyan-100/[0.09] bg-[#07111c]/65 p-2.5 text-slate-400 shadow-[0_16px_50px_rgba(0,0,0,.28)] backdrop-blur-xl transition-[color,transform,border-color] duration-200 hover:border-cyan-300/25 hover:text-white active:scale-[.97] disabled:opacity-40" title="Refresh topology"><RefreshCw size={15} className={collectMutation.isPending ? 'animate-spin' : ''} /></button>}
         </div>
       </header>
 
-      <aside className="absolute bottom-5 left-5 top-32 z-10 w-56 overflow-hidden rounded-xl border border-white/[0.08] bg-[#0b111b]/90 shadow-2xl backdrop-blur-xl lg:left-7">
+      <aside className="absolute bottom-5 left-5 top-32 z-10 w-60 overflow-hidden rounded-2xl border border-cyan-100/[0.08] bg-[#07111c]/82 shadow-[0_24px_80px_rgba(0,0,0,.42),inset_0_1px_0_rgba(255,255,255,.04)] backdrop-blur-2xl lg:left-7">
         <div className="border-b border-white/[0.06] p-3">
           <div className="relative"><Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-600" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Find endpoint…" className="w-full rounded-lg border border-white/[0.07] bg-black/25 py-2 pl-8 pr-3 text-xs text-zinc-200 outline-none placeholder:text-zinc-700 focus:border-emerald-500/50" /></div>
         </div>
@@ -109,6 +110,8 @@ export default function NetworkMapPage() {
       </aside>
 
       {data.connections.some(item => item.status === 'error') && <div className="absolute bottom-5 left-64 z-10 hidden max-w-sm rounded-lg border border-amber-500/20 bg-[#17130b]/90 px-3 py-2 text-[10px] text-amber-200 backdrop-blur md:block lg:left-72"><AlertTriangle size={12} className="mr-1.5 inline" />Some sources failed. The map is showing retained data from successful snapshots.</div>}
+
+      <div className="pointer-events-none absolute bottom-5 left-1/2 z-10 hidden -translate-x-1/2 items-center gap-2 rounded-full border border-cyan-100/[0.07] bg-[#07111c]/58 px-3.5 py-2 text-[9px] font-medium tracking-wide text-slate-500 shadow-lg backdrop-blur-xl xl:flex"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300/70 shadow-[0_0_10px_rgba(103,232,249,.65)]" /> Drag to orbit · Scroll to zoom · Select a floor or device</div>
 
       {selectedFloor && <div className="absolute bottom-5 right-5 z-10 flex items-center gap-2 rounded-lg border border-white/[0.08] bg-black/40 p-1.5 backdrop-blur lg:right-7"><button onClick={() => { const index = data.floors.findIndex(item => item.id === floorId); setFloorId(data.floors[Math.max(0, index - 1)]?.id || floorId) }} className="rounded-md p-1.5 text-zinc-500 hover:bg-white/[0.05] hover:text-white" aria-label="Previous floor"><ChevronLeft size={14} /></button><span className="min-w-20 text-center text-[10px] font-medium text-zinc-300">{selectedFloor.label}</span><button onClick={() => { const index = data.floors.findIndex(item => item.id === floorId); setFloorId(data.floors[Math.min(data.floors.length - 1, index + 1)]?.id || floorId) }} className="rounded-md p-1.5 text-zinc-500 hover:bg-white/[0.05] hover:text-white" aria-label="Next floor"><ChevronRight size={14} /></button></div>}
 

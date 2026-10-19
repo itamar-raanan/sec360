@@ -54,7 +54,7 @@ export default function NetworkMapScene(props: Props) {
 
         const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
         const scene = new THREE.Scene()
-        scene.background = new THREE.Color(0x030913)
+        scene.background = null
         scene.fog = new THREE.FogExp2(0x030913, 0.013)
 
         const camera = new THREE.PerspectiveCamera(33, 1, 0.1, 260)
@@ -65,7 +65,8 @@ export default function NetworkMapScene(props: Props) {
         camera.position.copy(overviewPosition)
         camera.lookAt(overviewLook)
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' })
+        renderer.setClearColor(0x000000, 0)
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
         renderer.outputColorSpace = THREE.SRGBColorSpace
         renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -78,7 +79,9 @@ export default function NetworkMapScene(props: Props) {
         const controls = new OrbitControls(camera, renderer.domElement)
         controls.enableDamping = true
         controls.dampingFactor = 0.065
-        controls.enablePan = true
+        controls.enableRotate = false
+        controls.enablePan = false
+        controls.enableZoom = false
         controls.minDistance = 18
         controls.maxDistance = 82
         controls.minPolarAngle = Math.PI * 0.08
@@ -106,6 +109,9 @@ export default function NetworkMapScene(props: Props) {
 
         const world = new THREE.Group()
         scene.add(world)
+        const proceduralEnvironment = new THREE.Group()
+        proceduralEnvironment.visible = false
+        world.add(proceduralEnvironment)
         let interactive: any[] = []
         let pulses: Array<{ mesh: any; curve: any; phase: number; speed: number }> = []
         let rings: Array<{ mesh: any; phase: number }> = []
@@ -179,24 +185,24 @@ export default function NetworkMapScene(props: Props) {
           const height = 1 + Math.pow(random(), 2) * 12
           const x = Math.cos(angle) * radius
           const z = Math.sin(angle) * radius
-          addBox(world, [width, height, depth], [x, height / 2 - 1.2, z], cityMaterial).castShadow = false
-          if (i % 3 === 0) addBox(world, [width * 0.72, 0.04, 0.04], [x, height * 0.58, z + depth / 2], cityGlow).castShadow = false
+          addBox(proceduralEnvironment, [width, height, depth], [x, height / 2 - 1.2, z], cityMaterial).castShadow = false
+          if (i % 3 === 0) addBox(proceduralEnvironment, [width * 0.72, 0.04, 0.04], [x, height * 0.58, z + depth / 2], cityGlow).castShadow = false
         }
         const ground = new THREE.Mesh(new THREE.CircleGeometry(92, 96), new THREE.MeshStandardMaterial({ color: 0x020711, roughness: 0.95 }))
         ground.rotation.x = -Math.PI / 2
         ground.position.y = -1.22
         ground.receiveShadow = true
-        world.add(ground)
+        proceduralEnvironment.add(ground)
         const grid = new THREE.GridHelper(138, 60, 0x0e4254, 0x09202d)
         grid.position.y = -1.18
         grid.material.transparent = true
         grid.material.opacity = 0.17
-        world.add(grid)
+        proceduralEnvironment.add(grid)
 
         const tower = new THREE.Group()
         tower.position.set(-8.8, 0, 0.6)
         tower.rotation.y = -0.08
-        world.add(tower)
+        proceduralEnvironment.add(tower)
         const structural = new THREE.MeshStandardMaterial({ color: 0xa9bcc7, metalness: 0.68, roughness: 0.27 })
         const darkGlass = new THREE.MeshPhysicalMaterial({ color: 0x061725, metalness: 0.36, roughness: 0.2, transparent: true, opacity: 0.9, clearcoat: 0.8 })
         // A stepped illuminated podium and the split-wing shell reproduce the supplied tower,
@@ -261,6 +267,9 @@ export default function NetworkMapScene(props: Props) {
           const fin = addBox(tower, [0.12, height, 0.34], [x, crownY + height / 2, x > 0 ? -0.15 : 0.1], structural)
           fin.rotation.z = x < 0 ? -0.018 : 0.018
         }
+        // The photographic plate owns building interaction; WebGL raycasting is reserved
+        // for live devices on the extracted floor.
+        interactive = []
 
         const slabMaterial = () => new THREE.MeshStandardMaterial({ color: 0x607785, metalness: 0.18, roughness: 0.42, transparent: true })
         const wallMaterial = () => new THREE.MeshPhysicalMaterial({ color: 0xb9d3dc, transparent: true, opacity: 0.58, roughness: 0.52, side: THREE.DoubleSide })
@@ -374,7 +383,7 @@ export default function NetworkMapScene(props: Props) {
           })
           const detail = { group, floorId: floor.id, opacity: reduceMotion ? 1 : 0, leaving: false, interactive: localInteractive, born: now }
           details.push(detail)
-          interactive = [...floorMeshes.values()].flatMap(item => item.meshes).concat(localInteractive)
+          interactive = localInteractive
           activeFloorId = floor.id
           cameraTransitionUntil = now + (reduceMotion ? 0 : 1.25)
         }
@@ -434,21 +443,9 @@ export default function NetworkMapScene(props: Props) {
             details.forEach(detail => { detail.leaving = true })
             activeFloorId = null
             detailSignature = ''
-            interactive = [...floorMeshes.values()].flatMap(item => item.meshes)
+            interactive = []
             cameraTransitionUntil = elapsed + (reduceMotion ? 0 : 1.1)
           }
-
-          state.floors.forEach(floor => {
-            const visual = floorMeshes.get(floor.id)
-            if (!visual) return
-            const isSelected = floor.id === state.selectedFloorId
-            visual.meshes.forEach(mesh => {
-              mesh.material.color.setHex(isSelected ? 0x1a6274 : floor.managed ? 0x123f50 : 0x102534)
-              mesh.material.emissive.setHex(isSelected ? 0x0a7480 : floor.managed ? 0x063542 : 0x01080d)
-              mesh.material.emissiveIntensity = isSelected ? 1.3 : floor.managed ? 0.65 : 0.15
-            })
-            visual.glows.forEach(glow => { glow.material.opacity = isSelected ? 0.94 : floor.managed ? 0.42 + Math.sin(elapsed * 1.1 + floor.ordinal) * 0.06 : 0.055 })
-          })
 
           const smooth = (speed: number) => reduceMotion ? 1 : 1 - Math.exp(-speed * delta)
           details.forEach(detail => {
@@ -502,6 +499,28 @@ export default function NetworkMapScene(props: Props) {
     return () => { disposed = true; observer?.disconnect(); cleanup() }
   }, [failed])
 
-  if (failed) return <div className="flex h-full items-center justify-center px-8 text-center"><div><p className="text-sm font-medium text-zinc-300">3D rendering is unavailable</p><p className="mt-1 text-xs text-zinc-600">Use the endpoint and equipment lists alongside the map.</p></div></div>
-  return <div ref={hostRef} className="h-full w-full" aria-label="Interactive 31-floor 3D Network Map" />
+  const selectedFloor = props.floors.find(floor => floor.id === props.selectedFloorId)
+  const guideTop = selectedFloor ? 84.6 - ((selectedFloor.ordinal - 1) / 30) * 75 : 50
+
+  return <div className="relative h-full w-full overflow-hidden bg-[#030913]" aria-label="Interactive 31-floor Network Map">
+    <img src="/assets/network-map/building-night.png" alt="" className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-center" />
+    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_34%_44%,transparent_0%,transparent_27%,rgba(3,9,19,.08)_48%,rgba(3,9,19,.35)_100%)]" />
+    {!failed && <div ref={hostRef} className="absolute inset-0 z-[2] h-full w-full" />}
+    {failed && <div className="absolute right-[8%] top-1/2 z-[3] -translate-y-1/2 text-center"><p className="text-sm font-medium text-zinc-300">Live floor rendering is unavailable</p><p className="mt-1 text-xs text-zinc-600">The building and floor directory remain available.</p></div>}
+
+    <div className="absolute bottom-[13.2%] left-[26.25%] top-[8.6%] z-[5] grid w-[13.9%] grid-rows-[repeat(31,minmax(0,1fr))]">
+      {props.floors.slice().reverse().map(floor => {
+        const selected = floor.id === props.selectedFloorId
+        return <button
+          key={floor.id}
+          onClick={() => props.onSelectFloor(floor.id)}
+          aria-label={`Open ${floor.label}, floor ${floor.ordinal}`}
+          title={`${floor.ordinal} · ${floor.label}${floor.managed ? '' : ' · available'}`}
+          className={`group relative w-full border-y transition-[background-color,border-color,box-shadow,transform] duration-300 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-200 ${selected ? 'z-10 scale-x-[1.035] border-cyan-200/80 bg-cyan-300/30 shadow-[0_0_22px_rgba(34,211,238,.55)]' : floor.managed ? 'border-cyan-300/15 bg-cyan-300/[0.045] hover:border-cyan-200/55 hover:bg-cyan-300/20' : 'border-transparent bg-transparent hover:border-white/25 hover:bg-white/[0.06]'}`}
+        ><span className={`pointer-events-none absolute -right-9 top-1/2 -translate-y-1/2 text-[8px] font-semibold tabular-nums transition-opacity ${selected ? 'text-cyan-100 opacity-100' : 'text-slate-500 opacity-0 group-hover:opacity-100'}`}>{String(floor.ordinal).padStart(2, '0')}</span></button>
+      })}
+    </div>
+
+    {selectedFloor && <div className="pointer-events-none absolute left-[40.1%] right-[48%] z-[4] h-px origin-left bg-gradient-to-r from-cyan-200/80 to-cyan-300/10 shadow-[0_0_12px_rgba(34,211,238,.5)] transition-[top,opacity] duration-700 ease-out" style={{ top: `${guideTop}%` }} />}
+  </div>
 }

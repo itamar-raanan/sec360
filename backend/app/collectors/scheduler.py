@@ -337,19 +337,6 @@ async def run_correlation_and_risk():
         logger.error(f"Scheduler: Engines failed: {e}", exc_info=True)
 
 
-async def purge_old_url_investigations():
-    """Apply the configured retention window to snapshots and screenshot artifacts."""
-    from sqlalchemy import delete
-    from app.models.url_investigation import UrlInvestigation
-
-    days = max(1, min(settings.URL_INVESTIGATION_RETENTION_DAYS, 3650))
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(delete(UrlInvestigation).where(UrlInvestigation.created_at < cutoff))
-        await db.commit()
-    logger.info("Scheduler: purged %d expired URL investigations", result.rowcount or 0)
-
-
 async def collect_all_and_process():
     """
     Full collection cycle — then immediately run correlation → compliance → risk.
@@ -429,22 +416,6 @@ def start_scheduler():
         flush_siem_deliveries,
         trigger=IntervalTrigger(minutes=1),
         id="flush_siem_deliveries",
-        replace_existing=True,
-        max_instances=1,
-    )
-    from app.investigations.service import resume_pending_investigations
-
-    scheduler.add_job(
-        resume_pending_investigations,
-        trigger=IntervalTrigger(minutes=1),
-        id="resume_url_investigations",
-        replace_existing=True,
-        max_instances=1,
-    )
-    scheduler.add_job(
-        purge_old_url_investigations,
-        trigger=IntervalTrigger(hours=24),
-        id="purge_url_investigations",
         replace_existing=True,
         max_instances=1,
     )

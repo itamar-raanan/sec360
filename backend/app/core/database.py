@@ -39,7 +39,7 @@ async def get_db() -> AsyncSession:
 async def init_db():
     """Create all tables and apply incremental schema patches."""
     async with engine.begin() as conn:
-        from app.models import user, endpoint, agent, activity, compliance, application, audit, system_settings, report, note, puppet, change_event, url_investigation  # noqa
+        from app.models import user, endpoint, agent, activity, compliance, application, audit, system_settings, report, note, puppet, change_event  # noqa
         await conn.run_sync(Base.metadata.create_all)
         # Incremental patches — safe to run repeatedly
         from sqlalchemy import text

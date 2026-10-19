@@ -45,10 +45,6 @@ class Settings(BaseSettings):
 
     # Collector schedule (minutes)
     COLLECTOR_INTERVAL_MINUTES: int = 10
-    URL_INVESTIGATION_RETENTION_DAYS: int = 90
-    URL_RISK_MODERATE_THRESHOLD: int = 25
-    URL_RISK_HIGH_THRESHOLD: int = 50
-    URL_RISK_CRITICAL_THRESHOLD: int = 75
 
     # Credential encryption — generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
     CREDENTIALS_ENCRYPTION_KEY: Optional[str] = None
@@ -110,15 +106,6 @@ if settings.CREDENTIALS_ENCRYPTION_KEY is None:
 
 def validate_runtime_security(config: Settings = settings) -> None:
     """Refuse an unsafe production configuration instead of merely warning."""
-    if not 1 <= config.URL_INVESTIGATION_RETENTION_DAYS <= 3650:
-        raise RuntimeError("URL_INVESTIGATION_RETENTION_DAYS must be between 1 and 3650")
-    thresholds = (
-        config.URL_RISK_MODERATE_THRESHOLD,
-        config.URL_RISK_HIGH_THRESHOLD,
-        config.URL_RISK_CRITICAL_THRESHOLD,
-    )
-    if not (0 < thresholds[0] < thresholds[1] < thresholds[2] <= 100):
-        raise RuntimeError("URL risk thresholds must increase from 1 through 100")
     if config.ENVIRONMENT.strip().lower() != "production":
         return
 

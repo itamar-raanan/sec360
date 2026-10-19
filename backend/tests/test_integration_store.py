@@ -36,11 +36,6 @@ async def test_catalog_contains_only_the_default_store_products(
         "google_workspace",
         "adfs",
         "active_directory",
-        "virustotal",
-        "abuseipdb",
-        "cloudflare_url_scanner",
-        "site_shot",
-        "cisco_talos",
     ]
     products = {product["integration_type"]: product for product in response.json()}
     assert products["puppet"]["features"] == ["puppet_facts"]
@@ -56,6 +51,7 @@ async def test_listing_retires_removed_products_and_seeds_the_store(
     db_session.add_all([
         IntegrationConfig(integration_type="hibob", display_name="HiBob"),
         IntegrationConfig(integration_type="cloudsoc", display_name="CloudSOC"),
+        IntegrationConfig(integration_type="virustotal", display_name="VirusTotal"),
     ])
     await db_session.commit()
 
@@ -69,11 +65,10 @@ async def test_listing_retires_removed_products_and_seeds_the_store(
     assert types == {
         "jumpcloud", "puppet", "sentinelone", "symantec_dlp",
         "google_workspace", "adfs", "active_directory",
-        "virustotal", "abuseipdb", "cloudflare_url_scanner", "site_shot", "cisco_talos",
     }
     retired = (await db_session.execute(
         select(IntegrationConfig).where(
-            IntegrationConfig.integration_type.in_(("hibob", "cloudsoc"))
+            IntegrationConfig.integration_type.in_(("hibob", "cloudsoc", "virustotal"))
         )
     )).scalars().all()
     assert retired == []
@@ -139,41 +134,6 @@ async def test_sentinelone_on_prem_does_not_unlock_application_vulnerabilities(
     )
     assert feature.status_code == 409
     assert "does not provide this feature" in feature.json()["detail"]
-
-
-async def test_threat_provider_credentials_are_validated_stored_and_masked(
-    client: AsyncClient, db_session, admin_user
-):
-    headers = await _admin_headers(client)
-    invalid = await client.put(
-        "/api/integrations/virustotal",
-        headers=headers,
-        json={"credentials": {"api_key": "secret", "timeout_seconds": 500}, "is_enabled": True},
-    )
-    assert invalid.status_code == 400
-
-    saved = await client.put(
-        "/api/integrations/virustotal",
-        headers=headers,
-        json={"credentials": {"api_key": "secret", "timeout_seconds": 15}, "is_enabled": True},
-    )
-    assert saved.status_code == 200
-    assert saved.json()["credentials_configured"] is True
-    assert "secret" not in saved.text
-    stored = (await db_session.execute(select(IntegrationConfig).where(
-        IntegrationConfig.integration_type == "virustotal"
-    ))).scalar_one()
-    assert stored.credentials["api_key"] == "secret"
-
-    disabled = await client.patch(
-        "/api/integrations/virustotal/enabled",
-        headers=headers,
-        json={"enabled": False},
-    )
-    assert disabled.status_code == 200
-    await db_session.refresh(stored)
-    assert stored.is_enabled is False
-    assert stored.credentials["api_key"] == "secret"
 
 
 async def test_feature_api_is_unavailable_until_its_product_is_connected(

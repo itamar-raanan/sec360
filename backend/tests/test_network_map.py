@@ -96,7 +96,17 @@ async def test_connections_are_admin_owned_cardinality_limited_and_never_return_
 
     floors = await client.get("/api/network-map/floors", headers=headers)
     assert floors.status_code == 200
-    assert len(floors.json()) == 8
+    assert len(floors.json()) == 31
+    assert all(item["managed"] is False for item in floors.json())
+
+    configured = await client.put(
+        f"/api/network-map/floors/{floors.json()[24]['id']}",
+        headers=headers,
+        json={"managed": True, "label": "Security Operations"},
+    )
+    assert configured.status_code == 200
+    assert configured.json()["managed"] is True
+    assert configured.json()["label"] == "Security Operations"
 
 
 async def test_operational_map_is_gated_and_correlates_only_by_puppet_mac(
@@ -113,7 +123,7 @@ async def test_operational_map_is_gated_and_correlates_only_by_puppet_mac(
         display_name="Closet A",
         config={"base_url": "http://switch.test", "username": "admin", "password": "secret"},
     )
-    floor = NetworkMapFloor(ordinal=1, label="First floor")
+    floor = NetworkMapFloor(ordinal=1, label="First floor", managed=True)
     db_session.add_all([settings, endpoint, connection, floor])
     await db_session.flush()
     db_session.add(PuppetNode(
@@ -157,6 +167,8 @@ async def test_operational_map_is_gated_and_correlates_only_by_puppet_mac(
     response = await client.get("/api/network-map", headers=headers)
     assert response.status_code == 200
     body = response.json()
-    assert len(body["floors"]) == 8
+    assert len(body["floors"]) == 31
+    assert body["summary"]["building_floors"] == 31
+    assert body["summary"]["floors"] == 1
     assert body["attachments"][0]["match_state"] == "matched"
     assert body["attachments"][0]["endpoint"]["hostname"] == "managed-laptop"

@@ -21,7 +21,7 @@ interface Connection {
   records_synced: number
 }
 
-interface Floor { id: string; ordinal: number; label: string }
+interface Floor { id: string; ordinal: number; label: string; managed: boolean }
 interface Equipment { id: string; kind: 'ap' | 'switch'; name: string; floor_id: string | null; position_x: number; position_z: number; port_overrides: Record<string, { floor_id?: string; role?: string }>; last_seen: string | null }
 
 const PRODUCTS: Record<ConnectionType, { label: string; note: string; icon: typeof Wifi }> = {
@@ -58,6 +58,7 @@ export default function NetworkMapConnections() {
 
   const singletonTypes = useMemo(() => new Set(connections.map(item => item.connection_type)), [connections])
   const currentType = editing?.connection_type || addingType
+  const managedFloors = floors.filter(floor => floor.managed)
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['network-map-connections'] })
   const refreshEquipment = () => queryClient.invalidateQueries({ queryKey: ['network-map-equipment'] })
@@ -163,19 +164,19 @@ export default function NetworkMapConnections() {
         </section>}
 
         <section className="mt-6 rounded-xl border border-white/[0.07] bg-white/[0.025] p-5">
-          <div><p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-500">Placement</p><h2 className="mt-1 text-base font-semibold text-white">Floors &amp; infrastructure</h2><p className="mt-1 text-xs text-zinc-500">Rename the eight floors and assign discovered access points or switches. Coordinates are saved independently per device.</p></div>
+          <div><p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-emerald-500">Placement</p><h2 className="mt-1 text-base font-semibold text-white">Floors &amp; infrastructure</h2><p className="mt-1 text-xs text-zinc-500">Assign discovered access points or switches to the floors selected in the 3D Network Map.</p></div>
           <div className="mt-5 grid gap-5 lg:grid-cols-[260px_1fr]">
-            <div className="space-y-1.5">{floors.map(floor => <label key={floor.id} className="flex items-center gap-2"><span className="w-6 text-[10px] text-zinc-600">{floor.ordinal}</span><input defaultValue={floor.label} onBlur={async event => { const label = event.target.value.trim(); if (label && label !== floor.label) { await apiClient.put(`/network-map/floors/${floor.id}`, { label }); await queryClient.invalidateQueries({ queryKey: ['network-map-floors'] }) } }} className="min-w-0 flex-1 rounded-md border border-white/[0.07] bg-black/20 px-2.5 py-2 text-xs text-zinc-300 outline-none focus:border-emerald-500/50" /></label>)}</div>
+            <div className="space-y-1.5">{managedFloors.length === 0 ? <a href="/network-map" className="block rounded-lg border border-dashed border-white/[0.08] px-3 py-5 text-center text-xs text-zinc-600 hover:border-emerald-500/30 hover:text-emerald-300">Choose managed floors in the map</a> : managedFloors.map(floor => <div key={floor.id} className="flex items-center gap-2 rounded-md border border-white/[0.06] bg-black/15 px-2.5 py-2"><span className="w-6 text-[10px] text-zinc-600">{floor.ordinal}</span><span className="truncate text-xs text-zinc-300">{floor.label}</span></div>)}</div>
             <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
               {equipment.length === 0 && <div className="rounded-lg border border-dashed border-white/[0.08] px-4 py-8 text-center text-xs text-zinc-600">Discovered APs and switches appear here after the first successful collection.</div>}
               {equipment.map(item => <div key={item.id} className="rounded-lg border border-white/[0.06] bg-black/10 p-2.5">
                 <div className="grid items-center gap-2 sm:grid-cols-[1fr_150px_72px_72px]">
                   <div className="min-w-0"><p className="truncate text-xs font-medium text-zinc-300">{item.name}</p><p className="text-[9px] uppercase tracking-wide text-zinc-600">{item.kind}</p></div>
-                  <select value={item.floor_id || ''} onChange={async event => { await apiClient.put(`/network-map/equipment/${item.id}`, { floor_id: event.target.value || null }); await refreshEquipment() }} className="rounded-md border border-white/[0.07] bg-zinc-950 px-2 py-1.5 text-xs text-zinc-300"><option value="">Unassigned</option>{floors.map(floor => <option key={floor.id} value={floor.id}>{floor.label}</option>)}</select>
+                  <select value={item.floor_id || ''} onChange={async event => { await apiClient.put(`/network-map/equipment/${item.id}`, { floor_id: event.target.value || null }); await refreshEquipment() }} className="rounded-md border border-white/[0.07] bg-zinc-950 px-2 py-1.5 text-xs text-zinc-300"><option value="">Unassigned</option>{managedFloors.map(floor => <option key={floor.id} value={floor.id}>{floor.label}</option>)}</select>
                   <input type="number" step="0.25" defaultValue={item.position_x} title="X position" onBlur={async event => { await apiClient.put(`/network-map/equipment/${item.id}`, { position_x: Number(event.target.value) }); await refreshEquipment() }} className="rounded-md border border-white/[0.07] bg-zinc-950 px-2 py-1.5 text-xs text-zinc-300" />
                   <input type="number" step="0.25" defaultValue={item.position_z} title="Z position" onBlur={async event => { await apiClient.put(`/network-map/equipment/${item.id}`, { position_z: Number(event.target.value) }); await refreshEquipment() }} className="rounded-md border border-white/[0.07] bg-zinc-950 px-2 py-1.5 text-xs text-zinc-300" />
                 </div>
-                {item.kind === 'switch' && <PortOverrideEditor item={item} floors={floors} onSaved={refreshEquipment} />}
+                {item.kind === 'switch' && <PortOverrideEditor item={item} floors={managedFloors} onSaved={refreshEquipment} />}
               </div>)}
             </div>
           </div>

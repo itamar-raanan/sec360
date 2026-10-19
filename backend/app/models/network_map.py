@@ -37,6 +37,7 @@ class NetworkMapFloor(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     ordinal: Mapped[int] = mapped_column(Integer, unique=True, index=True)
     label: Mapped[str] = mapped_column(String(80))
+    managed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

@@ -2,6 +2,7 @@ export interface MapFloor {
   id: string
   ordinal: number
   label: string
+  managed: boolean
 }
 
 export interface MapEquipment {
@@ -50,5 +51,5 @@ export interface NetworkMapPayload {
   connections: Array<{ id: string; type: string; name: string; enabled: boolean; status: string; last_collected_at: string | null; last_error: string | null }>
   equipment: MapEquipment[]
   attachments: MapAttachment[]
-  summary: { floors: number; equipment: number; endpoints: number; matched: number; unassigned_equipment: number }
+  summary: { floors: number; building_floors: number; equipment: number; endpoints: number; matched: number; unassigned_equipment: number }
 }

@@ -42,7 +42,8 @@ class ConnectionTestIn(BaseModel):
 
 
 class FloorUpdate(BaseModel):
-    label: str = Field(min_length=1, max_length=80)
+    label: str | None = Field(default=None, min_length=1, max_length=80)
+    managed: bool | None = None
 
 
 class EquipmentUpdate(BaseModel):
@@ -287,7 +288,10 @@ async def list_floors(
     _: AuthUser = Depends(require_role("admin")),
 ):
     floors = await ensure_floors(db)
-    return [{"id": str(item.id), "ordinal": item.ordinal, "label": item.label} for item in floors]
+    return [
+        {"id": str(item.id), "ordinal": item.ordinal, "label": item.label, "managed": item.managed}
+        for item in floors
+    ]
 
 
 @router.get("/equipment")
@@ -323,9 +327,17 @@ async def update_floor(
     floor = await db.get(NetworkMapFloor, floor_id)
     if floor is None:
         raise HTTPException(404, detail="Network Map floor not found")
-    floor.label = data.label.strip()
-    await audit_action("update_network_map_floor", "network_map_floor", str(floor.id), request, db, current, {"label": floor.label})
-    return {"id": str(floor.id), "ordinal": floor.ordinal, "label": floor.label}
+    before = {"label": floor.label, "managed": floor.managed}
+    if data.label is not None:
+        floor.label = data.label.strip()
+    if data.managed is not None:
+        floor.managed = data.managed
+    after = {"label": floor.label, "managed": floor.managed}
+    await audit_action(
+        "update_network_map_floor", "network_map_floor", str(floor.id), request, db, current,
+        {"before": before, "after": after, "ordinal": floor.ordinal},
+    )
+    return {"id": str(floor.id), "ordinal": floor.ordinal, "label": floor.label, "managed": floor.managed}
 
 
 @router.put("/equipment/{equipment_id}")
@@ -339,8 +351,12 @@ async def update_equipment(
     item = await db.get(NetworkMapEquipment, equipment_id)
     if item is None:
         raise HTTPException(404, detail="Network Map equipment not found")
-    if data.floor_id is not None and await db.get(NetworkMapFloor, data.floor_id) is None:
-        raise HTTPException(422, detail="Unknown floor")
+    if data.floor_id is not None:
+        target_floor = await db.get(NetworkMapFloor, data.floor_id)
+        if target_floor is None:
+            raise HTTPException(422, detail="Unknown floor")
+        if not target_floor.managed:
+            raise HTTPException(422, detail="Equipment can only be assigned to a managed floor")
     changes = data.model_dump(exclude_unset=True)
     if data.port_overrides is not None:
         if len(data.port_overrides) > 512:
@@ -359,8 +375,11 @@ async def update_equipment(
                     override_floor_id = uuid.UUID(str(floor_value))
                 except ValueError as exc:
                     raise HTTPException(422, detail=f"Invalid floor for port {clean_port}") from exc
-                if await db.get(NetworkMapFloor, override_floor_id) is None:
+                override_floor = await db.get(NetworkMapFloor, override_floor_id)
+                if override_floor is None:
                     raise HTTPException(422, detail=f"Unknown floor for port {clean_port}")
+                if not override_floor.managed:
+                    raise HTTPException(422, detail=f"Port {clean_port} can only be assigned to a managed floor")
             normalized_overrides[clean_port] = {"role": role, **({"floor_id": str(floor_value)} if floor_value else {})}
         changes["port_overrides"] = normalized_overrides
     for key, value in changes.items():

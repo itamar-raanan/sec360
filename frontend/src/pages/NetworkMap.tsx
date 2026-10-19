@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Box, ChevronLeft, ChevronRight, CircleDot, Map, Network, RefreshCw, Search, Settings2, Wifi, X } from 'lucide-react'
+import { AlertTriangle, Box, ChevronLeft, ChevronRight, CircleDot, Network, RefreshCw, Search, Settings2, Wifi, X } from 'lucide-react'
 
 import apiClient from '../api/client'
 import NetworkMapScene from '../features/networkMap/NetworkMapScene'
@@ -32,6 +32,7 @@ export default function NetworkMapPage() {
   const [equipmentId, setEquipmentId] = useState<string | null>(null)
   const [attachmentId, setAttachmentId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const hasConnections = Boolean(data?.connections.length)
 
   const collectMutation = useMutation({
     mutationFn: async () => {
@@ -77,7 +78,7 @@ export default function NetworkMapPage() {
       />
 
       <header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-4 bg-gradient-to-b from-[#030913] via-[#030913]/88 to-transparent px-5 pb-16 pt-5 lg:px-7">
-        <div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300"><Network size={13} /> 3D Network Map <span className="ml-1 rounded border border-cyan-300/20 bg-cyan-300/[0.06] px-1.5 py-0.5 text-[8px] tracking-[0.12em] text-cyan-200/80">Live</span></div><h1 className="mt-1.5 text-[28px] font-semibold leading-none tracking-[-0.03em] text-white">{selectedFloor ? selectedFloor.label : 'Building overview'}</h1><p className="mt-2 text-xs text-slate-400">{selectedFloor ? `${floorAttachments.length} observed endpoints · ${floorEquipment.length} infrastructure devices` : `${data.summary.floors} floors · ${data.summary.endpoints} observed endpoints`}</p></div>
+        <div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300"><Network size={13} /> 3D Network Map <span className="ml-1 rounded border border-cyan-300/20 bg-cyan-300/[0.06] px-1.5 py-0.5 text-[8px] tracking-[0.12em] text-cyan-200/80">{hasConnections ? 'Live' : 'Preview'}</span></div><h1 className="mt-1.5 text-[28px] font-semibold leading-none tracking-[-0.03em] text-white">{selectedFloor ? selectedFloor.label : 'Building overview'}</h1><p className="mt-2 text-xs text-slate-400">{hasConnections ? (selectedFloor ? `${floorAttachments.length} observed endpoints · ${floorEquipment.length} infrastructure devices` : `${data.summary.floors} floors · ${data.summary.endpoints} observed endpoints`) : (selectedFloor ? 'Floor-plan preview · topology appears after connecting a source' : `${data.summary.floors} interactive floors · architectural preview`)}</p></div>
         <div className="pointer-events-auto flex items-center gap-2">
           <div className="hidden rounded-xl border border-cyan-100/[0.09] bg-[#07111c]/65 px-3.5 py-2.5 text-[10px] text-slate-400 shadow-[0_16px_50px_rgba(0,0,0,.28)] backdrop-blur-xl md:flex md:items-center md:gap-4"><span className="flex items-center gap-1.5"><span className="h-px w-7 border-t border-dashed border-cyan-300" /> Wi-Fi</span><span className="flex items-center gap-1.5"><span className="h-px w-7 bg-teal-300" /> Ethernet</span></div>
           {user?.role === 'admin' && <a href="/network-map/connections" className="rounded-xl border border-cyan-100/[0.09] bg-[#07111c]/65 p-2.5 text-slate-400 shadow-[0_16px_50px_rgba(0,0,0,.28)] backdrop-blur-xl transition-[color,transform,border-color] duration-200 hover:border-cyan-300/25 hover:text-white active:scale-[.97]" title="Network Map connections"><Settings2 size={15} /></a>}
@@ -111,13 +112,16 @@ export default function NetworkMapPage() {
 
       {data.connections.some(item => item.status === 'error') && <div className="absolute bottom-5 left-64 z-10 hidden max-w-sm rounded-lg border border-amber-500/20 bg-[#17130b]/90 px-3 py-2 text-[10px] text-amber-200 backdrop-blur md:block lg:left-72"><AlertTriangle size={12} className="mr-1.5 inline" />Some sources failed. The map is showing retained data from successful snapshots.</div>}
 
+      {!hasConnections && <section className="absolute right-5 top-24 z-10 w-[min(310px,calc(100%-40px))] rounded-2xl border border-cyan-200/[0.10] bg-[#07111c]/82 p-4 shadow-[0_24px_70px_rgba(0,0,0,.38),inset_0_1px_0_rgba(255,255,255,.05)] backdrop-blur-2xl lg:right-7">
+        <div className="flex items-start gap-3"><span className="mt-0.5 rounded-lg border border-cyan-300/15 bg-cyan-300/[0.07] p-2 text-cyan-200"><Box size={14} /></span><div className="min-w-0"><p className="text-xs font-semibold text-white">Exploring in preview mode</p><p className="mt-1 text-[10px] leading-4 text-slate-400">Select any floor to inspect its 3D layout. Live access points, switches, endpoints, and traffic paths will appear when a source is connected.</p>{user?.role === 'admin' && <a href="/network-map/connections" className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-semibold text-cyan-200 transition-colors hover:text-white"><Settings2 size={12} /> Configure when ready</a>}</div></div>
+      </section>}
+
       <div className="pointer-events-none absolute bottom-5 left-1/2 z-10 hidden -translate-x-1/2 items-center gap-2 rounded-full border border-cyan-100/[0.07] bg-[#07111c]/58 px-3.5 py-2 text-[9px] font-medium tracking-wide text-slate-500 shadow-lg backdrop-blur-xl xl:flex"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300/70 shadow-[0_0_10px_rgba(103,232,249,.65)]" /> Drag to orbit · Scroll to zoom · Select a floor or device</div>
 
       {selectedFloor && <div className="absolute bottom-5 right-5 z-10 flex items-center gap-2 rounded-lg border border-white/[0.08] bg-black/40 p-1.5 backdrop-blur lg:right-7"><button onClick={() => { const index = data.floors.findIndex(item => item.id === floorId); setFloorId(data.floors[Math.max(0, index - 1)]?.id || floorId) }} className="rounded-md p-1.5 text-zinc-500 hover:bg-white/[0.05] hover:text-white" aria-label="Previous floor"><ChevronLeft size={14} /></button><span className="min-w-20 text-center text-[10px] font-medium text-zinc-300">{selectedFloor.label}</span><button onClick={() => { const index = data.floors.findIndex(item => item.id === floorId); setFloorId(data.floors[Math.min(data.floors.length - 1, index + 1)]?.id || floorId) }} className="rounded-md p-1.5 text-zinc-500 hover:bg-white/[0.05] hover:text-white" aria-label="Next floor"><ChevronRight size={14} /></button></div>}
 
       {(selectedAttachment || selectedEquipment) && <DetailDrawer attachment={selectedAttachment} equipment={selectedEquipment} endpointCount={selectedEquipment ? data.attachments.filter(item => item.equipment_id === selectedEquipment.id).length : 0} connections={data.connections} onClose={() => { setAttachmentId(null); setEquipmentId(null) }} />}
 
-      {!data.connections.length && <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#070b12]/70 backdrop-blur-sm"><div className="max-w-sm rounded-2xl border border-white/[0.08] bg-[#0b111b] p-7 text-center shadow-2xl"><Map className="mx-auto text-emerald-400" size={24} /><h2 className="mt-4 text-base font-semibold text-white">Connect your network sources</h2><p className="mt-2 text-sm leading-5 text-zinc-500">Add Cisco WLC, FortiGate, or MikroTik SwOS connections to begin building the topology.</p>{user?.role === 'admin' && <a href="/network-map/connections" className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-emerald-500"><Settings2 size={13} /> Configure connections</a>}</div></div>}
     </div>
   )
 }

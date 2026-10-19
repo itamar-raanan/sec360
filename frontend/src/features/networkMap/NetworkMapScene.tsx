@@ -271,25 +271,191 @@ export default function NetworkMapScene(props: Props) {
         // for live devices on the extracted floor.
         interactive = []
 
-        const slabMaterial = () => new THREE.MeshStandardMaterial({ color: 0x607785, metalness: 0.18, roughness: 0.42, transparent: true })
-        const wallMaterial = () => new THREE.MeshPhysicalMaterial({ color: 0xb9d3dc, transparent: true, opacity: 0.58, roughness: 0.52, side: THREE.DoubleSide })
+        const slabMaterial = () => new THREE.MeshStandardMaterial({ color: 0x273745, metalness: 0.18, roughness: 0.48, transparent: true })
+        const wallMaterial = () => new THREE.MeshPhysicalMaterial({ color: 0xb9d3dc, transparent: true, opacity: 0.68, roughness: 0.44, side: THREE.DoubleSide })
         const accentMaterial = () => new THREE.MeshBasicMaterial({ color: 0x16e4ef, transparent: true, opacity: 0.82 })
         const addFloorPlan = (parent: any) => {
           const wall = wallMaterial()
-          const perimeter = [
-            [[0.16, 1.05, 12.5], [-10.5, 0.72, 0]], [[0.16, 1.05, 12.5], [10.5, 0.72, 0]],
-            [[21.1, 1.05, 0.16], [0, 0.72, -6.15]], [[21.1, 1.05, 0.16], [0, 0.72, 6.15]],
-          ] as const
-          perimeter.forEach(([size, position]) => addBox(parent, [...size], [...position], wall))
-          addBox(parent, [14.5, 0.82, 0.13], [-2.4, 0.6, 3.55], wall)
-          addBox(parent, [14.5, 0.82, 0.13], [-2.4, 0.6, -3.65], wall)
-          for (const x of [-8.25, -5.9, -3.55, -1.2, 1.15]) {
-            addBox(parent, [0.12, 0.82, 2.55], [x, 0.6, 4.83], wall)
-            addBox(parent, [0.12, 0.82, 2.35], [x, 0.6, -4.82], wall)
+          const glass = new THREE.MeshPhysicalMaterial({ color: 0x76c5e8, metalness: 0.08, roughness: 0.16, transmission: 0.36, transparent: true, opacity: 0.48, clearcoat: 0.8, side: THREE.DoubleSide })
+          const workFloor = new THREE.MeshStandardMaterial({ color: 0x315f76, roughness: 0.8, metalness: 0.04 })
+          const meetingFloor = new THREE.MeshStandardMaterial({ color: 0x8a6135, roughness: 0.74, metalness: 0.02 })
+          const loungeFloor = new THREE.MeshStandardMaterial({ color: 0x496a56, roughness: 0.82, metalness: 0.01 })
+          const serverFloor = new THREE.MeshStandardMaterial({ color: 0x173a68, roughness: 0.58, metalness: 0.18 })
+          const coreFloor = new THREE.MeshStandardMaterial({ color: 0x3d4a55, roughness: 0.8, metalness: 0.08 })
+          const corridorFloor = new THREE.MeshStandardMaterial({ color: 0x82909a, roughness: 0.84, metalness: 0.02 })
+          const paleWood = new THREE.MeshStandardMaterial({ color: 0xb98e5d, roughness: 0.64, metalness: 0.02 })
+          const charcoal = new THREE.MeshStandardMaterial({ color: 0x17232d, roughness: 0.52, metalness: 0.3 })
+          const upholstery = new THREE.MeshStandardMaterial({ color: 0x6f8792, roughness: 0.9, metalness: 0 })
+          const plant = new THREE.MeshStandardMaterial({ color: 0x4ca16d, roughness: 0.88, metalness: 0 })
+          const porcelain = new THREE.MeshStandardMaterial({ color: 0xd9e5e7, roughness: 0.3, metalness: 0.02 })
+          const serverGlow = new THREE.MeshStandardMaterial({ color: 0x132331, emissive: 0x0878d8, emissiveIntensity: 1.65, roughness: 0.32, metalness: 0.62 })
+
+          const addZone = (width: number, depth: number, x: number, z: number, material: any, elevation = 0.2) => {
+            const zone = addBox(parent, [width, 0.055, depth], [x, elevation, z], material)
+            zone.castShadow = false
+            return zone
           }
-          addBox(parent, [3.05, 1.5, 2.35], [-1.7, 0.9, -0.15], darkGlass.clone())
-          addBox(parent, [2.45, 1.5, 2.55], [2.25, 0.9, 0.2], darkGlass.clone())
-          for (const x of [-7.1, -4.6, -2.1, 0.4, 5.6, 8.1]) addBox(parent, [1.2, 0.08, 0.52], [x, 0.48, x > 3 ? 2.4 : -2.25], structural.clone()).castShadow = false
+          const addWall = (width: number, depth: number, x: number, z: number, material = wall, height = 1.02) =>
+            addBox(parent, [width, height, depth], [x, 0.22 + height / 2, z], material)
+          const addChair = (group: any, x: number, z: number, rotation = 0) => {
+            const chair = new THREE.Group()
+            chair.position.set(x, 0, z)
+            chair.rotation.y = rotation
+            addBox(chair, [0.32, 0.12, 0.32], [0, 0.34, 0], charcoal)
+            addBox(chair, [0.32, 0.42, 0.09], [0, 0.54, 0.13], charcoal)
+            group.add(chair)
+          }
+          const addDeskCluster = (x: number, z: number, rotation = 0) => {
+            const group = new THREE.Group()
+            group.position.set(x, 0, z)
+            group.rotation.y = rotation
+            addBox(group, [1.62, 0.11, 0.76], [0, 0.58, 0], paleWood)
+            addBox(group, [0.06, 0.48, 0.62], [-0.67, 0.36, 0], charcoal)
+            addBox(group, [0.06, 0.48, 0.62], [0.67, 0.36, 0], charcoal)
+            for (const dx of [-0.4, 0.4]) {
+              for (const dz of [-0.5, 0.5]) addChair(group, dx, dz, dz > 0 ? Math.PI : 0)
+              addBox(group, [0.42, 0.28, 0.035], [dx, 0.83, 0], charcoal).rotation.x = -0.08
+            }
+            parent.add(group)
+          }
+          const addMeetingTable = (x: number, z: number, width: number, rotation = 0) => {
+            const group = new THREE.Group()
+            group.position.set(x, 0, z)
+            group.rotation.y = rotation
+            addBox(group, [width, 0.12, 0.78], [0, 0.55, 0], paleWood)
+            addBox(group, [width * 0.72, 0.44, 0.12], [0, 0.31, 0], charcoal)
+            const seats = Math.max(2, Math.floor(width / 0.55))
+            for (let i = 0; i < seats; i += 1) {
+              const seatX = -width / 2 + 0.34 + i * ((width - 0.68) / Math.max(seats - 1, 1))
+              addChair(group, seatX, -0.62, 0)
+              addChair(group, seatX, 0.62, Math.PI)
+            }
+            parent.add(group)
+          }
+          const addCafeTable = (x: number, z: number) => {
+            const group = new THREE.Group()
+            group.position.set(x, 0, z)
+            const top = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.46, 0.1, 24), paleWood)
+            top.position.y = 0.57
+            top.castShadow = true
+            group.add(top)
+            const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.14, 0.5, 12), charcoal)
+            stem.position.y = 0.3
+            group.add(stem)
+            for (let i = 0; i < 4; i += 1) {
+              const angle = i * Math.PI / 2
+              addChair(group, Math.cos(angle) * 0.72, Math.sin(angle) * 0.72, -angle + Math.PI / 2)
+            }
+            parent.add(group)
+          }
+          const addPlanter = (x: number, z: number) => {
+            const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.25, 0.32, 14), charcoal)
+            pot.position.set(x, 0.37, z)
+            pot.castShadow = true
+            parent.add(pot)
+            const leaves = new THREE.Mesh(new THREE.DodecahedronGeometry(0.34, 0), plant)
+            leaves.scale.set(0.85, 1.25, 0.85)
+            leaves.position.set(x, 0.76, z)
+            leaves.castShadow = true
+            parent.add(leaves)
+          }
+          const addServerRack = (x: number, z: number) => {
+            const rack = addBox(parent, [0.62, 1.08, 0.62], [x, 0.76, z], charcoal)
+            addEdges(parent, rack, 0x2ea8ff, 0.5)
+            for (const y of [0.4, 0.59, 0.78, 0.97]) {
+              const panel = addBox(parent, [0.48, 0.09, 0.025], [x, y, z + 0.325], serverGlow)
+              panel.castShadow = false
+            }
+          }
+          const addSofa = (x: number, z: number, rotation = 0) => {
+            const group = new THREE.Group()
+            group.position.set(x, 0, z)
+            group.rotation.y = rotation
+            addBox(group, [1.34, 0.32, 0.62], [0, 0.39, 0], upholstery)
+            addBox(group, [1.34, 0.52, 0.16], [0, 0.57, 0.25], upholstery)
+            addBox(group, [0.18, 0.4, 0.62], [-0.61, 0.48, 0], upholstery)
+            addBox(group, [0.18, 0.4, 0.62], [0.61, 0.48, 0], upholstery)
+            parent.add(group)
+          }
+
+          // Glazed perimeter with a deliberately lower cutaway edge for a legible 2.5D plan.
+          ;[
+            [0.14, 1.22, 12.7, -11.25, 0], [0.14, 1.22, 12.7, 11.25, 0],
+            [22.65, 1.22, 0.14, 0, -6.28], [22.65, 1.22, 0.14, 0, 6.28],
+          ].forEach(([width, height, depth, x, z]) => addWall(width, depth, x, z, glass, height))
+
+          // Functional color zones follow the supplied plan without exposing team or room names.
+          addZone(21.9, 2.2, 0, -4.95, workFloor)
+          addZone(21.9, 2.2, 0, 4.95, workFloor)
+          addZone(2.35, 7.2, -10, 0, workFloor)
+          addZone(2.45, 3.7, 9.95, -2.05, workFloor)
+          addZone(4.25, 4.15, 8.65, 2.05, loungeFloor)
+          addZone(3.75, 2.4, -4.55, 0.9, serverFloor)
+          addZone(3.1, 2.45, -4.8, -1.95, serverFloor)
+          addZone(6.75, 4.45, 1.65, 0.3, coreFloor)
+          addZone(12.3, 1.25, 2.25, -2.95, corridorFloor)
+          addZone(13.2, 1.2, 1.75, 3.05, corridorFloor)
+
+          // Long perimeter office bands and their room divisions.
+          addWall(19.3, 0.13, -0.7, -3.78)
+          addWall(19.3, 0.13, -0.7, 3.78)
+          for (const x of [-8.25, -6.1, -3.75, -1.15, 1.55, 4.35, 6.85, 8.8]) {
+            addWall(0.13, 2.5, x, -5.02)
+            addWall(0.13, 2.5, x, 5.02)
+          }
+          addWall(0.13, 7.6, -8.78, 0)
+          for (const z of [-2.45, 0.15, 2.55]) addWall(2.5, 0.13, -10.02, z)
+          addWall(0.13, 3.5, 8.72, -1.95)
+          addWall(2.55, 0.13, 9.98, -0.15)
+
+          // Meeting rooms have warm flooring and fewer, larger tables.
+          for (const [x, z, width, depth] of [[-7.15, -4.96, 2.05, 2.18], [-2.45, -4.96, 2.45, 2.18], [2.95, -4.96, 2.65, 2.18], [7.8, 4.96, 1.85, 2.18]] as const) {
+            addZone(width, depth, x, z, meetingFloor, 0.23)
+            addMeetingTable(x, z, width > 2.3 ? 1.5 : 1.15)
+          }
+
+          // Workstations form compact bench neighborhoods around the perimeter.
+          for (const [x, z, rotation] of [
+            [-9.92, -4.85, Math.PI / 2], [-5, -4.92, 0], [0.2, -4.92, 0], [5.45, -4.92, 0], [9.85, -4.85, Math.PI / 2],
+            [-9.92, -1.25, Math.PI / 2], [-9.92, 1.55, Math.PI / 2], [-8.25, 4.92, 0], [-5, 4.92, 0], [-0.05, 4.92, 0], [3.1, 4.92, 0], [5.85, 4.92, 0],
+          ] as const) addDeskCluster(x, z, rotation)
+
+          // Central service core: elevators, two stairs, restrooms and paired server rooms.
+          addWall(6.8, 0.14, 1.75, -1.95)
+          addWall(6.8, 0.14, 1.75, 2.5)
+          addWall(0.14, 4.58, -1.65, 0.28)
+          addWall(0.14, 4.58, 5.15, 0.28)
+          for (const x of [0.15, 1.2, 2.3, 3.35]) {
+            addBox(parent, [0.82, 1.16, 0.68], [x, 0.8, 0.15], charcoal)
+            addBox(parent, [0.58, 0.9, 0.025], [x, 0.76, 0.505], structural.clone())
+          }
+          for (const x of [-0.78, 4.3]) {
+            addWall(1.45, 1.55, x, 1.55, charcoal, 1.18)
+            for (let step = 0; step < 5; step += 1) addBox(parent, [1.15, 0.08, 0.2], [x, 0.3 + step * 0.13, 1.1 + step * 0.2], structural.clone())
+          }
+          for (const x of [-0.75, 0.1]) {
+            addWall(0.08, 1.3, x, -1.02, wall, 0.72)
+            const basin = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.25, 16), porcelain)
+            basin.position.set(x - 0.36, 0.36, -1.1)
+            parent.add(basin)
+          }
+          for (const [x, z] of [[-5.5, -2.15], [-4.65, -2.15], [-5.5, 0.75], [-4.65, 0.75], [-3.8, 0.75]] as const) addServerRack(x, z)
+
+          // Kitchen, café, and lounge occupy the large right-hand social zone.
+          addBox(parent, [3.2, 0.72, 0.58], [9.1, 0.58, 0.32], paleWood)
+          addBox(parent, [2.25, 0.1, 0.7], [8.82, 0.62, 1.22], paleWood)
+          for (const x of [7.95, 8.55, 9.15, 9.75]) addChair(parent, x, 1.82, Math.PI)
+          addCafeTable(8.0, 2.65)
+          addCafeTable(9.75, 3.55)
+          addSofa(7.55, 4.45, -0.12)
+          addSofa(9.25, 4.65, Math.PI + 0.14)
+          addBox(parent, [1.1, 0.12, 0.56], [8.45, 0.46, 4.35], paleWood)
+
+          // Small collaboration pocket inside the circulation ring.
+          addSofa(-1.5, -2.82, Math.PI / 2)
+          addSofa(0.15, -2.82, -Math.PI / 2)
+          addBox(parent, [0.72, 0.11, 0.46], [-0.68, 0.43, -2.82], paleWood)
+          for (const [x, z] of [[-10.6, -5.65], [-8.95, 5.65], [-5.95, -3.38], [4.82, -3.35], [7.05, 2.5], [10.65, 4.95], [6.65, 5.65], [3.95, -5.65]] as const) addPlanter(x, z)
         }
 
         type Detail = { group: any; floorId: string; opacity: number; leaving: boolean; interactive: any[]; born: number }
@@ -307,11 +473,11 @@ export default function NetworkMapScene(props: Props) {
           group.scale.setScalar(reduceMotion ? 1 : 0.52)
           world.add(group)
           const localInteractive: any[] = []
-          const slab = addBox(group, [21.2, 0.34, 12.5], [0, 0, 0], slabMaterial())
+          const slab = addBox(group, [22.7, 0.34, 12.7], [0, 0, 0], slabMaterial())
           addEdges(group, slab, 0x5cebf1, 0.78)
           addFloorPlan(group)
-          const floorGrid = new THREE.GridHelper(20.8, 22, 0x78b5c7, 0x314b5b)
-          floorGrid.scale.z = 0.59
+          const floorGrid = new THREE.GridHelper(22.3, 24, 0x78b5c7, 0x314b5b)
+          floorGrid.scale.z = 0.56
           floorGrid.position.y = 0.2
           floorGrid.material.transparent = true
           floorGrid.material.opacity = 0.22

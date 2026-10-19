@@ -22,7 +22,7 @@ from app.models.user import User
 from app.network_map.collectors import collect_for_type, normalize_mac
 
 
-FLOOR_COUNT = 8
+FLOOR_COUNT = 31
 MAC_TEXT_RE = re.compile(
     r"(?<![0-9a-f])(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}(?![0-9a-f])|"
     r"(?<![0-9a-f])(?:[0-9a-f]{4}\.){2}[0-9a-f]{4}(?![0-9a-f])",
@@ -35,7 +35,7 @@ async def ensure_floors(db: AsyncSession) -> list[NetworkMapFloor]:
     existing = {floor.ordinal for floor in floors}
     for ordinal in range(1, FLOOR_COUNT + 1):
         if ordinal not in existing:
-            db.add(NetworkMapFloor(ordinal=ordinal, label=f"Floor {ordinal}"))
+            db.add(NetworkMapFloor(ordinal=ordinal, label=f"Floor {ordinal}", managed=False))
     if len(existing) != FLOOR_COUNT:
         await db.flush()
         floors = list((await db.execute(select(NetworkMapFloor).order_by(NetworkMapFloor.ordinal))).scalars())
@@ -314,7 +314,7 @@ async def build_map_payload(db: AsyncSession) -> dict[str, Any]:
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "floors": [{"id": str(f.id), "ordinal": f.ordinal, "label": f.label} for f in floors],
+        "floors": [{"id": str(f.id), "ordinal": f.ordinal, "label": f.label, "managed": f.managed} for f in floors],
         "connections": [{
             "id": str(c.id), "type": c.connection_type, "name": c.display_name,
             "enabled": c.enabled,
@@ -331,7 +331,8 @@ async def build_map_payload(db: AsyncSession) -> dict[str, Any]:
         } for item in equipment],
         "attachments": attachment_rows,
         "summary": {
-            "floors": FLOOR_COUNT,
+            "floors": sum(1 for floor in floors if floor.managed),
+            "building_floors": FLOOR_COUNT,
             "equipment": len(equipment),
             "endpoints": len(attachment_rows),
             "matched": sum(1 for item in attachment_rows if item["match_state"] == "matched"),

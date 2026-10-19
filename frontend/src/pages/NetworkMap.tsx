@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Box, ChevronLeft, ChevronRight, CircleDot, Network, RefreshCw, Search, Settings2, Wifi, X } from 'lucide-react'
+import { AlertTriangle, Box, Building2, Check, ChevronLeft, ChevronRight, CircleDot, Network, RefreshCw, Search, Settings2, SlidersHorizontal, Wifi, X } from 'lucide-react'
 
 import apiClient from '../api/client'
 import NetworkMapScene from '../features/networkMap/NetworkMapScene'
@@ -32,6 +32,7 @@ export default function NetworkMapPage() {
   const [equipmentId, setEquipmentId] = useState<string | null>(null)
   const [attachmentId, setAttachmentId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [floorManagerOpen, setFloorManagerOpen] = useState(false)
   const hasConnections = Boolean(data?.connections.length)
 
   const collectMutation = useMutation({
@@ -42,15 +43,29 @@ export default function NetworkMapPage() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['network-map'] }),
   })
 
+  const floorMutation = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: { managed?: boolean; label?: string } }) => apiClient.put(`/network-map/floors/${id}`, patch).then(response => response.data),
+    onSuccess: updated => {
+      queryClient.setQueryData<NetworkMapPayload>(['network-map'], current => current ? {
+        ...current,
+        floors: current.floors.map(floor => floor.id === updated.id ? updated : floor),
+        summary: { ...current.summary, floors: current.floors.reduce((count, floor) => count + ((floor.id === updated.id ? updated.managed : floor.managed) ? 1 : 0), 0) },
+      } : current)
+      queryClient.invalidateQueries({ queryKey: ['network-map-floors'] })
+    },
+  })
+
   const selectedFloor = data?.floors.find(item => item.id === floorId)
+  const managedFloors = useMemo(() => data?.floors.filter(item => item.managed) || [], [data])
   const selectedEquipment = data?.equipment.find(item => item.id === equipmentId) || null
   const selectedAttachment = data?.attachments.find(item => item.id === attachmentId) || null
-  const floorEquipment = useMemo(() => data?.equipment.filter(item => item.floor_id === floorId) || [], [data, floorId])
-  const floorAttachments = useMemo(() => data?.attachments.filter(item => item.floor_id === floorId) || [], [data, floorId])
+  const floorEquipment = useMemo(() => selectedFloor?.managed ? data?.equipment.filter(item => item.floor_id === floorId) || [] : [], [data, floorId, selectedFloor?.managed])
+  const floorAttachments = useMemo(() => selectedFloor?.managed ? data?.attachments.filter(item => item.floor_id === floorId) || [] : [], [data, floorId, selectedFloor?.managed])
   const results = useMemo(() => {
     const needle = search.trim().toLowerCase()
     if (!needle || !data) return []
-    return data.attachments.filter(item => [item.mac_address, item.endpoint.hostname, item.endpoint.ip_address, item.endpoint.owner, item.ssid, item.port, item.vlan].some(value => String(value || '').toLowerCase().includes(needle))).slice(0, 12)
+    const managedIds = new Set(data.floors.filter(floor => floor.managed).map(floor => floor.id))
+    return data.attachments.filter(item => item.floor_id && managedIds.has(item.floor_id) && [item.mac_address, item.endpoint.hostname, item.endpoint.ip_address, item.endpoint.owner, item.ssid, item.port, item.vlan].some(value => String(value || '').toLowerCase().includes(needle))).slice(0, 12)
   }, [data, search])
 
   const selectAttachment = (id: string) => {
@@ -78,9 +93,10 @@ export default function NetworkMapPage() {
       />
 
       <header className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-4 bg-gradient-to-b from-[#030913] via-[#030913]/88 to-transparent px-5 pb-16 pt-5 lg:px-7">
-        <div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300"><Network size={13} /> 3D Network Map <span className="ml-1 rounded border border-cyan-300/20 bg-cyan-300/[0.06] px-1.5 py-0.5 text-[8px] tracking-[0.12em] text-cyan-200/80">{hasConnections ? 'Live' : 'Preview'}</span></div><h1 className="mt-1.5 text-[28px] font-semibold leading-none tracking-[-0.03em] text-white">{selectedFloor ? selectedFloor.label : 'Building overview'}</h1><p className="mt-2 text-xs text-slate-400">{hasConnections ? (selectedFloor ? `${floorAttachments.length} observed endpoints · ${floorEquipment.length} infrastructure devices` : `${data.summary.floors} floors · ${data.summary.endpoints} observed endpoints`) : (selectedFloor ? 'Floor-plan preview · topology appears after connecting a source' : `${data.summary.floors} interactive floors · architectural preview`)}</p></div>
+        <div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300"><Network size={13} /> 3D Network Map <span className="ml-1 rounded border border-cyan-300/20 bg-cyan-300/[0.06] px-1.5 py-0.5 text-[8px] tracking-[0.12em] text-cyan-200/80">{hasConnections ? 'Live' : 'Preview'}</span></div><div className="mt-1.5 flex items-center gap-2"><h1 className="text-[28px] font-semibold leading-none tracking-[-0.03em] text-white">{selectedFloor ? selectedFloor.label : 'Building overview'}</h1>{selectedFloor && !selectedFloor.managed && <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-slate-500">Available</span>}</div><p className="mt-2 text-xs text-slate-400">{selectedFloor ? (selectedFloor.managed ? `${floorAttachments.length} observed endpoints · ${floorEquipment.length} infrastructure devices` : `Floor ${selectedFloor.ordinal} · not currently managed`) : `${data.summary.building_floors} floors · ${data.summary.floors} managed · ${data.summary.endpoints} observed endpoints`}</p></div>
         <div className="pointer-events-auto flex items-center gap-2">
           <div className="hidden rounded-xl border border-cyan-100/[0.09] bg-[#07111c]/65 px-3.5 py-2.5 text-[10px] text-slate-400 shadow-[0_16px_50px_rgba(0,0,0,.28)] backdrop-blur-xl md:flex md:items-center md:gap-4"><span className="flex items-center gap-1.5"><span className="h-px w-7 border-t border-dashed border-cyan-300" /> Wi-Fi</span><span className="flex items-center gap-1.5"><span className="h-px w-7 bg-teal-300" /> Ethernet</span></div>
+          {user?.role === 'admin' && <button onClick={() => setFloorManagerOpen(true)} className="flex items-center gap-2 rounded-xl border border-cyan-200/[0.12] bg-cyan-300/[0.07] px-3 py-2.5 text-[10px] font-semibold text-cyan-100 shadow-[0_16px_50px_rgba(0,0,0,.28)] backdrop-blur-xl transition-[background-color,transform,border-color] duration-200 hover:border-cyan-200/25 hover:bg-cyan-300/[0.11] active:scale-[.98]"><SlidersHorizontal size={14} /> Manage floors</button>}
           {user?.role === 'admin' && <a href="/network-map/connections" className="rounded-xl border border-cyan-100/[0.09] bg-[#07111c]/65 p-2.5 text-slate-400 shadow-[0_16px_50px_rgba(0,0,0,.28)] backdrop-blur-xl transition-[color,transform,border-color] duration-200 hover:border-cyan-300/25 hover:text-white active:scale-[.97]" title="Network Map connections"><Settings2 size={15} /></a>}
           {user?.role !== 'viewer' && <button onClick={() => collectMutation.mutate()} disabled={collectMutation.isPending || !data.connections.some(item => item.enabled)} className="rounded-xl border border-cyan-100/[0.09] bg-[#07111c]/65 p-2.5 text-slate-400 shadow-[0_16px_50px_rgba(0,0,0,.28)] backdrop-blur-xl transition-[color,transform,border-color] duration-200 hover:border-cyan-300/25 hover:text-white active:scale-[.97] disabled:opacity-40" title="Refresh topology"><RefreshCw size={15} className={collectMutation.isPending ? 'animate-spin' : ''} /></button>}
         </div>
@@ -93,8 +109,9 @@ export default function NetworkMapPage() {
         <div className="h-[calc(100%-57px)] overflow-y-auto p-2">
           {search.trim() ? <div className="space-y-1">{results.length === 0 && <p className="px-2 py-5 text-center text-xs text-zinc-600">No endpoint matches</p>}{results.map(item => <button key={item.id} onClick={() => selectAttachment(item.id)} className="w-full rounded-lg px-2.5 py-2 text-left hover:bg-white/[0.04]"><span className="block truncate text-xs font-medium text-zinc-300">{labelForAttachment(item)}</span><span className="mt-0.5 block text-[10px] text-zinc-600">{item.mac_address} · {item.match_state.replace(/_/g, ' ')}</span></button>)}</div> : <>
             <button onClick={() => { setFloorId(null); setEquipmentId(null); setAttachmentId(null) }} className={`mb-1 flex w-full items-center gap-2 rounded-lg px-2.5 py-2.5 text-left text-xs ${floorId === null ? 'bg-emerald-500/10 text-emerald-300' : 'text-zinc-400 hover:bg-white/[0.04]'}`}><Box size={14} /> Building overview</button>
-            <p className="px-2.5 pb-1 pt-3 text-[9px] font-semibold uppercase tracking-[0.15em] text-zinc-700">Floors</p>
-            {data.floors.slice().reverse().map(floor => {
+            <div className="flex items-center justify-between px-2.5 pb-1 pt-3"><p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-zinc-700">My floors</p><span className="text-[9px] tabular-nums text-cyan-300/60">{managedFloors.length}/31</span></div>
+            {managedFloors.length === 0 && <button onClick={() => setFloorManagerOpen(true)} className="mx-1 my-2 w-[calc(100%-8px)] rounded-lg border border-dashed border-cyan-200/[0.12] px-3 py-4 text-center text-[10px] leading-4 text-slate-500 transition-colors hover:border-cyan-200/25 hover:text-cyan-100">Choose the floors your team manages</button>}
+            {managedFloors.slice().reverse().map(floor => {
               const count = data.attachments.filter(item => item.floor_id === floor.id).length
               return <button key={floor.id} onClick={() => { setFloorId(floor.id); setEquipmentId(null); setAttachmentId(null) }} className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs ${floorId === floor.id ? 'bg-emerald-500/10 text-emerald-300' : 'text-zinc-400 hover:bg-white/[0.04]'}`}><span>{floor.label}</span><span className="text-[10px] text-zinc-600">{count}</span></button>
             })}
@@ -116,14 +133,29 @@ export default function NetworkMapPage() {
         <div className="flex items-start gap-3"><span className="mt-0.5 rounded-lg border border-cyan-300/15 bg-cyan-300/[0.07] p-2 text-cyan-200"><Box size={14} /></span><div className="min-w-0"><p className="text-xs font-semibold text-white">Exploring in preview mode</p><p className="mt-1 text-[10px] leading-4 text-slate-400">Select any floor to inspect its 3D layout. Live access points, switches, endpoints, and traffic paths will appear when a source is connected.</p>{user?.role === 'admin' && <a href="/network-map/connections" className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-semibold text-cyan-200 transition-colors hover:text-white"><Settings2 size={12} /> Configure when ready</a>}</div></div>
       </section>}
 
+      {floorManagerOpen && user?.role === 'admin' && <FloorManager floors={data.floors} pending={floorMutation.isPending} onChange={(id, patch) => floorMutation.mutate({ id, patch })} onClose={() => setFloorManagerOpen(false)} />}
+
       <div className="pointer-events-none absolute bottom-5 left-1/2 z-10 hidden -translate-x-1/2 items-center gap-2 rounded-full border border-cyan-100/[0.07] bg-[#07111c]/58 px-3.5 py-2 text-[9px] font-medium tracking-wide text-slate-500 shadow-lg backdrop-blur-xl xl:flex"><span className="h-1.5 w-1.5 rounded-full bg-cyan-300/70 shadow-[0_0_10px_rgba(103,232,249,.65)]" /> Drag to orbit · Scroll to zoom · Select a floor or device</div>
 
-      {selectedFloor && <div className="absolute bottom-5 right-5 z-10 flex items-center gap-2 rounded-lg border border-white/[0.08] bg-black/40 p-1.5 backdrop-blur lg:right-7"><button onClick={() => { const index = data.floors.findIndex(item => item.id === floorId); setFloorId(data.floors[Math.max(0, index - 1)]?.id || floorId) }} className="rounded-md p-1.5 text-zinc-500 hover:bg-white/[0.05] hover:text-white" aria-label="Previous floor"><ChevronLeft size={14} /></button><span className="min-w-20 text-center text-[10px] font-medium text-zinc-300">{selectedFloor.label}</span><button onClick={() => { const index = data.floors.findIndex(item => item.id === floorId); setFloorId(data.floors[Math.min(data.floors.length - 1, index + 1)]?.id || floorId) }} className="rounded-md p-1.5 text-zinc-500 hover:bg-white/[0.05] hover:text-white" aria-label="Next floor"><ChevronRight size={14} /></button></div>}
+      {selectedFloor && <div className="absolute bottom-5 right-5 z-10 flex items-center gap-2 rounded-full border border-white/[0.08] bg-[#07111c]/72 p-1.5 shadow-xl backdrop-blur-xl lg:right-7"><button onClick={() => { const index = data.floors.findIndex(item => item.id === floorId); setFloorId(data.floors[Math.max(0, index - 1)]?.id || floorId) }} className="rounded-full p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-white" aria-label="Previous floor"><ChevronLeft size={14} /></button><span className="min-w-28 text-center text-[10px] font-medium text-zinc-300"><span className="text-cyan-300/70">{String(selectedFloor.ordinal).padStart(2, '0')}</span> · {selectedFloor.label}</span><button onClick={() => { const index = data.floors.findIndex(item => item.id === floorId); setFloorId(data.floors[Math.min(data.floors.length - 1, index + 1)]?.id || floorId) }} className="rounded-full p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-white" aria-label="Next floor"><ChevronRight size={14} /></button></div>}
 
       {(selectedAttachment || selectedEquipment) && <DetailDrawer attachment={selectedAttachment} equipment={selectedEquipment} endpointCount={selectedEquipment ? data.attachments.filter(item => item.equipment_id === selectedEquipment.id).length : 0} connections={data.connections} onClose={() => { setAttachmentId(null); setEquipmentId(null) }} />}
 
     </div>
   )
+}
+
+function FloorManager({ floors, pending, onChange, onClose }: { floors: NetworkMapPayload['floors']; pending: boolean; onChange: (id: string, patch: { managed?: boolean; label?: string }) => void; onClose: () => void }) {
+  return <aside className="absolute bottom-4 right-4 top-20 z-30 flex w-[min(390px,calc(100%-32px))] flex-col overflow-hidden rounded-2xl border border-cyan-100/[0.11] bg-[#07111c]/95 shadow-[0_32px_100px_rgba(0,0,0,.62),inset_0_1px_0_rgba(255,255,255,.05)] backdrop-blur-2xl lg:right-7 lg:top-24">
+    <div className="flex items-start justify-between border-b border-white/[0.06] px-5 py-4"><div><div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300"><Building2 size={13} /> Building directory</div><h2 className="mt-1.5 text-lg font-semibold tracking-[-0.02em] text-white">Manage your floors</h2><p className="mt-1 text-[10px] leading-4 text-slate-500">Select the floors you operate, then give each one the name your team uses.</p></div><button onClick={onClose} className="rounded-lg p-2 text-slate-600 transition-colors hover:bg-white/[0.05] hover:text-white" aria-label="Close floor manager"><X size={15} /></button></div>
+    <div className="flex items-center justify-between border-b border-white/[0.05] px-5 py-2.5 text-[9px] uppercase tracking-[0.14em] text-slate-600"><span>{floors.filter(floor => floor.managed).length} of 31 managed</span><span className={pending ? 'text-cyan-300' : 'text-emerald-400/70'}>{pending ? 'Saving…' : 'Saved'}</span></div>
+    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-2">{floors.slice().reverse().map(floor => <div key={floor.id} className={`group my-1 flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors duration-200 ${floor.managed ? 'border-cyan-300/[0.14] bg-cyan-300/[0.055]' : 'border-transparent hover:border-white/[0.05] hover:bg-white/[0.025]'}`}>
+      <button onClick={() => onChange(floor.id, { managed: !floor.managed })} className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border transition-all duration-200 ${floor.managed ? 'border-cyan-300/60 bg-cyan-300 text-[#041017] shadow-[0_0_16px_rgba(34,211,238,.24)]' : 'border-white/[0.13] bg-black/20 text-transparent hover:border-cyan-300/35'}`} aria-label={`${floor.managed ? 'Remove' : 'Manage'} floor ${floor.ordinal}`}><Check size={12} strokeWidth={3} /></button>
+      <span className={`w-7 text-right text-[10px] font-semibold tabular-nums ${floor.managed ? 'text-cyan-300/80' : 'text-slate-700'}`}>{String(floor.ordinal).padStart(2, '0')}</span>
+      <input defaultValue={floor.label} key={`${floor.id}:${floor.label}`} disabled={!floor.managed} onBlur={event => { const label = event.target.value.trim(); if (label && label !== floor.label) onChange(floor.id, { label }) }} className="min-w-0 flex-1 border-0 bg-transparent px-1 py-1 text-xs text-slate-200 outline-none placeholder:text-slate-700 disabled:text-slate-600" aria-label={`Name for floor ${floor.ordinal}`} />
+    </div>)}</div>
+    <div className="border-t border-white/[0.06] p-3"><button onClick={onClose} className="w-full rounded-xl bg-cyan-300 px-4 py-2.5 text-xs font-semibold text-[#041017] shadow-[0_8px_30px_rgba(34,211,238,.15)] transition-[filter,transform] hover:brightness-110 active:scale-[.99]">Done</button></div>
+  </aside>
 }
 
 function DetailDrawer({ attachment, equipment, endpointCount, connections, onClose }: { attachment: MapAttachment | null; equipment: MapEquipment | null; endpointCount: number; connections: NetworkMapPayload['connections']; onClose: () => void }) {

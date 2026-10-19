@@ -114,6 +114,7 @@ async def init_db():
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS siem_enabled BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS siem_config JSONB",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS network_map_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE network_map_floors ADD COLUMN IF NOT EXISTS managed BOOLEAN NOT NULL DEFAULT FALSE",
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_network_map_single_wlc ON network_map_connections (connection_type) WHERE connection_type = 'cisco_wlc'",
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_network_map_single_fortigate ON network_map_connections (connection_type) WHERE connection_type = 'fortigate'",
             """

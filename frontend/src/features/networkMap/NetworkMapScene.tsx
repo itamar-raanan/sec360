@@ -33,18 +33,9 @@ function seededRandom(seed: number) {
 
 export default function NetworkMapScene(props: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
-  const callbacks = useRef({
-    floor: props.onSelectFloor,
-    equipment: props.onSelectEquipment,
-    attachment: props.onSelectAttachment,
-  })
+  const propsRef = useRef(props)
   const [failed, setFailed] = useState(!webglAvailable())
-
-  callbacks.current = {
-    floor: props.onSelectFloor,
-    equipment: props.onSelectEquipment,
-    attachment: props.onSelectAttachment,
-  }
+  propsRef.current = props
 
   useEffect(() => {
     const host = hostRef.current
@@ -64,21 +55,21 @@ export default function NetworkMapScene(props: Props) {
         const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
         const scene = new THREE.Scene()
         scene.background = new THREE.Color(0x030913)
-        scene.fog = new THREE.FogExp2(0x030913, 0.012)
+        scene.fog = new THREE.FogExp2(0x030913, 0.013)
 
-        const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 320)
-        const overviewPosition = new THREE.Vector3(38, 30, 68)
-        const floorPosition = new THREE.Vector3(34, 24, 47)
-        const overviewLook = new THREE.Vector3(-8.5, 10.2, 1.5)
-        const floorLook = new THREE.Vector3(1.2, 8.8, 0.7)
-        camera.position.copy(props.selectedFloorId && !reduceMotion ? overviewPosition : props.selectedFloorId ? floorPosition : overviewPosition)
-        camera.lookAt(props.selectedFloorId ? floorLook : overviewLook)
+        const camera = new THREE.PerspectiveCamera(33, 1, 0.1, 260)
+        const overviewPosition = new THREE.Vector3(31, 22, 50)
+        const detailPosition = new THREE.Vector3(31, 20, 43)
+        const overviewLook = new THREE.Vector3(-2.5, 10.7, 0)
+        const detailLook = new THREE.Vector3(1.4, 8.5, 0)
+        camera.position.copy(overviewPosition)
+        camera.lookAt(overviewLook)
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' })
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' })
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
         renderer.outputColorSpace = THREE.SRGBColorSpace
         renderer.toneMapping = THREE.ACESFilmicToneMapping
-        renderer.toneMappingExposure = 1.32
+        renderer.toneMappingExposure = 1.28
         renderer.shadowMap.enabled = true
         renderer.shadowMap.type = THREE.PCFSoftShadowMap
         renderer.domElement.style.touchAction = 'none'
@@ -86,18 +77,17 @@ export default function NetworkMapScene(props: Props) {
 
         const controls = new OrbitControls(camera, renderer.domElement)
         controls.enableDamping = true
-        controls.dampingFactor = 0.075
+        controls.dampingFactor = 0.065
         controls.enablePan = true
-        controls.minDistance = 20
-        controls.maxDistance = 95
+        controls.minDistance = 18
+        controls.maxDistance = 82
         controls.minPolarAngle = Math.PI * 0.08
         controls.maxPolarAngle = Math.PI * 0.49
-        controls.target.copy(props.selectedFloorId ? floorLook : overviewLook)
-        controls.update()
+        controls.target.copy(overviewLook)
 
-        scene.add(new THREE.HemisphereLight(0xa8dcff, 0x03050a, 3.2))
-        const key = new THREE.DirectionalLight(0xeaf6ff, 5.8)
-        key.position.set(22, 34, 18)
+        scene.add(new THREE.HemisphereLight(0xb4e3ff, 0x02050a, 3.1))
+        const key = new THREE.DirectionalLight(0xf0f8ff, 5.4)
+        key.position.set(22, 36, 18)
         key.castShadow = true
         key.shadow.mapSize.set(2048, 2048)
         key.shadow.camera.near = 1
@@ -107,20 +97,18 @@ export default function NetworkMapScene(props: Props) {
         key.shadow.camera.top = 35
         key.shadow.camera.bottom = -35
         scene.add(key)
-        const cyanLight = new THREE.PointLight(0x14dbe5, 80, 60, 2)
-        cyanLight.position.set(-10, 12, 7)
+        const cyanLight = new THREE.PointLight(0x14dbe5, 76, 58, 2)
+        cyanLight.position.set(-8, 13, 7)
         scene.add(cyanLight)
-        const blueLight = new THREE.PointLight(0x2c72ff, 65, 75, 2)
-        blueLight.position.set(16, 16, -15)
+        const blueLight = new THREE.PointLight(0x2c72ff, 52, 70, 2)
+        blueLight.position.set(15, 14, -14)
         scene.add(blueLight)
 
         const world = new THREE.Group()
         scene.add(world)
-        const interactive: any[] = []
-        const animatedPulses: Array<{ mesh: any; curve: any; phase: number; speed: number }> = []
-        const animatedRings: Array<{ mesh: any; phase: number }> = []
-        const animatedBands: Array<{ material: any; phase: number }> = []
-        const floorGroups: Array<{ group: any; start: any; target: any; floorId: string }> = []
+        let interactive: any[] = []
+        let pulses: Array<{ mesh: any; curve: any; phase: number; speed: number }> = []
+        let rings: Array<{ mesh: any; phase: number }> = []
 
         const addBox = (parent: any, size: number[], position: number[], material: any) => {
           const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material)
@@ -130,30 +118,41 @@ export default function NetworkMapScene(props: Props) {
           parent.add(mesh)
           return mesh
         }
-
-        const addEdges = (parent: any, mesh: any, color = 0x5ea3c7, opacity = 0.46) => {
-          const edges = new THREE.LineSegments(
-            new THREE.EdgesGeometry(mesh.geometry),
-            new THREE.LineBasicMaterial({ color, transparent: true, opacity }),
-          )
+        const addEdges = (parent: any, mesh: any, color = 0x5ea3c7, opacity = 0.42) => {
+          const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), new THREE.LineBasicMaterial({ color, transparent: true, opacity }))
           edges.position.copy(mesh.position)
-          edges.rotation.copy(mesh.rotation)
           parent.add(edges)
-          return edges
         }
-
+        const setGroupOpacity = (group: any, opacity: number) => {
+          group.traverse((object: any) => {
+            if (!object.material) return
+            const materials = Array.isArray(object.material) ? object.material : [object.material]
+            materials.forEach((material: any) => {
+              if (material.userData.baseOpacity === undefined) material.userData.baseOpacity = material.opacity ?? 1
+              material.transparent = true
+              material.opacity = material.userData.baseOpacity * opacity
+            })
+          })
+        }
+        const disposeGroup = (group: any) => {
+          group.traverse((object: any) => {
+            object.geometry?.dispose?.()
+            const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : []
+            materials.forEach((material: any) => { material.map?.dispose?.(); material.dispose?.() })
+          })
+          group.parent?.remove(group)
+        }
         const makeLabel = (text: string, accent = false) => {
           const canvas = document.createElement('canvas')
           const context = canvas.getContext('2d')!
-          const ratio = 2
-          canvas.width = 256 * ratio
-          canvas.height = 62 * ratio
-          context.scale(ratio, ratio)
+          canvas.width = 512
+          canvas.height = 124
+          context.scale(2, 2)
           context.font = '600 17px ui-sans-serif, system-ui, sans-serif'
           context.textAlign = 'center'
           context.textBaseline = 'middle'
-          context.fillStyle = 'rgba(4, 12, 22, 0.90)'
-          context.strokeStyle = accent ? 'rgba(34, 211, 238, 0.78)' : 'rgba(120, 166, 190, 0.42)'
+          context.fillStyle = 'rgba(4, 12, 22, .92)'
+          context.strokeStyle = accent ? 'rgba(34, 211, 238, .82)' : 'rgba(120, 166, 190, .42)'
           context.lineWidth = 1
           context.beginPath()
           context.roundRect(4, 4, 248, 54, 10)
@@ -169,270 +168,182 @@ export default function NetworkMapScene(props: Props) {
           return sprite
         }
 
-        // A restrained procedural city gives the tower scale and depth without competing with live data.
         const random = seededRandom(360)
         const cityMaterial = new THREE.MeshStandardMaterial({ color: 0x07111d, roughness: 0.94, metalness: 0.05 })
-        const cityGlow = new THREE.MeshBasicMaterial({ color: 0x0d3a4b, transparent: true, opacity: 0.22 })
-        for (let i = 0; i < 74; i += 1) {
+        const cityGlow = new THREE.MeshBasicMaterial({ color: 0x0d3a4b, transparent: true, opacity: 0.2 })
+        for (let i = 0; i < 66; i += 1) {
           const angle = random() * Math.PI * 2
-          const radius = 30 + random() * 58
-          const width = 2 + random() * 6
-          const depth = 2 + random() * 6
-          const height = 1.2 + Math.pow(random(), 2) * 14
+          const radius = 27 + random() * 52
+          const width = 2 + random() * 5
+          const depth = 2 + random() * 5
+          const height = 1 + Math.pow(random(), 2) * 12
           const x = Math.cos(angle) * radius
           const z = Math.sin(angle) * radius
-          const block = addBox(world, [width, height, depth], [x, height / 2 - 1.2, z], cityMaterial)
-          block.castShadow = false
-          if (i % 3 === 0) addBox(world, [width * 0.72, 0.05, 0.04], [x, height * 0.58, z + depth / 2 + 0.025], cityGlow).castShadow = false
+          addBox(world, [width, height, depth], [x, height / 2 - 1.2, z], cityMaterial).castShadow = false
+          if (i % 3 === 0) addBox(world, [width * 0.72, 0.04, 0.04], [x, height * 0.58, z + depth / 2], cityGlow).castShadow = false
         }
-
-        const ground = new THREE.Mesh(
-          new THREE.CircleGeometry(105, 96),
-          new THREE.MeshStandardMaterial({ color: 0x020711, roughness: 0.94, metalness: 0.05 }),
-        )
+        const ground = new THREE.Mesh(new THREE.CircleGeometry(92, 96), new THREE.MeshStandardMaterial({ color: 0x020711, roughness: 0.95 }))
         ground.rotation.x = -Math.PI / 2
         ground.position.y = -1.22
         ground.receiveShadow = true
         world.add(ground)
-        const grid = new THREE.GridHelper(150, 60, 0x0e4254, 0x09202d)
+        const grid = new THREE.GridHelper(138, 60, 0x0e4254, 0x09202d)
         grid.position.y = -1.18
         grid.material.transparent = true
-        grid.material.opacity = 0.2
+        grid.material.opacity = 0.17
         world.add(grid)
 
-        const glassMaterial = new THREE.MeshPhysicalMaterial({
-          color: 0x173b54,
-          metalness: 0.22,
-          roughness: 0.16,
-          transmission: 0.18,
-          transparent: true,
-          opacity: 0.8,
-          clearcoat: 0.72,
-          clearcoatRoughness: 0.2,
-          side: THREE.DoubleSide,
-        })
-        const darkGlassMaterial = new THREE.MeshPhysicalMaterial({
-          color: 0x061725,
-          metalness: 0.36,
-          roughness: 0.2,
-          transparent: true,
-          opacity: 0.88,
-          clearcoat: 0.8,
-        })
-        const structuralMaterial = new THREE.MeshStandardMaterial({ color: 0xa9bcc7, metalness: 0.68, roughness: 0.27 })
-        const slabMaterial = new THREE.MeshStandardMaterial({ color: 0x182a39, metalness: 0.28, roughness: 0.56 })
-        const selectedSlabMaterial = new THREE.MeshStandardMaterial({ color: 0x607785, metalness: 0.18, roughness: 0.42 })
-        const wallMaterial = new THREE.MeshPhysicalMaterial({ color: 0xb9d3dc, transparent: true, opacity: 0.6, roughness: 0.52, side: THREE.DoubleSide })
-        const accentMaterial = new THREE.MeshBasicMaterial({ color: 0x16e4ef, transparent: true, opacity: 0.8 })
-
         const tower = new THREE.Group()
-        tower.position.set(-8.5, 0, 1.5)
+        tower.position.set(-8.8, 0, 0.6)
         world.add(tower)
+        const structural = new THREE.MeshStandardMaterial({ color: 0xa9bcc7, metalness: 0.68, roughness: 0.27 })
+        const darkGlass = new THREE.MeshPhysicalMaterial({ color: 0x061725, metalness: 0.36, roughness: 0.2, transparent: true, opacity: 0.9, clearcoat: 0.8 })
+        addBox(tower, [11.2, 0.85, 7.6], [0, -0.55, 0], darkGlass)
+        addBox(tower, [10.4, 0.18, 7], [0, -0.04, 0], structural)
 
-        addBox(tower, [16.5, 1.15, 11.5], [0, -0.58, 0], darkGlassMaterial)
-        addBox(tower, [14.8, 0.24, 9.9], [0, 0.12, 0], structuralMaterial)
+        const floorStep = 0.76
+        const floorMeshes = new Map<string, { mesh: any; glow: any; floor: MapFloor }>()
+        propsRef.current.floors.forEach((floor, index) => {
+          const y = 0.18 + index * floorStep
+          const taper = 1 - index * 0.0055
+          const width = 10.2 * taper
+          const depth = 6.8 * taper
+          const material = new THREE.MeshPhysicalMaterial({ color: 0x102b3d, metalness: 0.26, roughness: 0.18, transparent: true, opacity: 0.86, clearcoat: 0.72 })
+          const mesh = addBox(tower, [width, 0.63, depth], [0, y + 0.3, 0], material)
+          mesh.userData = { type: 'floor', id: floor.id }
+          interactive.push(mesh)
+          const glowMaterial = new THREE.MeshBasicMaterial({ color: 0x16e4ef, transparent: true, opacity: 0.08 })
+          const glow = addBox(tower, [width + 0.16, 0.035, depth + 0.16], [0, y, 0], glowMaterial)
+          glow.castShadow = false
+          floorMeshes.set(floor.id, { mesh, glow, floor })
+          for (const x of [-width / 2, width / 2]) addBox(tower, [0.035, 0.69, depth + 0.12], [x, y + 0.31, 0], structural).castShadow = false
+        })
+        const crownY = 0.18 + propsRef.current.floors.length * floorStep
+        const crown = new THREE.Mesh(new THREE.ConeGeometry(4.8, 3.8, 4), darkGlass)
+        crown.rotation.y = Math.PI / 4
+        crown.scale.z = 0.68
+        crown.position.set(0, crownY + 1.75, 0)
+        tower.add(crown)
+        for (const x of [-5.1, 5.1]) {
+          const fin = addBox(tower, [0.09, crownY + 4, 0.22], [x, crownY / 2 + 1.1, 0], structural)
+          fin.rotation.z = x < 0 ? -0.025 : 0.025
+        }
 
+        const slabMaterial = () => new THREE.MeshStandardMaterial({ color: 0x607785, metalness: 0.18, roughness: 0.42, transparent: true })
+        const wallMaterial = () => new THREE.MeshPhysicalMaterial({ color: 0xb9d3dc, transparent: true, opacity: 0.58, roughness: 0.52, side: THREE.DoubleSide })
+        const accentMaterial = () => new THREE.MeshBasicMaterial({ color: 0x16e4ef, transparent: true, opacity: 0.82 })
         const addFloorPlan = (parent: any) => {
-          // Floor-25 proportions: perimeter offices, central services, and an open collaboration wing.
+          const wall = wallMaterial()
           const perimeter = [
             [[0.16, 1.05, 12.5], [-10.5, 0.72, 0]], [[0.16, 1.05, 12.5], [10.5, 0.72, 0]],
             [[21.1, 1.05, 0.16], [0, 0.72, -6.15]], [[21.1, 1.05, 0.16], [0, 0.72, 6.15]],
           ] as const
-          perimeter.forEach(([size, position]) => addBox(parent, [...size], [...position], wallMaterial))
-          addBox(parent, [14.5, 0.82, 0.13], [-2.4, 0.6, 3.55], wallMaterial)
-          addBox(parent, [14.5, 0.82, 0.13], [-2.4, 0.6, -3.65], wallMaterial)
+          perimeter.forEach(([size, position]) => addBox(parent, [...size], [...position], wall))
+          addBox(parent, [14.5, 0.82, 0.13], [-2.4, 0.6, 3.55], wall)
+          addBox(parent, [14.5, 0.82, 0.13], [-2.4, 0.6, -3.65], wall)
           for (const x of [-8.25, -5.9, -3.55, -1.2, 1.15]) {
-            addBox(parent, [0.12, 0.82, 2.55], [x, 0.6, 4.83], wallMaterial)
-            addBox(parent, [0.12, 0.82, 2.35], [x, 0.6, -4.82], wallMaterial)
+            addBox(parent, [0.12, 0.82, 2.55], [x, 0.6, 4.83], wall)
+            addBox(parent, [0.12, 0.82, 2.35], [x, 0.6, -4.82], wall)
           }
-          addBox(parent, [3.05, 1.5, 2.35], [-1.7, 0.9, -0.15], darkGlassMaterial)
-          addBox(parent, [2.45, 1.5, 2.55], [2.25, 0.9, 0.2], darkGlassMaterial)
-          addBox(parent, [0.12, 0.82, 5.25], [-8.35, 0.6, 0], wallMaterial)
-          for (const x of [-7.1, -4.6, -2.1, 0.4, 5.6, 8.1]) {
-            const desk = addBox(parent, [1.2, 0.08, 0.52], [x, 0.48, x > 3 ? 2.4 : -2.25], structuralMaterial)
-            desk.castShadow = false
-          }
+          addBox(parent, [3.05, 1.5, 2.35], [-1.7, 0.9, -0.15], darkGlass.clone())
+          addBox(parent, [2.45, 1.5, 2.55], [2.25, 0.9, 0.2], darkGlass.clone())
+          for (const x of [-7.1, -4.6, -2.1, 0.4, 5.6, 8.1]) addBox(parent, [1.2, 0.08, 0.52], [x, 0.48, x > 3 ? 2.4 : -2.25], structural.clone()).castShadow = false
         }
 
-        props.floors.forEach((floor, index) => {
+        type Detail = { group: any; floorId: string; opacity: number; leaving: boolean; interactive: any[]; born: number }
+        let details: Detail[] = []
+        let activeFloorId: string | null = null
+        let detailSignature = ''
+        let cameraTransitionUntil = 0
+
+        const buildDetail = (floor: MapFloor, now: number) => {
+          details.forEach(detail => { detail.leaving = true })
+          pulses = []
+          rings = []
           const group = new THREE.Group()
-          group.userData = { type: 'floor', id: floor.id }
-          const floorY = 0.55 + index * 2.42
-          const taper = 1 - index * 0.012
-          const width = 14.2 * taper
-          const depth = 9.25 * taper
-          const selected = props.selectedFloorId === floor.id
-          const slab = addBox(group, [selected ? 21.2 : width, selected ? 0.34 : 0.26, selected ? 12.5 : depth], [0, 0, 0], selected ? selectedSlabMaterial : slabMaterial)
-          slab.userData = { type: 'floor', id: floor.id }
-          interactive.push(slab)
-          addEdges(group, slab, selected ? 0x5cebf1 : 0x4689a8, selected ? 0.78 : 0.42)
-
-          if (selected) {
-            addFloorPlan(group)
-            const floorGrid = new THREE.GridHelper(20.8, 22, 0x78b5c7, 0x314b5b)
-            floorGrid.scale.z = 0.59
-            floorGrid.position.y = 0.2
-            floorGrid.material.transparent = true
-            floorGrid.material.opacity = 0.22
-            group.add(floorGrid)
-          } else {
-            addBox(group, [width, 2.06, depth], [0, 1.14, 0], glassMaterial)
-            addBox(group, [width + 0.12, 0.08, depth + 0.12], [0, 2.2, 0], structuralMaterial)
-            addBox(group, [width + 0.12, 0.035, depth + 0.16], [0, 1.12, 0], structuralMaterial).castShadow = false
-            for (const x of [-width / 2, width / 2]) addBox(group, [0.08, 2.28, depth + 0.35], [x, 1.12, 0], structuralMaterial)
-            for (let x = -width / 2 + 1.25; x < width / 2; x += 1.25) {
-              addBox(group, [0.035, 2.02, 0.045], [x, 1.14, depth / 2 + 0.03], structuralMaterial).castShadow = false
-              addBox(group, [0.035, 2.02, 0.045], [x, 1.14, -depth / 2 - 0.03], structuralMaterial).castShadow = false
-            }
-            const bandMaterial = accentMaterial.clone()
-            bandMaterial.opacity = selected ? 1 : 0.14
-            addBox(group, [width + 0.28, 0.055, depth + 0.28], [0, 0.2, 0], bandMaterial).castShadow = false
-            animatedBands.push({ material: bandMaterial, phase: index / Math.max(props.floors.length, 1) })
-          }
-
-          const towerPosition = new THREE.Vector3(0, floorY, 0)
-          const expandedPosition = new THREE.Vector3(19, 9.5, -0.8)
-          const parkedPosition = towerPosition.clone()
-          if (props.selectedFloorId && !selected) parkedPosition.x = -0.5
-          const start = towerPosition.clone()
-          const target = selected ? expandedPosition : parkedPosition
-          group.position.copy(reduceMotion ? target : start)
-          if (selected) group.rotation.y = -0.08
-          tower.add(group)
-          floorGroups.push({ group, start, target, floorId: floor.id })
-        })
-
-        // Tapered crown and twin illuminated fins reproduce the uploaded tower silhouette.
-        const crownY = 0.55 + props.floors.length * 2.42
-        addBox(tower, [12.7, 0.7, 8.2], [0, crownY, 0], darkGlassMaterial)
-        const crown = new THREE.Mesh(new THREE.ConeGeometry(6.2, 4.8, 4), darkGlassMaterial)
-        crown.rotation.y = Math.PI / 4
-        crown.scale.z = 0.67
-        crown.position.set(0, crownY + 2.5, 0)
-        tower.add(crown)
-        for (const x of [-6.75, 6.75]) {
-          const fin = addBox(tower, [0.13, props.floors.length * 2.42 + 5.2, 0.34], [x, crownY / 2 + 1.4, 0], structuralMaterial)
-          fin.rotation.z = x < 0 ? -0.025 : 0.025
-        }
-
-        const selectedGroup = floorGroups.find(row => row.floorId === props.selectedFloorId)?.group
-        if (selectedGroup) {
-          const floorLight = new THREE.PointLight(0xbfefff, 48, 28, 2)
+          group.position.set(-8.8, 0.18 + (floor.ordinal - 1) * floorStep, 0.6)
+          group.scale.setScalar(reduceMotion ? 1 : 0.52)
+          world.add(group)
+          const localInteractive: any[] = []
+          const slab = addBox(group, [21.2, 0.34, 12.5], [0, 0, 0], slabMaterial())
+          addEdges(group, slab, 0x5cebf1, 0.78)
+          addFloorPlan(group)
+          const floorGrid = new THREE.GridHelper(20.8, 22, 0x78b5c7, 0x314b5b)
+          floorGrid.scale.z = 0.59
+          floorGrid.position.y = 0.2
+          floorGrid.material.transparent = true
+          floorGrid.material.opacity = 0.22
+          group.add(floorGrid)
+          const floorLight = new THREE.PointLight(0xbfefff, 44, 28, 2)
           floorLight.position.set(0, 7, 0)
-          selectedGroup.add(floorLight)
-          const floorEquipment = props.equipment.filter(item => item.floor_id === props.selectedFloorId)
-          for (const item of floorEquipment) {
-            const selected = item.id === props.selectedEquipmentId
+          group.add(floorLight)
+
+          const state = propsRef.current
+          const floorEquipment = floor.managed ? state.equipment.filter(item => item.floor_id === floor.id) : []
+          floorEquipment.forEach(item => {
             const x = THREE.MathUtils.clamp(item.position.x, -9.5, 9.5)
             const z = THREE.MathUtils.clamp(item.position.z, -5.4, 5.4)
-            const deviceGroup = new THREE.Group()
-            deviceGroup.position.set(x, 0.28, z)
-            deviceGroup.userData = { type: 'equipment', id: item.id }
-            selectedGroup.add(deviceGroup)
-
+            const device = new THREE.Group()
+            device.position.set(x, 0.28, z)
+            device.userData = { type: 'equipment', id: item.id }
+            group.add(device)
             if (item.kind === 'ap') {
-              const bodyMaterial = new THREE.MeshPhysicalMaterial({ color: 0xe5f3f6, roughness: 0.24, metalness: 0.12, clearcoat: 0.9 })
-              const body = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.73, 0.2, 40), bodyMaterial)
+              const body = new THREE.Mesh(new THREE.CylinderGeometry(0.65, 0.73, 0.2, 40), new THREE.MeshPhysicalMaterial({ color: 0xe5f3f6, roughness: 0.24, metalness: 0.12, clearcoat: 0.9 }))
               body.position.y = 0.35
-              body.userData = deviceGroup.userData
+              body.userData = device.userData
               body.castShadow = true
-              deviceGroup.add(body)
-              interactive.push(body)
-              const cap = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.025, 8, 40), accentMaterial)
+              device.add(body)
+              localInteractive.push(body)
+              const cap = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.025, 8, 40), accentMaterial())
               cap.rotation.x = Math.PI / 2
               cap.position.y = 0.45
-              deviceGroup.add(cap)
+              device.add(cap)
               for (let ringIndex = 0; ringIndex < 3; ringIndex += 1) {
-                const ring = new THREE.Mesh(
-                  new THREE.RingGeometry(0.62, 0.66, 48),
-                  new THREE.MeshBasicMaterial({ color: 0x20e8f3, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }),
-                )
+                const ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.66, 48), new THREE.MeshBasicMaterial({ color: 0x20e8f3, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }))
                 ring.rotation.x = -Math.PI / 2
                 ring.position.y = 0.22
-                ring.scale.setScalar(1 + ringIndex * 0.42)
-                deviceGroup.add(ring)
-                animatedRings.push({ mesh: ring, phase: ringIndex / 3 + floorEquipment.indexOf(item) * 0.13 })
+                device.add(ring)
+                rings.push({ mesh: ring, phase: ringIndex / 3 + floorEquipment.indexOf(item) * 0.13 })
               }
             } else {
-              const switchBody = addBox(deviceGroup, [1.35, 0.38, 0.72], [0, 0.28, 0], darkGlassMaterial)
-              switchBody.userData = deviceGroup.userData
-              interactive.push(switchBody)
-              for (let port = 0; port < 8; port += 1) {
-                const portMaterial = new THREE.MeshBasicMaterial({ color: port % 3 === 0 ? 0x25e6cf : 0x315267 })
-                addBox(deviceGroup, [0.1, 0.08, 0.02], [-0.49 + port * 0.14, 0.29, 0.37], portMaterial).castShadow = false
-              }
+              const body = addBox(device, [1.35, 0.38, 0.72], [0, 0.28, 0], darkGlass.clone())
+              body.userData = device.userData
+              localInteractive.push(body)
             }
-
-            const label = makeLabel(item.name, selected)
-              label.position.set(0, 1.55, 0)
-            deviceGroup.add(label)
-
-            const clients = props.attachments.filter(row => row.equipment_id === item.id).slice(0, 32)
-            clients.forEach((row, clientIndex) => {
-              const angle = (clientIndex / Math.max(clients.length, 1)) * Math.PI * 2 + (clientIndex % 2) * 0.28
-              const radius = 1.65 + (clientIndex % 5) * 0.53
-              const endpointPosition = new THREE.Vector3(
-                THREE.MathUtils.clamp(x + Math.cos(angle) * radius, -9.6, 9.6),
-                0.38,
-                THREE.MathUtils.clamp(z + Math.sin(angle) * radius, -5.25, 5.25),
-              )
-              const endpointMaterial = new THREE.MeshStandardMaterial({
-                color: row.match_state === 'matched' ? 0x55e6cf : row.match_state === 'ambiguous' ? 0xf3b85b : 0x708393,
-                emissive: row.id === props.selectedAttachmentId ? 0x1bd7df : 0x071018,
-                emissiveIntensity: row.id === props.selectedAttachmentId ? 2.4 : 0.5,
-                metalness: 0.35,
-                roughness: 0.35,
-              })
-              const endpointGroup = new THREE.Group()
-              endpointGroup.position.copy(endpointPosition)
-              endpointGroup.userData = { type: 'attachment', id: row.id }
-              const base = addBox(endpointGroup, [0.58, 0.06, 0.4], [0, 0, 0], endpointMaterial)
-              base.userData = endpointGroup.userData
-              interactive.push(base)
-              const screen = addBox(endpointGroup, [0.56, 0.4, 0.055], [0, 0.24, -0.13], endpointMaterial)
+            const label = makeLabel(item.name, item.id === state.selectedEquipmentId)
+            label.position.set(0, 1.55, 0)
+            device.add(label)
+            state.attachments.filter(row => row.equipment_id === item.id).slice(0, 32).forEach((row, index) => {
+              const angle = index / Math.max(state.attachments.length, 1) * Math.PI * 2 + (index % 2) * 0.28
+              const radius = 1.65 + (index % 5) * 0.53
+              const position = new THREE.Vector3(THREE.MathUtils.clamp(x + Math.cos(angle) * radius, -9.6, 9.6), 0.38, THREE.MathUtils.clamp(z + Math.sin(angle) * radius, -5.25, 5.25))
+              const material = new THREE.MeshStandardMaterial({ color: row.match_state === 'matched' ? 0x55e6cf : row.match_state === 'ambiguous' ? 0xf3b85b : 0x708393, emissive: row.id === state.selectedAttachmentId ? 0x1bd7df : 0x071018, emissiveIntensity: row.id === state.selectedAttachmentId ? 2.4 : 0.5, metalness: 0.35, roughness: 0.35 })
+              const endpoint = new THREE.Group()
+              endpoint.position.copy(position)
+              const base = addBox(endpoint, [0.58, 0.06, 0.4], [0, 0, 0], material)
+              base.userData = { type: 'attachment', id: row.id }
+              localInteractive.push(base)
+              const screen = addBox(endpoint, [0.56, 0.4, 0.055], [0, 0.24, -0.13], material)
               screen.rotation.x = -0.16
-              screen.userData = endpointGroup.userData
-              interactive.push(screen)
-              selectedGroup.add(endpointGroup)
-
+              screen.userData = base.userData
+              localInteractive.push(screen)
+              group.add(endpoint)
               const startPoint = new THREE.Vector3(x, 0.57, z)
-              const endPoint = endpointPosition.clone().setY(0.48)
-              const midpoint = startPoint.clone().lerp(endPoint, 0.5)
-              midpoint.y += 0.22 + Math.min(startPoint.distanceTo(endPoint) * 0.04, 0.5)
-              const curve = new THREE.QuadraticBezierCurve3(startPoint, midpoint, endPoint)
-              const geometry = new THREE.BufferGeometry().setFromPoints(curve.getPoints(24))
-              const lineMaterial = row.attachment_type === 'wireless'
-                ? new THREE.LineDashedMaterial({ color: 0x20dceb, dashSize: 0.2, gapSize: 0.13, transparent: true, opacity: 0.56 })
-                : new THREE.LineBasicMaterial({ color: 0x2ce0bd, transparent: true, opacity: 0.62 })
-              const line = new THREE.Line(geometry, lineMaterial)
+              const midpoint = startPoint.clone().lerp(position, 0.5).setY(0.82)
+              const curve = new THREE.QuadraticBezierCurve3(startPoint, midpoint, position.clone().setY(0.48))
+              const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(curve.getPoints(24)), row.attachment_type === 'wireless' ? new THREE.LineDashedMaterial({ color: 0x20dceb, dashSize: 0.2, gapSize: 0.13, transparent: true, opacity: 0.56 }) : new THREE.LineBasicMaterial({ color: 0x2ce0bd, transparent: true, opacity: 0.62 }))
               if (row.attachment_type === 'wireless') line.computeLineDistances()
-              selectedGroup.add(line)
-              const pulse = new THREE.Mesh(
-                new THREE.SphereGeometry(0.1, 12, 12),
-                new THREE.MeshBasicMaterial({ color: row.attachment_type === 'wireless' ? 0x7ff5ff : 0x72ffd8 }),
-              )
-              selectedGroup.add(pulse)
-              animatedPulses.push({ mesh: pulse, curve, phase: clientIndex / Math.max(clients.length, 1), speed: 0.16 + (clientIndex % 4) * 0.025 })
+              group.add(line)
+              const pulse = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 12), new THREE.MeshBasicMaterial({ color: row.attachment_type === 'wireless' ? 0x7ff5ff : 0x72ffd8 }))
+              group.add(pulse)
+              pulses.push({ mesh: pulse, curve, phase: index / Math.max(1, floorEquipment.length), speed: 0.16 + (index % 4) * 0.025 })
             })
-          }
-        }
-
-        // The dashed bridge makes the building-to-floor relationship explicit.
-        if (props.selectedFloorId) {
-          const selectedIndex = props.floors.findIndex(floor => floor.id === props.selectedFloorId)
-          const sourceY = 0.55 + selectedIndex * 2.42 + 1.1
-          const bridgeCurve = new THREE.QuadraticBezierCurve3(
-            new THREE.Vector3(-1.2, sourceY, 1.5),
-            new THREE.Vector3(0.5, Math.max(sourceY, 8) + 2.5, 0.5),
-            new THREE.Vector3(10, 7.8, 0.7),
-          )
-          const bridgeGeometry = new THREE.BufferGeometry().setFromPoints(bridgeCurve.getPoints(48))
-          const bridge = new THREE.Line(
-            bridgeGeometry,
-            new THREE.LineDashedMaterial({ color: 0x24dbe7, dashSize: 0.42, gapSize: 0.24, transparent: true, opacity: 0.72 }),
-          )
-          bridge.computeLineDistances()
-          world.add(bridge)
+          })
+          const detail = { group, floorId: floor.id, opacity: reduceMotion ? 1 : 0, leaving: false, interactive: localInteractive, born: now }
+          details.push(detail)
+          interactive = [...floorMeshes.values()].map(item => item.mesh).concat(localInteractive)
+          activeFloorId = floor.id
+          cameraTransitionUntil = now + (reduceMotion ? 0 : 1.25)
         }
 
         const raycaster = new THREE.Raycaster()
@@ -442,42 +353,31 @@ export default function NetworkMapScene(props: Props) {
         let hovered: any = null
         const setPointer = (event: PointerEvent) => {
           const rect = renderer.domElement.getBoundingClientRect()
-          pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
-          pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
+          pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
           raycaster.setFromCamera(pointer, camera)
         }
         const onPointerDown = (event: PointerEvent) => { downX = event.clientX; downY = event.clientY }
         const onPointerMove = (event: PointerEvent) => {
           setPointer(event)
           const hit = raycaster.intersectObjects(interactive, false)[0]?.object || null
-          if (hovered !== hit) {
-            if (hovered) hovered.scale.setScalar(1)
-            hovered = hit
-            if (hovered) hovered.scale.setScalar(1.06)
-            renderer.domElement.style.cursor = hovered ? 'pointer' : 'grab'
-          }
+          hovered = hit
+          renderer.domElement.style.cursor = hovered ? 'pointer' : 'grab'
         }
         const onPointerUp = (event: PointerEvent) => {
           if (Math.hypot(event.clientX - downX, event.clientY - downY) > 7) return
           setPointer(event)
           const hit = raycaster.intersectObjects(interactive, false)[0]?.object
-          if (hit?.userData.type === 'floor') callbacks.current.floor(hit.userData.id)
-          if (hit?.userData.type === 'equipment') callbacks.current.equipment(hit.userData.id)
-          if (hit?.userData.type === 'attachment') callbacks.current.attachment(hit.userData.id)
+          if (hit?.userData.type === 'floor') propsRef.current.onSelectFloor(hit.userData.id)
+          if (hit?.userData.type === 'equipment') propsRef.current.onSelectEquipment(hit.userData.id)
+          if (hit?.userData.type === 'attachment') propsRef.current.onSelectAttachment(hit.userData.id)
         }
         renderer.domElement.addEventListener('pointerdown', onPointerDown)
         renderer.domElement.addEventListener('pointermove', onPointerMove)
         renderer.domElement.addEventListener('pointerup', onPointerUp)
-        renderer.domElement.addEventListener('pointerleave', () => { renderer.domElement.style.cursor = 'grab' })
 
-        const targetCamera = props.selectedFloorId ? floorPosition : overviewPosition
-        const targetLook = props.selectedFloorId ? floorLook : overviewLook
         const resize = () => {
           const width = host.clientWidth
           const height = host.clientHeight
-          // Keep the CSS viewport independent from the high-DPI drawing buffer.
-          // Without the style update a 2× display renders a 2560px canvas into a
-          // 1280px host, cropping the camera framing to its upper-left quadrant.
           renderer.setSize(width, height)
           camera.aspect = width / Math.max(height, 1)
           camera.updateProjectionMatrix()
@@ -489,27 +389,55 @@ export default function NetworkMapScene(props: Props) {
         const clock = new THREE.Clock()
         const animate = () => {
           frame = requestAnimationFrame(animate)
-          const elapsed = clock.getElapsedTime()
+          const delta = Math.min(clock.getDelta(), 0.05)
+          const elapsed = clock.elapsedTime
+          const state = propsRef.current
+          const selected = state.floors.find(floor => floor.id === state.selectedFloorId) || null
+          const signature = selected ? `${selected.id}:${state.selectedEquipmentId || ''}:${state.selectedAttachmentId || ''}:${state.equipment.filter(item => item.floor_id === selected.id).length}:${state.attachments.filter(item => item.floor_id === selected.id).length}` : ''
+          if (selected && (activeFloorId !== selected.id || signature !== detailSignature)) {
+            buildDetail(selected, elapsed)
+            detailSignature = signature
+          } else if (!selected && activeFloorId) {
+            details.forEach(detail => { detail.leaving = true })
+            activeFloorId = null
+            detailSignature = ''
+            interactive = [...floorMeshes.values()].map(item => item.mesh)
+            cameraTransitionUntil = elapsed + (reduceMotion ? 0 : 1.1)
+          }
+
+          state.floors.forEach(floor => {
+            const visual = floorMeshes.get(floor.id)
+            if (!visual) return
+            const isSelected = floor.id === state.selectedFloorId
+            visual.mesh.material.color.setHex(isSelected ? 0x1a6274 : floor.managed ? 0x123f50 : 0x102534)
+            visual.mesh.material.emissive.setHex(isSelected ? 0x0a7480 : floor.managed ? 0x063542 : 0x01080d)
+            visual.mesh.material.emissiveIntensity = isSelected ? 1.3 : floor.managed ? 0.65 : 0.15
+            visual.glow.material.opacity = isSelected ? 0.94 : floor.managed ? 0.42 + Math.sin(elapsed * 1.1 + floor.ordinal) * 0.06 : 0.055
+          })
+
+          const smooth = (speed: number) => reduceMotion ? 1 : 1 - Math.exp(-speed * delta)
+          details.forEach(detail => {
+            const target = detail.leaving ? new THREE.Vector3(15.5, 7.2, -1.8) : new THREE.Vector3(8.7, 8.2, -0.4)
+            detail.group.position.lerp(target, smooth(detail.leaving ? 5.5 : 4.2))
+            const scale = detail.leaving ? 0.92 : 1
+            detail.group.scale.lerp(new THREE.Vector3(scale, scale, scale), smooth(5.2))
+            detail.opacity += ((detail.leaving ? 0 : 1) - detail.opacity) * smooth(detail.leaving ? 6.5 : 5.5)
+            setGroupOpacity(detail.group, detail.opacity)
+          })
+          details.filter(detail => detail.leaving && detail.opacity < 0.015).forEach(detail => disposeGroup(detail.group))
+          details = details.filter(detail => !(detail.leaving && detail.opacity < 0.015))
+
+          const targetLook = activeFloorId ? detailLook : overviewLook
+          controls.target.lerp(targetLook, smooth(4.2))
+          if (elapsed < cameraTransitionUntil) camera.position.lerp(activeFloorId ? detailPosition : overviewPosition, smooth(3.4))
           if (!reduceMotion) {
-            camera.position.lerp(targetCamera, 0.025)
-            controls.target.lerp(targetLook, 0.035)
-            floorGroups.forEach(({ group, target }) => {
-              group.position.lerp(target, 0.055)
-              if (group.position.distanceTo(target) < 0.002) group.position.copy(target)
-            })
-            animatedRings.forEach(({ mesh, phase }) => {
+            rings.forEach(({ mesh, phase }) => {
               const cycle = (elapsed * 0.42 + phase) % 1
-              const scale = 0.86 + cycle * 1.35
-              mesh.scale.setScalar(scale)
+              mesh.scale.setScalar(0.86 + cycle * 1.35)
               mesh.material.opacity = (1 - cycle) * 0.28
             })
-            animatedPulses.forEach(({ mesh, curve, phase, speed }) => {
-              mesh.position.copy(curve.getPoint((elapsed * speed + phase) % 1))
-            })
-            animatedBands.forEach(({ material, phase }) => {
-              material.opacity = 0.1 + Math.pow(Math.max(0, Math.sin(elapsed * 1.15 - phase * Math.PI * 2)), 8) * 0.72
-            })
-            cyanLight.intensity = 72 + Math.sin(elapsed * 0.8) * 8
+            pulses.forEach(({ mesh, curve, phase, speed }) => mesh.position.copy(curve.getPoint((elapsed * speed + phase) % 1)))
+            cyanLight.intensity = 70 + Math.sin(elapsed * 0.8) * 7
           }
           controls.update()
           renderer.render(scene, camera)
@@ -525,10 +453,7 @@ export default function NetworkMapScene(props: Props) {
           scene.traverse((object: any) => {
             object.geometry?.dispose?.()
             const materials = Array.isArray(object.material) ? object.material : object.material ? [object.material] : []
-            materials.forEach((material: any) => {
-              material.map?.dispose?.()
-              material.dispose?.()
-            })
+            materials.forEach((material: any) => { material.map?.dispose?.(); material.dispose?.() })
           })
           renderer.dispose()
           renderer.domElement.remove()
@@ -539,13 +464,9 @@ export default function NetworkMapScene(props: Props) {
       }
     }
     start()
-    return () => {
-      disposed = true
-      observer?.disconnect()
-      cleanup()
-    }
-  }, [props.floors, props.equipment, props.attachments, props.selectedFloorId, props.selectedEquipmentId, props.selectedAttachmentId, failed])
+    return () => { disposed = true; observer?.disconnect(); cleanup() }
+  }, [failed])
 
   if (failed) return <div className="flex h-full items-center justify-center px-8 text-center"><div><p className="text-sm font-medium text-zinc-300">3D rendering is unavailable</p><p className="mt-1 text-xs text-zinc-600">Use the endpoint and equipment lists alongside the map.</p></div></div>
-  return <div ref={hostRef} className="h-full w-full" aria-label="Interactive 3D Network Map" />
+  return <div ref={hostRef} className="h-full w-full" aria-label="Interactive 31-floor 3D Network Map" />
 }

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "generate:network-floor": "node scripts/generate-network-floor-glb.mjs",
+    "generate:network-floor": "python3 scripts/generate_network_floor_blender.py",
     "preview": "vite preview",
     "lint": "eslint . --report-unused-disable-directives --max-warnings 0"
   },

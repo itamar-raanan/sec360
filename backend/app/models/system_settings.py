@@ -70,3 +70,7 @@ class SystemSettings(Base):
     # key used for integration credentials.
     siem_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     siem_config: Mapped[dict | None] = mapped_column(EncryptedJSON, nullable=True)
+
+    # Optional Network Map feature. Connection configuration remains available
+    # to administrators while operational collection and views are disabled.
+    network_map_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

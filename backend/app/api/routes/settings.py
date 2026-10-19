@@ -114,6 +114,7 @@ class SystemSettingsIn(BaseModel):
     min_dlp_version: Optional[str] = None
     min_wss_version: Optional[str] = None
     endpoint_product_tags: Optional[list[Literal["S1", "DLP", "WSS"]]] = None
+    network_map_enabled: Optional[bool] = None
 
 
 class SystemSettingsOut(BaseModel):
@@ -142,6 +143,7 @@ class SystemSettingsOut(BaseModel):
     min_dlp_version: str
     min_wss_version: str
     endpoint_product_tags: list[str]
+    network_map_enabled: bool
 
 
 class SamlSettingsIn(BaseModel):

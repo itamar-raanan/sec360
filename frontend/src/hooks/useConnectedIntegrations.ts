@@ -2,11 +2,18 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 
 import { fetchIntegrations } from '../api/integrations'
+import apiClient from '../api/client'
 
 export function useConnectedIntegrations() {
   const query = useQuery({
     queryKey: ['integrations'],
     queryFn: fetchIntegrations,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  })
+  const networkMap = useQuery<{ enabled: boolean }>({
+    queryKey: ['network-map-status'],
+    queryFn: () => apiClient.get('/network-map/status').then(response => response.data),
     staleTime: 15_000,
     refetchInterval: 30_000,
   })
@@ -34,12 +41,15 @@ export function useConnectedIntegrations() {
 
   const features = useMemo(
     () => new Set(
-      (query.data ?? [])
+      [
+        ...(query.data ?? [])
         .filter(item => item.is_enabled && item.status === 'connected')
         .flatMap(item => item.available_features ?? []),
+        ...(networkMap.data?.enabled ? ['network_map'] : []),
+      ],
     ),
-    [query.data],
+    [query.data, networkMap.data?.enabled],
   )
 
-  return { ...query, connected, configured, features }
+  return { ...query, isLoading: query.isLoading || networkMap.isLoading, connected, configured, features }
 }

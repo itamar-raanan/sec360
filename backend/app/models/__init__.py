@@ -9,6 +9,13 @@ from app.models.integration import IntegrationConfig
 from app.models.note import Note
 from app.models.puppet import PuppetFact, PuppetFactFavorite, PuppetFactSavedView, PuppetNode
 from app.models.change_event import ChangeEvent, EntityStateSnapshot, SiemDelivery
+from app.models.network_map import (
+    NetworkMapCollectionRun,
+    NetworkMapConnection,
+    NetworkMapEquipment,
+    NetworkMapFloor,
+    NetworkMapObservation,
+)
 
 __all__ = [
     "User",
@@ -31,4 +38,9 @@ __all__ = [
     "ChangeEvent",
     "EntityStateSnapshot",
     "SiemDelivery",
+    "NetworkMapCollectionRun",
+    "NetworkMapConnection",
+    "NetworkMapEquipment",
+    "NetworkMapFloor",
+    "NetworkMapObservation",
 ]

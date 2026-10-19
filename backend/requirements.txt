@@ -27,3 +27,5 @@ pytest-asyncio
 aiosqlite
 cryptography>=42.0.0
 redis[asyncio]>=5.0.0
+paramiko>=3.4.0,<4
+mikrotik-swos>=1.5.0,<2

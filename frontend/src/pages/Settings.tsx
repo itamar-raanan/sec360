@@ -24,6 +24,7 @@ import {
   Copy,
   FileKey2,
   Upload,
+  Network,
 } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
 import apiClient from '../api/client'
@@ -64,6 +65,7 @@ interface SystemSettings {
   min_dlp_version: string
   min_wss_version: string
   endpoint_product_tags: EndpointProductTag[]
+  network_map_enabled: boolean
 }
 
 type EndpointProductTag = 'S1' | 'DLP' | 'WSS'
@@ -785,6 +787,7 @@ function PlatformTab() {
         queryClient.invalidateQueries({ queryKey: ['endpoints-all'] }),
         queryClient.invalidateQueries({ queryKey: ['endpoint-detail'] }),
         queryClient.invalidateQueries({ queryKey: ['user-identity'] }),
+        queryClient.invalidateQueries({ queryKey: ['network-map-status'] }),
       ])
       setMsg({ type: 'success', msg: 'Settings saved and security posture recalculated' })
       refetch()
@@ -907,6 +910,20 @@ function PlatformTab() {
       <Section title="Automation">
         <Field label="Auto-correlation" hint="Automatically correlate users and endpoints across data sources">
           <Toggle checked={form.auto_correlation} onChange={v => set('auto_correlation', v)} />
+        </Field>
+      </Section>
+
+      <Section title="Network Map" hint="Optional topology visualization. Connection setup remains available while the feature is disabled.">
+        <Field label="Enable Network Map" hint="Shows the Network Map navigation item and starts scheduled topology collection">
+          <Toggle checked={form.network_map_enabled} onChange={v => set('network_map_enabled', v)} />
+        </Field>
+        <Field label="Network Map connections" hint="Configure Cisco WLC, FortiGate, and MikroTik SwOS sources">
+          <a
+            href="/network-map/connections"
+            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-emerald-400 hover:bg-emerald-500/10"
+          >
+            <Network size={14} /> Configure
+          </a>
         </Field>
       </Section>
 

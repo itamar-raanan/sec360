@@ -61,7 +61,7 @@ The frontend uses:
 
 - React Query for server-state fetching and cache invalidation.
 - Zustand for client-side application state.
-- Recharts for dashboard visualizations.
+- Recharts for dashboard visualizations and a pinned, vendored Three.js runtime for Network Map geometry.
 - Tailwind CSS and Lucide icons for the interface.
 - A shared API client using `/api` by default.
 
@@ -76,7 +76,7 @@ The FastAPI service owns:
 - Reports and scheduled email delivery.
 - DLP policy search and DLP change tracking.
 - Puppet Facts and SentinelOne application-vulnerability views.
-- URL and domain investigation orchestration.
+- Optional Network Map collection, correlation, and topology APIs.
 - Audit logs, change events, SIEM delivery, and system settings.
 
 Interactive OpenAPI documentation is available at `/docs` on the backend service. In development it is reachable at `http://localhost:8000/docs`. The production Nginx configuration exposes the application API under `/api` but does not publish the backend's `/docs` route.
@@ -93,6 +93,7 @@ PostgreSQL stores the canonical inventory and operational state, including:
 - DLP search and policy-tracking state.
 - Puppet nodes, facts, favorites, and saved views.
 - Application vulnerabilities.
+- Network Map connections, floors, infrastructure placement, collection runs, and retained observations.
 - Reports, system settings, analyst notes, audit logs, change events, and SIEM deliveries.
 
 Database tables are created on application startup, and startup code applies idempotent compatibility patches required by the current release. Back up PostgreSQL before upgrading an existing installation.
@@ -106,6 +107,8 @@ APScheduler runs inside the backend. A normal collection cycle is deliberately o
 3. Correlation runs, followed by compliance evaluation and risk calculation.
 
 Other scheduled jobs handle report delivery, data retention, and SIEM retries. The default full collection interval is 15 minutes and is configurable.
+
+When Network Map is enabled, a separate feature-owned scheduled job collects its enabled connections on the same configurable interval. Disabling Network Map immediately stops operational collection without deleting connection configuration or retained observations.
 
 ### Correlation engine
 
@@ -261,6 +264,22 @@ When Puppet is connected, analysts can explore PuppetDB data:
 - Saved and default views.
 - Sorting, pagination, and CSV export.
 
+### Network Map
+
+Network Map is an optional, administrator-controlled topology workspace. Enable it under **Settings → Platform → Network Map**. When disabled, its navigation, operational API, and scheduled collection remain unavailable; administrators can still prepare and test connections at **Network Map → Connections**.
+
+The feature owns its connections instead of placing them in the Integration Store:
+
+- One Cisco WLC SSH connection for access points, wireless clients, WLAN IDs, and SSIDs.
+- One FortiGate HTTPS API connection for DHCP lease enrichment.
+- Any number of MikroTik SwOS HTTP Digest connections for switch host tables, ports, and VLANs.
+
+Saved secrets are encrypted and never returned to the browser. **Test connection** is separate from **Save**: it validates the current form without silently saving, enabling, or scheduling it. A successful complete collection replaces only that connection's current snapshot. A failed or malformed collection leaves the previous snapshot intact and exposes the source error and collection age.
+
+The workspace provides eight independently configurable floors using one shared schematic geometry. Administrators assign discovered access points and switches to a floor, save stable X/Z placement, and may override the served floor and role of individual switch ports. The 3D view supports orbit, pan, zoom, floor expansion, dashed Wi-Fi links, solid Ethernet links, endpoint/equipment selection, search, and an accessible list fallback when WebGL is unavailable.
+
+Endpoint identity is resolved only by normalized MAC addresses found in existing Puppet facts. Hostname and IP address may enrich a matched record, but never create the match. Multiple Puppet matches remain explicitly ambiguous; no Puppet match is labeled **No current Puppet match** rather than incorrectly classifying the device as unmanaged. Wireless attachment takes precedence over a simultaneous wired observation unless that switch port is explicitly configured as an endpoint-facing port.
+
 ### DLP user policy search
 
 The DLP policy search connects to the configured Symantec DLP Enforce Oracle database and searches policy conditions for user-related exclusions and patterns such as users, email addresses, domains, IP addresses, and personal-email rules. Agent collection supports the integration's configured database mode, but the live User Policy Search specifically requires Oracle credentials.
@@ -316,6 +335,7 @@ Settings includes:
 - SAML and RADIUS configuration, including RADIUS connection testing.
 - TLS certificate replacement.
 - System settings that immediately trigger derived compliance/risk recalculation where necessary.
+- Network Map activation and a direct link to its feature-owned connection and floor configuration.
 
 ## Integrations
 
@@ -332,6 +352,8 @@ Settings includes:
 | Symantec DLP | DLP agents, WSS/product evidence, exclusions, and policy search | Connects to the Enforce database |
 
 HiBob and CloudSOC are retired integrations and are not presented as active catalog choices.
+
+Cisco WLC, FortiGate, and MikroTik SwOS are Network Map sources, not Integration Store products. Configure them from **Network Map → Connections**. Puppet remains the existing source of managed-endpoint identity used by Network Map correlation; the feature does not create a second Puppet connector.
 
 ## Data collection and processing
 
@@ -353,6 +375,18 @@ A transient health-check or synchronization error does not immediately remove th
 ### Endpoint lifecycle
 
 Last-seen age does not remove an endpoint from inventory. An endpoint remains current while it is active and its lifecycle state is `active`. This is intentional: stale source records remain visible until an analyst cleans them in the upstream system or deliberately retires them in SEC360.
+
+### Network Map lifecycle
+
+Network Map configuration, collection, and visualization are separate stages:
+
+1. An administrator configures and tests feature-owned connections.
+2. The administrator enables Network Map in System Settings.
+3. Manual or scheduled collection records a scoped snapshot for each enabled connection.
+4. Infrastructure is discovered into an explicit unassigned state until an administrator places it on a floor.
+5. Current wireless and wired observations are correlated to existing Puppet-managed endpoints by normalized MAC address.
+6. FortiGate leases enrich those observations with current IP and hostname data by the same MAC.
+7. Complete snapshots retire only earlier observations from the same connection; failures retain the last useful topology.
 
 ### Credentials
 
@@ -588,6 +622,8 @@ Production Docker log rotation is configured for the backend and frontend. Appli
 
 Use **Integration Store → Test** to validate network access and credentials without waiting for a scheduled collection. Use **Sync** to run that integration immediately.
 
+For Network Map sources, use **Network Map → Connections → Test connection**. Cisco WLC host-key verification is strict by default; allow an unknown host key only when that tradeoff is intentional. FortiGate requires HTTPS. MikroTik SwOS may use HTTP Digest on a trusted management network because many SwOS deployments do not provide HTTPS; keep that traffic isolated and prefer HTTPS where the device supports it.
+
 For container-level DNS troubleshooting:
 
 ```bash
@@ -688,6 +724,7 @@ All application APIs are mounted under `/api` except the backend health endpoint
 | `/api/dlp-policy-search` | Live Symantec DLP policy search |
 | `/api/application-vulnerabilities` | SentinelOne vulnerability summaries, facets, records, detail, and CSV |
 | `/api/puppet-facts` | Puppet summaries, facts, favorites, saved views, and export |
+| `/api/network-map` | Feature status, operational topology, connections, tests, collection, floors, infrastructure placement, and port overrides |
 | `/api/search` | Global application search |
 | `/api/notes` | Analyst notes |
 | `/health` | Direct backend database/scheduler health check |

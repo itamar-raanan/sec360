@@ -72,7 +72,7 @@ export default function NetworkMapScene(props: Props) {
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
         renderer.outputColorSpace = THREE.SRGBColorSpace
         renderer.toneMapping = THREE.ACESFilmicToneMapping
-        renderer.toneMappingExposure = 1.28
+        renderer.toneMappingExposure = 1.06
         renderer.shadowMap.enabled = true
         renderer.shadowMap.type = THREE.PCFSoftShadowMap
         renderer.domElement.style.touchAction = 'none'
@@ -90,8 +90,8 @@ export default function NetworkMapScene(props: Props) {
         controls.maxPolarAngle = Math.PI * 0.49
         controls.target.copy(overviewLook)
 
-        scene.add(new THREE.HemisphereLight(0xb4e3ff, 0x02050a, 3.1))
-        const key = new THREE.DirectionalLight(0xf0f8ff, 5.4)
+        scene.add(new THREE.HemisphereLight(0xb4e3ff, 0x02050a, 1.65))
+        const key = new THREE.DirectionalLight(0xf0f8ff, 2.8)
         key.position.set(22, 36, 18)
         key.castShadow = true
         key.shadow.mapSize.set(2048, 2048)
@@ -102,10 +102,10 @@ export default function NetworkMapScene(props: Props) {
         key.shadow.camera.top = 35
         key.shadow.camera.bottom = -35
         scene.add(key)
-        const cyanLight = new THREE.PointLight(0x14dbe5, 76, 58, 2)
+        const cyanLight = new THREE.PointLight(0x14dbe5, 18, 58, 2)
         cyanLight.position.set(-8, 13, 7)
         scene.add(cyanLight)
-        const blueLight = new THREE.PointLight(0x2c72ff, 52, 70, 2)
+        const blueLight = new THREE.PointLight(0x2c72ff, 14, 70, 2)
         blueLight.position.set(15, 14, -14)
         scene.add(blueLight)
 
@@ -215,7 +215,7 @@ export default function NetworkMapScene(props: Props) {
               transparent: factor[3] < 1,
               opacity: factor[3],
             }
-            const loaded = entry.extras?.sec360Material === 'glass'
+            const loaded = entry.extras?.sec360Material === 'glass' || /glass/i.test(entry.name || '')
               ? new THREE.MeshPhysicalMaterial({ ...common, transmission: 0.34, thickness: 0.08, clearcoat: 0.76, side: THREE.DoubleSide, depthWrite: false })
               : new THREE.MeshStandardMaterial(common)
             loaded.name = entry.name || ''
@@ -234,8 +234,9 @@ export default function NetworkMapScene(props: Props) {
               geometry.setAttribute('normal', new THREE.BufferAttribute(readAccessor(primitive.attributes.NORMAL), 3))
               geometry.setIndex(new THREE.BufferAttribute(readAccessor(primitive.indices), 1))
               geometry.computeBoundingSphere()
-              const mesh = new THREE.Mesh(geometry, loadedMaterials[primitive.material])
-              mesh.name = meshEntry.name || ''
+              const loadedMaterial = loadedMaterials[primitive.material]
+              const mesh = new THREE.Mesh(geometry, loadedMaterial)
+              mesh.name = loadedMaterial?.name || meshEntry.name || ''
               mesh.castShadow = mesh.name !== 'Blue curtain glass'
               mesh.receiveShadow = true
               asset.add(mesh)
@@ -624,20 +625,20 @@ export default function NetworkMapScene(props: Props) {
             floorGrid.material.opacity = 0.34
             group.add(floorGrid)
           }
-          const floorLight = new THREE.PointLight(0xbfefff, 44, 28, 2)
+          const floorLight = new THREE.PointLight(0xbfefff, 13, 28, 2)
           floorLight.position.set(0, 7, 0)
           group.add(floorLight)
           // Small pools of light make the functional zones read like the rendered
           // reference while keeping fixtures and live network overlays unobstructed.
           for (const [x, z] of [[-7.15, -4.96], [-2.45, -4.96], [2.95, -4.96], [7.8, 4.96]] as const) {
-            const meetingLight = new THREE.PointLight(0xffbd72, 7.5, 4.2, 2)
+            const meetingLight = new THREE.PointLight(0xffbd72, 3.2, 4.2, 2)
             meetingLight.position.set(x, 2.1, z)
             group.add(meetingLight)
           }
-          const socialLight = new THREE.PointLight(0xc4e8a6, 8, 5.5, 2)
+          const socialLight = new THREE.PointLight(0xc4e8a6, 3.5, 5.5, 2)
           socialLight.position.set(8.7, 2.4, 2.3)
           group.add(socialLight)
-          const serverLight = new THREE.PointLight(0x237dff, 8, 4.8, 2)
+          const serverLight = new THREE.PointLight(0x237dff, 3.6, 4.8, 2)
           serverLight.position.set(-4.8, 2.2, -0.6)
           group.add(serverLight)
 

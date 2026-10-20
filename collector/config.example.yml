@@ -1,0 +1,38 @@
+sec360:
+  url: https://sec360.example.com
+  token: ${SEC360_COLLECTOR_TOKEN}
+  verify_ssl: true
+  timeout_seconds: 30
+
+collection_interval_seconds: 120
+queue_path: /var/lib/sec360-collector/queue.db
+
+sources:
+  - id: campus-wlc
+    name: Campus WLC
+    type: cisco_wlc
+    host: 10.10.1.20
+    port: 22
+    username: ${WLC_USERNAME}
+    password: ${WLC_PASSWORD}
+    known_hosts: /etc/sec360-collector/known_hosts
+    allow_unknown_host_key: false
+    timeout_seconds: 15
+
+  - id: primary-fortigate
+    name: Primary FortiGate
+    type: fortigate
+    base_url: https://10.10.1.1
+    api_token: ${FGT_API_TOKEN}
+    vdom: "*"
+    verify_ssl: true
+    timeout_seconds: 15
+
+  - id: floor-25-switch
+    name: Floor 25 Switch
+    type: mikrotik
+    base_url: http://10.10.25.10
+    username: ${SWOS_USERNAME}
+    password: ${SWOS_PASSWORD}
+    verify_ssl: false
+    timeout_seconds: 10

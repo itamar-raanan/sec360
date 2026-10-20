@@ -4,6 +4,7 @@ import { AlertTriangle, Box, Building2, Check, ChevronLeft, ChevronRight, Circle
 
 import apiClient from '../api/client'
 import NetworkMapScene from '../features/networkMap/NetworkMapScene'
+import NetworkMapTabs from '../features/networkMap/NetworkMapTabs'
 import type { MapAttachment, MapEquipment, NetworkMapPayload } from '../features/networkMap/types'
 import { useAuthStore } from '../store/auth'
 
@@ -37,7 +38,7 @@ export default function NetworkMapPage() {
 
   const collectMutation = useMutation({
     mutationFn: async () => {
-      const enabled = (data?.connections || []).filter(item => item.enabled)
+      const enabled = (data?.connections || []).filter(item => item.enabled && !item.managed_by_collector)
       await Promise.allSettled(enabled.map(item => apiClient.post(`/network-map/connections/${item.id}/collect`)))
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['network-map'] }),
@@ -97,8 +98,8 @@ export default function NetworkMapPage() {
         <div className="pointer-events-auto flex items-center gap-2">
           <div className="hidden rounded-xl border border-cyan-100/[0.09] bg-[#07111c]/65 px-3.5 py-2.5 text-[10px] text-slate-400 shadow-[0_16px_50px_rgba(0,0,0,.28)] backdrop-blur-xl md:flex md:items-center md:gap-4"><span className="flex items-center gap-1.5"><span className="h-px w-7 border-t border-dashed border-cyan-300" /> Wi-Fi</span><span className="flex items-center gap-1.5"><span className="h-px w-7 bg-teal-300" /> Ethernet</span></div>
           {user?.role === 'admin' && <button onClick={() => setFloorManagerOpen(true)} className="flex items-center gap-2 rounded-xl border border-cyan-200/[0.12] bg-cyan-300/[0.07] px-3 py-2.5 text-[10px] font-semibold text-cyan-100 shadow-[0_16px_50px_rgba(0,0,0,.28)] backdrop-blur-xl transition-[background-color,transform,border-color] duration-200 hover:border-cyan-200/25 hover:bg-cyan-300/[0.11] active:scale-[.98]"><SlidersHorizontal size={14} /> Manage floors</button>}
-          {user?.role === 'admin' && <a href="/network-map/connections" className="rounded-xl border border-cyan-100/[0.09] bg-[#07111c]/65 p-2.5 text-slate-400 shadow-[0_16px_50px_rgba(0,0,0,.28)] backdrop-blur-xl transition-[color,transform,border-color] duration-200 hover:border-cyan-300/25 hover:text-white active:scale-[.97]" title="Network Map connections"><Settings2 size={15} /></a>}
-          {user?.role !== 'viewer' && <button onClick={() => collectMutation.mutate()} disabled={collectMutation.isPending || !data.connections.some(item => item.enabled)} className="rounded-xl border border-cyan-100/[0.09] bg-[#07111c]/65 p-2.5 text-slate-400 shadow-[0_16px_50px_rgba(0,0,0,.28)] backdrop-blur-xl transition-[color,transform,border-color] duration-200 hover:border-cyan-300/25 hover:text-white active:scale-[.97] disabled:opacity-40" title="Refresh topology"><RefreshCw size={15} className={collectMutation.isPending ? 'animate-spin' : ''} /></button>}
+          <NetworkMapTabs floating />
+          {user?.role !== 'viewer' && data.connections.some(item => item.enabled && !item.managed_by_collector) && <button onClick={() => collectMutation.mutate()} disabled={collectMutation.isPending} className="rounded-xl border border-cyan-100/[0.09] bg-[#07111c]/65 p-2.5 text-slate-400 shadow-[0_16px_50px_rgba(0,0,0,.28)] backdrop-blur-xl transition-[color,transform,border-color] duration-200 hover:border-cyan-300/25 hover:text-white active:scale-[.97] disabled:opacity-40" title="Refresh direct topology sources"><RefreshCw size={15} className={collectMutation.isPending ? 'animate-spin' : ''} /></button>}
         </div>
       </header>
 
@@ -115,7 +116,7 @@ export default function NetworkMapPage() {
               const count = data.attachments.filter(item => item.floor_id === floor.id).length
               return <button key={floor.id} onClick={() => { setFloorId(floor.id); setEquipmentId(null); setAttachmentId(null) }} className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-xs ${floorId === floor.id ? 'bg-emerald-500/10 text-emerald-300' : 'text-zinc-400 hover:bg-white/[0.04]'}`}><span>{floor.label}</span><span className="text-[10px] text-zinc-600">{count}</span></button>
             })}
-            {data.summary.unassigned_equipment > 0 && <div className="mt-3 rounded-lg border border-amber-500/15 bg-amber-500/[0.04] p-2.5"><p className="text-[10px] font-medium text-amber-300">{data.summary.unassigned_equipment} unassigned devices</p><p className="mt-1 text-[9px] leading-3 text-zinc-600">Assign them to a floor in Connections.</p></div>}
+            {data.summary.unassigned_equipment > 0 && <div className="mt-3 rounded-lg border border-amber-500/15 bg-amber-500/[0.04] p-2.5"><p className="text-[10px] font-medium text-amber-300">{data.summary.unassigned_equipment} unassigned devices</p><p className="mt-1 text-[9px] leading-3 text-zinc-600">Assign them to a floor in Config.</p></div>}
             {selectedFloor && <>
               <p className="px-2.5 pb-1 pt-4 text-[9px] font-semibold uppercase tracking-[0.15em] text-zinc-700">Infrastructure</p>
               {floorEquipment.map(item => <button key={item.id} onClick={() => { setEquipmentId(item.id); setAttachmentId(null) }} className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left hover:bg-white/[0.04]"><span className="truncate text-xs text-zinc-400">{item.name}</span><span className="text-[9px] uppercase text-zinc-700">{item.kind}</span></button>)}
@@ -130,7 +131,7 @@ export default function NetworkMapPage() {
       {data.connections.some(item => item.status === 'error') && <div className="absolute bottom-5 left-64 z-10 hidden max-w-sm rounded-lg border border-amber-500/20 bg-[#17130b]/90 px-3 py-2 text-[10px] text-amber-200 backdrop-blur md:block lg:left-72"><AlertTriangle size={12} className="mr-1.5 inline" />Some sources failed. The map is showing retained data from successful snapshots.</div>}
 
       {!hasConnections && <section className="absolute right-5 top-24 z-10 w-[min(310px,calc(100%-40px))] rounded-2xl border border-cyan-200/[0.10] bg-[#07111c]/82 p-4 shadow-[0_24px_70px_rgba(0,0,0,.38),inset_0_1px_0_rgba(255,255,255,.05)] backdrop-blur-2xl lg:right-7">
-        <div className="flex items-start gap-3"><span className="mt-0.5 rounded-lg border border-cyan-300/15 bg-cyan-300/[0.07] p-2 text-cyan-200"><Box size={14} /></span><div className="min-w-0"><p className="text-xs font-semibold text-white">Exploring in preview mode</p><p className="mt-1 text-[10px] leading-4 text-slate-400">Select any floor to inspect its 3D layout. Live access points, switches, endpoints, and traffic paths will appear when a source is connected.</p>{user?.role === 'admin' && <a href="/network-map/connections" className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-semibold text-cyan-200 transition-colors hover:text-white"><Settings2 size={12} /> Configure when ready</a>}</div></div>
+        <div className="flex items-start gap-3"><span className="mt-0.5 rounded-lg border border-cyan-300/15 bg-cyan-300/[0.07] p-2 text-cyan-200"><Box size={14} /></span><div className="min-w-0"><p className="text-xs font-semibold text-white">Exploring in preview mode</p><p className="mt-1 text-[10px] leading-4 text-slate-400">Select any floor to inspect its 3D layout. Live access points, switches, endpoints, and traffic paths will appear when a source is connected.</p>{user?.role === 'admin' && <a href="/network-map/config" className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-semibold text-cyan-200 transition-colors hover:text-white"><Settings2 size={12} /> Configure when ready</a>}</div></div>
       </section>}
 
       {floorManagerOpen && user?.role === 'admin' && <FloorManager floors={data.floors} pending={floorMutation.isPending} onChange={(id, patch) => floorMutation.mutate({ id, patch })} onClose={() => setFloorManagerOpen(false)} />}

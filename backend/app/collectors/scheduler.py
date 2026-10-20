@@ -380,41 +380,6 @@ async def collect_all_and_process():
     logger.info("Scheduler: Full collection cycle complete")
 
 
-async def collect_network_map():
-    """Collect feature-owned topology sources without affecting core collectors."""
-    from sqlalchemy import select
-    from app.models.network_map import NetworkMapConnection
-    from app.models.system_settings import SystemSettings
-    from app.network_map.service import collect_connection
-
-    async with AsyncSessionLocal() as db:
-        enabled = (await db.execute(
-            select(SystemSettings.network_map_enabled).where(SystemSettings.id == 1)
-        )).scalar_one_or_none()
-        if not enabled:
-            return
-        ids = list((await db.execute(
-            select(NetworkMapConnection.id).where(NetworkMapConnection.enabled.is_(True))
-        )).scalars())
-
-    semaphore = asyncio.Semaphore(4)
-
-    async def run_one(connection_id):
-        async with semaphore:
-            async with AsyncSessionLocal() as db:
-                item = await db.get(NetworkMapConnection, connection_id)
-                if item is None or not item.enabled:
-                    return
-                try:
-                    await collect_connection(db, item)
-                    await db.commit()
-                except Exception:
-                    await db.rollback()
-                    logger.exception("Scheduler: Network Map collection failed for %s", connection_id)
-
-    await asyncio.gather(*(run_one(connection_id) for connection_id in ids))
-
-
 def start_scheduler():
     interval_minutes = settings.COLLECTOR_INTERVAL_MINUTES
 
@@ -426,13 +391,6 @@ def start_scheduler():
         trigger=IntervalTrigger(minutes=interval_minutes),
         id="collect_all_and_process",
         replace_existing=True,
-    )
-    scheduler.add_job(
-        collect_network_map,
-        trigger=IntervalTrigger(minutes=interval_minutes),
-        id="collect_network_map",
-        replace_existing=True,
-        max_instances=1,
     )
     scheduler.add_job(
         send_scheduled_reports,

@@ -93,7 +93,7 @@ PostgreSQL stores the canonical inventory and operational state, including:
 - DLP search and policy-tracking state.
 - Puppet nodes, facts, favorites, and saved views.
 - Application vulnerabilities.
-- Network Map connections, floors, infrastructure placement, collection runs, and retained observations.
+- Network Map collectors, source snapshots, floors, infrastructure placement, collection runs, and retained observations.
 - Reports, system settings, analyst notes, audit logs, change events, and SIEM deliveries.
 
 Database tables are created on application startup, and startup code applies idempotent compatibility patches required by the current release. Back up PostgreSQL before upgrading an existing installation.
@@ -108,7 +108,7 @@ APScheduler runs inside the backend. A normal collection cycle is deliberately o
 
 Other scheduled jobs handle report delivery, data retention, and SIEM retries. The default full collection interval is 15 minutes and is configurable.
 
-When Network Map is enabled, a separate feature-owned scheduled job collects its enabled connections on the same configurable interval. Disabling Network Map immediately stops operational collection without deleting connection configuration or retained observations.
+Network Map device collection runs in the separate on-premises `collector/` service. The collector reaches private sources locally and pushes complete snapshots outbound to SEC360. The backend does not need routes or credentials for WLC, FortiGate, or MikroTik devices.
 
 ### Correlation engine
 
@@ -266,15 +266,15 @@ When Puppet is connected, analysts can explore PuppetDB data:
 
 ### Network Map
 
-Network Map is an optional, administrator-controlled topology workspace. Enable it under **Settings → Platform → Network Map**. When disabled, its navigation, operational API, and scheduled collection remain unavailable; administrators can still prepare and test connections at **Network Map → Connections**.
+Network Map is an optional, administrator-controlled topology workspace. Enable it under **Settings → Platform → Network Map**. Its workspace is divided into **Visual**, **Table**, and **Config**. Visual presents the building/floor experience, Table provides the operational endpoint and attachment inventory, and Config enrolls collectors and places discovered infrastructure.
 
-The feature owns its connections instead of placing them in the Integration Store:
+Network sources are collected by the separate on-premises Docker service in `collector/`, not by the SEC360 backend and not through the Integration Store:
 
-- One Cisco WLC SSH connection for access points, wireless clients, WLAN IDs, and SSIDs.
-- One FortiGate HTTPS API connection for DHCP lease enrichment.
-- Any number of MikroTik SwOS HTTP Digest connections for switch host tables, ports, and VLANs.
+- Cisco WLC over SSH for access points, wireless clients, WLAN IDs, and SSIDs.
+- FortiGate over HTTPS for DHCP lease enrichment.
+- MikroTik SwOS over HTTP Digest for switch host tables, ports, and VLANs.
 
-Saved secrets are encrypted and never returned to the browser. **Test connection** is separate from **Save**: it validates the current form without silently saving, enabling, or scheduling it. A successful complete collection replaces only that connection's current snapshot. A failed or malformed collection leaves the previous snapshot intact and exposes the source error and collection age.
+Device credentials stay only on the collector host in its environment and local YAML file. SEC360 stores a hashed, revocable collector token; the clear token is displayed only on enrollment or rotation. The collector writes each complete snapshot to a durable SQLite queue before transmission. SEC360 accepts duplicate snapshot IDs idempotently and rejects stale source sequences. A failed or malformed collection leaves the previous source snapshot intact and exposes source health and queue depth in Config.
 
 The workspace models a 31-storey tower. Administrators select the floors their organization occupies, give each managed floor a business name, assign discovered access points and switches, save stable X/Z placement, and may override the served floor and role of individual switch ports. The cinematic view keeps the supplied tower and city artwork visible, moves the tower aside when a floor is selected, and expands that floor into a detailed angled architectural view. It also provides dashed Wi-Fi links, solid Ethernet links, endpoint/equipment selection, search, and an accessible list fallback when WebGL is unavailable.
 
@@ -337,7 +337,7 @@ Settings includes:
 - SAML and RADIUS configuration, including RADIUS connection testing.
 - TLS certificate replacement.
 - System settings that immediately trigger derived compliance/risk recalculation where necessary.
-- Network Map activation and a direct link to its feature-owned connection and floor configuration.
+- Network Map activation and a direct link to collector and floor configuration.
 
 ## Integrations
 
@@ -355,7 +355,7 @@ Settings includes:
 
 HiBob and CloudSOC are retired integrations and are not presented as active catalog choices.
 
-Cisco WLC, FortiGate, and MikroTik SwOS are Network Map sources, not Integration Store products. Configure them from **Network Map → Connections**. Puppet remains the existing source of managed-endpoint identity used by Network Map correlation; the feature does not create a second Puppet connector.
+Cisco WLC, FortiGate, and MikroTik SwOS are Network Map sources, not Integration Store products. Enroll the middle server from **Network Map → Config**, then configure device credentials in `collector/config.yml` on that server. Puppet remains the existing source of managed-endpoint identity used by Network Map correlation; the feature does not create a second Puppet connector.
 
 ## Data collection and processing
 
@@ -382,9 +382,9 @@ Last-seen age does not remove an endpoint from inventory. An endpoint remains cu
 
 Network Map configuration, collection, and visualization are separate stages:
 
-1. An administrator configures and tests feature-owned connections.
-2. The administrator enables Network Map in System Settings.
-3. Manual or scheduled collection records a scoped snapshot for each enabled connection.
+1. An administrator enables Network Map and creates a collector in Config.
+2. The one-time collector token and device credentials are installed on the middle server.
+3. The Docker collector fetches each local source, queues a complete snapshot, and pushes it outbound to SEC360.
 4. Infrastructure is discovered into an explicit unassigned state until an administrator places it on a floor.
 5. Current wireless and wired observations are correlated to existing Puppet-managed endpoints by normalized MAC address.
 6. FortiGate leases enrich those observations with current IP and hostname data by the same MAC.
@@ -624,7 +624,7 @@ Production Docker log rotation is configured for the backend and frontend. Appli
 
 Use **Integration Store → Test** to validate network access and credentials without waiting for a scheduled collection. Use **Sync** to run that integration immediately.
 
-For Network Map sources, use **Network Map → Connections → Test connection**. Cisco WLC host-key verification is strict by default; allow an unknown host key only when that tradeoff is intentional. FortiGate requires HTTPS. MikroTik SwOS may use HTTP Digest on a trusted management network because many SwOS deployments do not provide HTTPS; keep that traffic isolated and prefer HTTPS where the device supports it.
+For Network Map sources, run `docker compose run --rm sec360-network-collector --once` in `collector/` and inspect its logs. Cisco WLC host-key verification is strict by default. FortiGate requires HTTPS. MikroTik SwOS may use HTTP Digest on a trusted management network because many SwOS deployments do not provide HTTPS; keep that traffic isolated and prefer HTTPS where the device supports it. Full collector deployment and troubleshooting instructions are in `collector/README.md`.
 
 For container-level DNS troubleshooting:
 

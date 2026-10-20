@@ -1,12 +1,13 @@
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock
 import uuid
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 
 from app.models.endpoint import Endpoint
 from app.models.network_map import (
+    NetworkMapCollector,
     NetworkMapCollectionRun,
     NetworkMapConnection,
     NetworkMapEquipment,
@@ -49,8 +50,8 @@ async def test_network_collector_parsers_normalize_supported_shapes():
     assert leases[0]["vdom"] == "root"
 
 
-async def test_connections_are_admin_owned_cardinality_limited_and_never_return_secrets(
-    client: AsyncClient, db_session, admin_user, monkeypatch
+async def test_direct_connections_are_retired_and_floor_management_remains_available(
+    client: AsyncClient, db_session, admin_user
 ):
     headers = await _admin_headers(client)
     payload = {
@@ -59,40 +60,8 @@ async def test_connections_are_admin_owned_cardinality_limited_and_never_return_
         "config": {"host": "wlc.example.test", "username": "collector", "password": "very-secret"},
     }
     created = await client.post("/api/network-map/connections", headers=headers, json=payload)
-    assert created.status_code == 201
-    assert created.json()["credentials_configured"] is True
-    assert "password" not in created.json()["config"]
-    connection_id = created.json()["id"]
-
-    updated = await client.put(f"/api/network-map/connections/{connection_id}", headers=headers, json={
-        "config": {"host": "saved-wlc.example.test", "password": ""},
-    })
-    assert updated.status_code == 200
-    stored = await db_session.get(NetworkMapConnection, uuid.UUID(connection_id))
-    assert stored.config["password"] == "very-secret"
-
-    test_call = AsyncMock(return_value={"ok": True, "counts": {"access_points": 1}})
-    monkeypatch.setattr("app.api.routes.network_map._test", test_call)
-    tested = await client.post(f"/api/network-map/connections/{connection_id}/test", headers=headers, json={
-        "config": {"host": "temporary-wlc.example.test", "password": ""},
-    })
-    assert tested.status_code == 200
-    tested_config = test_call.await_args.args[1]
-    assert tested_config["host"] == "temporary-wlc.example.test"
-    assert tested_config["password"] == "very-secret"
-    await db_session.refresh(stored)
-    assert stored.config["host"] == "saved-wlc.example.test"
-
-    duplicate = await client.post("/api/network-map/connections", headers=headers, json=payload)
-    assert duplicate.status_code == 409
-
-    for name in ("Closet A", "Closet B"):
-        response = await client.post("/api/network-map/connections", headers=headers, json={
-            "connection_type": "mikrotik",
-            "display_name": name,
-            "config": {"base_url": f"http://{name[-1].lower()}.example.test", "username": "admin", "password": "secret"},
-        })
-        assert response.status_code == 201
+    assert created.status_code == 410
+    assert "collector" in created.json()["detail"].lower()
 
     floors = await client.get("/api/network-map/floors", headers=headers)
     assert floors.status_code == 200
@@ -172,3 +141,85 @@ async def test_operational_map_is_gated_and_correlates_only_by_puppet_mac(
     assert body["summary"]["floors"] == 1
     assert body["attachments"][0]["match_state"] == "matched"
     assert body["attachments"][0]["endpoint"]["hostname"] == "managed-laptop"
+    assert body["table_entities"][0]["mac_address"] == "aa:bb:cc:dd:ee:ff"
+
+
+async def test_on_prem_collector_enrollment_and_idempotent_snapshot_ingestion(
+    client: AsyncClient, db_session, admin_user
+):
+    headers = await _admin_headers(client)
+    created = await client.post(
+        "/api/network-map/collectors", headers=headers, json={"name": "Tel Aviv collector"}
+    )
+    assert created.status_code == 201
+    collector_id = created.json()["id"]
+    token = created.json()["token"]
+    assert token.startswith(f"nmc_{collector_id}_")
+
+    listed = await client.get("/api/network-map/collectors", headers=headers)
+    assert listed.status_code == 200
+    assert listed.json()[0]["name"] == "Tel Aviv collector"
+    assert "token" not in listed.json()[0]
+
+    snapshot_id = str(uuid.uuid4())
+    snapshot = {
+        "schema_version": "1.0",
+        "collector_id": collector_id,
+        "source_id": "campus-wlc",
+        "source_name": "Campus WLC",
+        "source_type": "cisco_wlc",
+        "snapshot_id": snapshot_id,
+        "sequence": 1,
+        "collected_at": datetime.now(timezone.utc).isoformat(),
+        "complete": True,
+        "records": {
+            "access_points": [{"name": "AP-25", "mac": "00:11:22:33:44:55", "ip": "10.0.0.25"}],
+            "clients": [{"mac": "AA-BB-CC-DD-EE-FF", "ap": "AP-25", "wlan": "7", "state": "Associated"}],
+            "wlans": {"7": "Corporate-WiFi"},
+        },
+    }
+    collector_headers = {"Authorization": f"Collector {token}"}
+    ingested = await client.post("/api/network-map/collector/ingest", headers=collector_headers, json=snapshot)
+    assert ingested.status_code == 200
+    assert ingested.json()["disposition"] == "accepted"
+    assert ingested.json()["records_synced"] == 1
+
+    duplicate = await client.post("/api/network-map/collector/ingest", headers=collector_headers, json=snapshot)
+    assert duplicate.status_code == 200
+    assert duplicate.json()["disposition"] == "duplicate"
+    assert len((await db_session.execute(select(NetworkMapObservation))).scalars().all()) == 1
+
+    stale_snapshot = {**snapshot, "snapshot_id": str(uuid.uuid4())}
+    stale = await client.post("/api/network-map/collector/ingest", headers=collector_headers, json=stale_snapshot)
+    assert stale.status_code == 200
+    assert stale.json()["disposition"] == "stale"
+
+    incomplete_snapshot = {**snapshot, "snapshot_id": str(uuid.uuid4()), "sequence": 2, "complete": False}
+    incomplete = await client.post("/api/network-map/collector/ingest", headers=collector_headers, json=incomplete_snapshot)
+    assert incomplete.status_code == 422
+    assert len((await db_session.execute(select(NetworkMapObservation))).scalars().all()) == 1
+
+    connection = (await db_session.execute(select(NetworkMapConnection).where(
+        NetworkMapConnection.collector_id == uuid.UUID(collector_id)
+    ))).scalar_one()
+    assert connection.config == {}
+    assert connection.source_identifier == "campus-wlc"
+    assert connection.records_synced == 1
+    observation = (await db_session.execute(select(NetworkMapObservation))).scalar_one()
+    assert observation.mac_address == "aa:bb:cc:dd:ee:ff"
+    assert observation.ssid == "Corporate-WiFi"
+
+    heartbeat = await client.post("/api/network-map/collector/heartbeat", headers=collector_headers, json={
+        "version": "1.0.0", "queue_depth": 0,
+        "sources": {"campus-wlc": {"status": "ok"}},
+    })
+    assert heartbeat.status_code == 200
+    collector = await db_session.get(NetworkMapCollector, uuid.UUID(collector_id))
+    assert collector.version == "1.0.0"
+
+    rejected = await client.post(
+        "/api/network-map/collector/ingest",
+        headers={"Authorization": "Collector nmc_00000000-0000-0000-0000-000000000000_invalid"},
+        json=snapshot,
+    )
+    assert rejected.status_code == 401

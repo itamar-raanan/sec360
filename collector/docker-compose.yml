@@ -1,0 +1,29 @@
+services:
+  sec360-network-collector:
+    build: .
+    image: sec360/network-collector:1.0.0
+    restart: unless-stopped
+    init: true
+    user: "10001:10001"
+    read_only: true
+    environment:
+      SEC360_COLLECTOR_TOKEN: ${SEC360_COLLECTOR_TOKEN}
+      WLC_USERNAME: ${WLC_USERNAME:-}
+      WLC_PASSWORD: ${WLC_PASSWORD:-}
+      FGT_API_TOKEN: ${FGT_API_TOKEN:-}
+      SWOS_USERNAME: ${SWOS_USERNAME:-admin}
+      SWOS_PASSWORD: ${SWOS_PASSWORD:-}
+    volumes:
+      - ./config.yml:/etc/sec360-collector/config.yml:ro
+      - ./known_hosts:/etc/sec360-collector/known_hosts:ro
+      - collector_data:/var/lib/sec360-collector
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    pids_limit: 128
+
+volumes:
+  collector_data:

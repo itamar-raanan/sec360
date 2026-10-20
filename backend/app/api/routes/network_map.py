@@ -10,17 +10,25 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import audit_action, get_current_user, get_db, require_role
-from app.models.network_map import NetworkMapConnection, NetworkMapEquipment, NetworkMapFloor
+from app.models.network_map import NetworkMapCollector, NetworkMapConnection, NetworkMapEquipment, NetworkMapFloor
 from app.models.system_settings import SystemSettings
 from app.models.user import AuthUser
 from app.network_map.collectors import collect_for_type
-from app.network_map.service import build_map_payload, collect_connection, ensure_floors
+from app.network_map.collector_auth import issue_collector_token, require_network_collector
+from app.network_map.service import build_map_payload, collect_connection, ensure_floors, ingest_collector_snapshot
 
 
 router = APIRouter(prefix="/network-map", tags=["Network Map"])
 ConnectionType = Literal["cisco_wlc", "fortigate", "mikrotik"]
 SINGLETON_TYPES = {"cisco_wlc", "fortigate"}
 SECRET_FIELDS = {"password", "api_token"}
+
+
+def _collector_only() -> None:
+    raise HTTPException(
+        status_code=410,
+        detail="Direct Network Map connections are retired. Configure the on-premises collector from Network Map → Config.",
+    )
 
 
 class ConnectionIn(BaseModel):
@@ -51,6 +59,30 @@ class EquipmentUpdate(BaseModel):
     position_x: float | None = Field(default=None, ge=-10.5, le=10.5)
     position_z: float | None = Field(default=None, ge=-6.5, le=6.5)
     port_overrides: dict[str, dict[str, Any]] | None = None
+
+
+class CollectorCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class CollectorHeartbeat(BaseModel):
+    version: str = Field(default="", max_length=64)
+    queue_depth: int = Field(default=0, ge=0, le=1_000_000)
+    sources: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+class CollectorSnapshot(BaseModel):
+    schema_version: Literal["1.0"] = "1.0"
+    collector_id: uuid.UUID
+    source_id: str = Field(min_length=1, max_length=160, pattern=r"^[A-Za-z0-9._:-]+$")
+    source_name: str = Field(min_length=1, max_length=120)
+    source_type: ConnectionType
+    snapshot_id: uuid.UUID
+    sequence: int = Field(ge=1)
+    collected_at: datetime
+    complete: bool
+    records: dict[str, Any]
+    health: dict[str, Any] = Field(default_factory=dict)
 
 
 async def _feature_enabled(db: AsyncSession) -> bool:
@@ -105,6 +137,9 @@ def _connection_out(item: NetworkMapConnection) -> dict[str, Any]:
         "connection_type": item.connection_type,
         "display_name": item.display_name,
         "enabled": item.enabled,
+        "collector_id": str(item.collector_id) if item.collector_id else None,
+        "source_identifier": item.source_identifier,
+        "managed_by_collector": item.collector_id is not None,
         "config": safe_config,
         "credentials_configured": any(bool(config.get(field)) for field in SECRET_FIELDS),
         "status": item.status,
@@ -112,6 +147,119 @@ def _connection_out(item: NetworkMapConnection) -> dict[str, Any]:
         "last_collected_at": item.last_collected_at,
         "last_error": item.last_error,
         "records_synced": item.records_synced,
+    }
+
+
+def _collector_out(item: NetworkMapCollector) -> dict[str, Any]:
+    return {
+        "id": str(item.id),
+        "name": item.name,
+        "status": "revoked" if item.revoked_at else item.status,
+        "version": item.version,
+        "token_prefix": item.token_prefix,
+        "last_seen_at": item.last_seen_at,
+        "last_ip": item.last_ip,
+        "metadata": item.metadata_json or {},
+        "revoked_at": item.revoked_at,
+        "created_at": item.created_at,
+    }
+
+
+@router.get("/collectors")
+async def list_collectors(
+    db: AsyncSession = Depends(get_db),
+    _: AuthUser = Depends(require_role("admin")),
+):
+    rows = (await db.execute(select(NetworkMapCollector).order_by(NetworkMapCollector.name))).scalars().all()
+    return [_collector_out(item) for item in rows]
+
+
+@router.post("/collectors", status_code=201)
+async def create_collector(
+    data: CollectorCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_role("admin")),
+):
+    name = data.name.strip()
+    if await db.scalar(select(func.count()).select_from(NetworkMapCollector).where(NetworkMapCollector.name == name)):
+        raise HTTPException(409, detail="A collector with this name already exists")
+    collector_id = uuid.uuid4()
+    token, token_hash, token_prefix = issue_collector_token(collector_id)
+    item = NetworkMapCollector(
+        id=collector_id, name=name, token_hash=token_hash, token_prefix=token_prefix
+    )
+    db.add(item)
+    await db.flush()
+    await audit_action("create_network_map_collector", "network_map_collector", str(item.id), request, db, current, {"name": name})
+    return {**_collector_out(item), "token": token}
+
+
+@router.post("/collectors/{collector_id}/rotate-token")
+async def rotate_collector_token(
+    collector_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_role("admin")),
+):
+    item = await db.get(NetworkMapCollector, collector_id)
+    if item is None or item.revoked_at is not None:
+        raise HTTPException(404, detail="Active collector not found")
+    token, token_hash, token_prefix = issue_collector_token(item.id)
+    item.token_hash = token_hash
+    item.token_prefix = token_prefix
+    await audit_action("rotate_network_map_collector_token", "network_map_collector", str(item.id), request, db, current, {})
+    return {**_collector_out(item), "token": token}
+
+
+@router.delete("/collectors/{collector_id}")
+async def revoke_collector(
+    collector_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_role("admin")),
+):
+    item = await db.get(NetworkMapCollector, collector_id)
+    if item is None:
+        raise HTTPException(404, detail="Collector not found")
+    item.revoked_at = datetime.now(timezone.utc)
+    item.status = "revoked"
+    await audit_action("revoke_network_map_collector", "network_map_collector", str(item.id), request, db, current, {})
+    return {"ok": True}
+
+
+@router.post("/collector/heartbeat")
+async def collector_heartbeat(
+    data: CollectorHeartbeat,
+    collector: NetworkMapCollector = Depends(require_network_collector),
+):
+    collector.version = data.version or collector.version
+    metadata = dict(collector.metadata_json or {})
+    source_metadata = dict(metadata.get("sources") or {})
+    for source_id, health in data.sources.items():
+        source_metadata[source_id] = {**source_metadata.get(source_id, {}), **health}
+    metadata.update({"queue_depth": data.queue_depth, "sources": source_metadata})
+    collector.metadata_json = metadata
+    return {"ok": True, "server_time": datetime.now(timezone.utc).isoformat()}
+
+
+@router.post("/collector/ingest")
+async def ingest_collector_data(
+    data: CollectorSnapshot,
+    collector: NetworkMapCollector = Depends(require_network_collector),
+    db: AsyncSession = Depends(get_db),
+):
+    if data.collector_id != collector.id:
+        raise HTTPException(403, detail="Snapshot collector_id does not match the credential")
+    try:
+        run, disposition = await ingest_collector_snapshot(db, collector, data.model_dump())
+    except ValueError as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+    return {
+        "ok": True,
+        "disposition": disposition,
+        "run_id": str(run.id) if run else None,
+        "records_synced": run.record_count if run else 0,
     }
 
 
@@ -141,6 +289,7 @@ async def create_connection(
     db: AsyncSession = Depends(get_db),
     current: AuthUser = Depends(require_role("admin")),
 ):
+    _collector_only()
     if data.connection_type in SINGLETON_TYPES:
         exists = (await db.execute(select(func.count()).select_from(NetworkMapConnection).where(
             NetworkMapConnection.connection_type == data.connection_type
@@ -171,6 +320,7 @@ async def update_connection(
     db: AsyncSession = Depends(get_db),
     current: AuthUser = Depends(require_role("admin")),
 ):
+    _collector_only()
     item = await db.get(NetworkMapConnection, connection_id)
     if item is None:
         raise HTTPException(404, detail="Network Map connection not found")
@@ -228,6 +378,7 @@ async def test_unsaved_connection(
     data: ConnectionTestIn,
     _: AuthUser = Depends(require_role("admin")),
 ):
+    _collector_only()
     config = _validate_config(data.connection_type, data.config, require_secret=True)
     try:
         return await _test(data.connection_type, config)
@@ -242,6 +393,7 @@ async def test_saved_connection(
     db: AsyncSession = Depends(get_db),
     _: AuthUser = Depends(require_role("admin")),
 ):
+    _collector_only()
     item = await db.get(NetworkMapConnection, connection_id)
     if item is None:
         raise HTTPException(404, detail="Network Map connection not found")
@@ -272,10 +424,13 @@ async def collect_saved_connection(
     db: AsyncSession = Depends(get_db),
     _: AuthUser = Depends(require_role("analyst")),
 ):
+    _collector_only()
     await _require_feature(db)
     item = await db.get(NetworkMapConnection, connection_id)
     if item is None or not item.enabled:
         raise HTTPException(404, detail="Enabled Network Map connection not found")
+    if item.collector_id is not None:
+        raise HTTPException(409, detail="Collector-managed sources push their own snapshots")
     run = await collect_connection(db, item)
     if run.status == "error":
         raise HTTPException(400, detail=run.error or "Collection failed")

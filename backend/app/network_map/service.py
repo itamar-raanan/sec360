@@ -5,13 +5,14 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import desc, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent import SecurityAgent
 from app.models.endpoint import Endpoint
 from app.models.network_map import (
     NetworkMapCollectionRun,
+    NetworkMapCollector,
     NetworkMapConnection,
     NetworkMapEquipment,
     NetworkMapFloor,
@@ -189,6 +190,190 @@ async def collect_connection(db: AsyncSession, connection: NetworkMapConnection)
     return run
 
 
+def _snapshot_records(source_type: str, records: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    """Validate the bounded, source-specific portion of a collector snapshot."""
+    if source_type == "cisco_wlc":
+        clients = records.get("clients") or []
+        aps = records.get("access_points", records.get("aps")) or []
+        wlans = records.get("wlans") or {}
+        if not isinstance(clients, list) or not isinstance(aps, list) or not isinstance(wlans, dict):
+            raise ValueError("Cisco WLC records must contain clients, access_points, and wlans")
+        result = {"clients": clients, "aps": aps, "wlans": wlans}
+        count = len(clients) + len(aps)
+    elif source_type == "fortigate":
+        leases = records.get("leases") or []
+        if not isinstance(leases, list):
+            raise ValueError("FortiGate records must contain a leases list")
+        result = {"leases": leases}
+        count = len(leases)
+    elif source_type == "mikrotik":
+        hosts = records.get("hosts") or []
+        switch = records.get("switch") or {}
+        if not isinstance(hosts, list) or not isinstance(switch, dict):
+            raise ValueError("MikroTik records must contain hosts and switch")
+        result = {"hosts": hosts, "switch": switch}
+        count = len(hosts)
+    else:
+        raise ValueError(f"Unsupported collector source type: {source_type}")
+    if count > 100_000:
+        raise ValueError("Collector snapshot exceeds the 100000-record limit")
+    if any(not isinstance(item, dict) for key in ("clients", "aps", "leases", "hosts") for item in result.get(key, [])):
+        raise ValueError("Collector record lists may contain only objects")
+    return result, count
+
+
+async def ingest_collector_snapshot(
+    db: AsyncSession,
+    collector: NetworkMapCollector,
+    snapshot: dict[str, Any],
+) -> tuple[NetworkMapCollectionRun | None, str]:
+    """Atomically install a complete collector snapshot as the source's current view."""
+    if not snapshot.get("complete"):
+        raise ValueError("Only complete snapshots can replace current Network Map data")
+    source_id = str(snapshot["source_id"]).strip()
+    source_type = str(snapshot["source_type"])
+    external_snapshot_id = str(snapshot["snapshot_id"])
+    sequence = int(snapshot["sequence"])
+    observed_at = snapshot["collected_at"]
+    result, _ = _snapshot_records(source_type, snapshot.get("records") or {})
+
+    existing = (await db.execute(select(NetworkMapCollectionRun).where(
+        NetworkMapCollectionRun.collector_id == collector.id,
+        NetworkMapCollectionRun.external_snapshot_id == external_snapshot_id,
+    ))).scalar_one_or_none()
+    if existing:
+        return existing, "duplicate"
+
+    source_connection_id = select(NetworkMapConnection.id).where(
+        NetworkMapConnection.collector_id == collector.id,
+        NetworkMapConnection.source_identifier == source_id,
+    ).scalar_subquery()
+    latest = (await db.execute(select(NetworkMapCollectionRun).where(
+        NetworkMapCollectionRun.connection_id == source_connection_id,
+        NetworkMapCollectionRun.sequence.is_not(None),
+    ).order_by(desc(NetworkMapCollectionRun.sequence)).limit(1))).scalar_one_or_none()
+    if latest and latest.sequence is not None and sequence <= latest.sequence:
+        return latest, "stale"
+
+    connection = (await db.execute(select(NetworkMapConnection).where(
+        NetworkMapConnection.collector_id == collector.id,
+        NetworkMapConnection.source_identifier == source_id,
+    ))).scalar_one_or_none()
+    if connection is None:
+        connection = NetworkMapConnection(
+            collector_id=collector.id,
+            source_identifier=source_id,
+            connection_type=source_type,
+            display_name=str(snapshot.get("source_name") or source_id)[:120],
+            enabled=True,
+            config={},
+            status="receiving",
+        )
+        db.add(connection)
+        await db.flush()
+    elif connection.connection_type != source_type:
+        raise ValueError("A collector source cannot change its source_type")
+    else:
+        connection.display_name = str(snapshot.get("source_name") or connection.display_name)[:120]
+
+    run = NetworkMapCollectionRun(
+        connection_id=connection.id,
+        collector_id=collector.id,
+        external_snapshot_id=external_snapshot_id,
+        sequence=sequence,
+        received_at=datetime.now(timezone.utc),
+        started_at=observed_at,
+    )
+    db.add(run)
+    await db.flush()
+    observations: list[NetworkMapObservation] = []
+
+    if source_type == "cisco_wlc":
+        equipment_by_name: dict[str, NetworkMapEquipment] = {}
+        for ap in result["aps"]:
+            mac = normalize_mac(ap.get("mac"))
+            source_key = f"ap:{mac or ap.get('name')}"
+            equipment = await _upsert_equipment(
+                db, connection, source_key, "ap", str(ap.get("name") or "Access point"), ap, observed_at
+            )
+            equipment_by_name[str(ap.get("name") or "").casefold()] = equipment
+        for client in result["clients"]:
+            mac = normalize_mac(client.get("mac"))
+            if not mac:
+                continue
+            equipment = equipment_by_name.get(str(client.get("ap") or "").casefold())
+            observations.append(NetworkMapObservation(
+                run_id=run.id, connection_id=connection.id,
+                equipment_id=equipment.id if equipment else None,
+                observation_type="wireless", mac_address=mac,
+                ssid=result["wlans"].get(str(client.get("wlan") or "")),
+                state=str(client.get("state") or "")[:80] or None,
+                raw=client, observed_at=observed_at,
+            ))
+    elif source_type == "fortigate":
+        for lease in result["leases"]:
+            mac = normalize_mac(lease.get("mac"))
+            if not mac:
+                continue
+            observations.append(NetworkMapObservation(
+                run_id=run.id, connection_id=connection.id,
+                observation_type="dhcp", mac_address=mac,
+                hostname=str(lease.get("hostname") or "")[:255] or None,
+                ip_address=str(lease.get("ip") or "")[:45] or None,
+                interface=str(lease.get("interface") or "")[:255] or None,
+                vdom=str(lease.get("vdom") or "")[:255] or None,
+                state=str(lease.get("status") or "")[:80] or None,
+                raw=lease, observed_at=observed_at,
+            ))
+    else:
+        switch = result["switch"]
+        equipment = await _upsert_equipment(
+            db, connection, "switch", "switch",
+            str(switch.get("name") or snapshot.get("source_name") or source_id),
+            switch, observed_at,
+        )
+        for host in result["hosts"]:
+            mac = normalize_mac(host.get("mac"))
+            if not mac:
+                continue
+            observations.append(NetworkMapObservation(
+                run_id=run.id, connection_id=connection.id, equipment_id=equipment.id,
+                observation_type="wired", mac_address=mac,
+                port=str(host.get("port") or "")[:80] or None,
+                vlan=str(host.get("vlan") or "")[:80] or None,
+                raw=host, observed_at=observed_at,
+            ))
+
+    await db.execute(update(NetworkMapObservation).where(
+        NetworkMapObservation.connection_id == connection.id,
+        NetworkMapObservation.is_current.is_(True),
+    ).values(is_current=False))
+    db.add_all(observations)
+    run.status = "success"
+    run.complete_snapshot = True
+    run.record_count = len(observations)
+    run.completed_at = datetime.now(timezone.utc)
+    connection.status = "connected"
+    connection.last_error = None
+    connection.last_collected_at = observed_at
+    connection.records_synced = len(observations)
+    collector.last_seen_at = datetime.now(timezone.utc)
+    collector.status = "connected"
+    metadata = dict(collector.metadata_json or {})
+    source_health = dict(metadata.get("sources") or {})
+    source_health[source_id] = {
+        "type": source_type,
+        "name": connection.display_name,
+        "status": "ok",
+        "last_push": run.received_at.isoformat(),
+        "records": len(observations),
+    }
+    metadata["sources"] = source_health
+    collector.metadata_json = metadata
+    await db.flush()
+    return run, "accepted"
+
+
 def _extract_macs(value: Any) -> set[str]:
     found: set[str] = set()
     if isinstance(value, dict):
@@ -312,12 +497,68 @@ async def build_map_payload(db: AsyncSession) -> dict[str, Any]:
             }),
         })
 
+    # The visual map needs placed infrastructure, while the table must retain
+    # every observed MAC even when DHCP is its only source or a WLC client
+    # references an AP that has not been discovered yet.
+    table_entities_by_mac: dict[str, dict[str, Any]] = {}
+    for item in sorted(attachment_rows, key=lambda value: value["observed_at"] or "", reverse=True):
+        table_entities_by_mac.setdefault(item["mac_address"], {**item})
+    for row in sorted(observations, key=lambda value: value.observed_at, reverse=True):
+        if row.mac_address in table_entities_by_mac:
+            continue
+        candidates = mac_index.get(row.mac_address, [])
+        endpoint = endpoint_by_id.get(candidates[0]) if len(candidates) == 1 else None
+        lease = dhcp_by_mac.get(row.mac_address)
+        endpoint_agents = agents_by_endpoint.get(endpoint.id, []) if endpoint else []
+        owner = owner_by_id.get(endpoint.owner_user_id) if endpoint and endpoint.owner_user_id else None
+        table_entities_by_mac[row.mac_address] = {
+            "id": str(row.id),
+            "mac_address": row.mac_address,
+            "attachment_type": row.observation_type,
+            "equipment_id": str(row.equipment_id) if row.equipment_id else None,
+            "floor_id": None,
+            "port": row.port,
+            "vlan": row.vlan,
+            "ssid": row.ssid,
+            "state": row.state,
+            "observed_at": _dt(row.observed_at),
+            "match_state": "matched" if len(candidates) == 1 else "ambiguous" if len(candidates) > 1 else "no_current_match",
+            "candidate_endpoint_ids": [str(item) for item in candidates] if len(candidates) > 1 else [],
+            "endpoint": ({
+                "id": str(endpoint.id),
+                "hostname": endpoint.hostname,
+                "ip_address": (lease.ip_address if lease and lease.ip_address else endpoint.ip_address),
+                "os_version": endpoint.os_version,
+                "username": endpoint.username,
+                "last_seen": _dt(endpoint.last_seen),
+                "risk_score": endpoint.risk_score,
+                "owner": owner.full_name if owner else None,
+                "products": sorted({agent.product_name for agent in endpoint_agents if agent.status == "active"}),
+            } if endpoint else {
+                "id": None,
+                "hostname": lease.hostname if lease else row.hostname,
+                "ip_address": lease.ip_address if lease else row.ip_address,
+                "os_version": None,
+                "username": None,
+                "last_seen": None,
+                "risk_score": None,
+                "owner": None,
+                "products": [],
+            }),
+        }
+    table_entities = sorted(
+        table_entities_by_mac.values(), key=lambda item: item["observed_at"] or "", reverse=True
+    )
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "floors": [{"id": str(f.id), "ordinal": f.ordinal, "label": f.label, "managed": f.managed} for f in floors],
         "connections": [{
             "id": str(c.id), "type": c.connection_type, "name": c.display_name,
             "enabled": c.enabled,
+            "collector_id": str(c.collector_id) if c.collector_id else None,
+            "source_identifier": c.source_identifier,
+            "managed_by_collector": c.collector_id is not None,
             "status": c.status, "last_collected_at": _dt(c.last_collected_at),
             "last_error": c.last_error,
         } for c in connections],
@@ -330,6 +571,7 @@ async def build_map_payload(db: AsyncSession) -> dict[str, Any]:
             "last_seen": _dt(item.last_seen),
         } for item in equipment],
         "attachments": attachment_rows,
+        "table_entities": table_entities,
         "summary": {
             "floors": sum(1 for floor in floors if floor.managed),
             "building_floors": FLOOR_COUNT,

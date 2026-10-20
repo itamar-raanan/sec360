@@ -913,16 +913,16 @@ function PlatformTab() {
         </Field>
       </Section>
 
-      <Section title="Network Map" hint="Optional topology visualization. Connection setup remains available while the feature is disabled.">
-        <Field label="Enable Network Map" hint="Shows the Network Map navigation item and starts scheduled topology collection">
+      <Section title="Network Map" hint="Optional topology visualization and on-premises source collection.">
+        <Field label="Enable Network Map" hint="Shows the Visual, Table, and Config Network Map views">
           <Toggle checked={form.network_map_enabled} onChange={v => set('network_map_enabled', v)} />
         </Field>
-        <Field label="Network Map connections" hint="Configure Cisco WLC, FortiGate, and MikroTik SwOS sources">
+        <Field label="Network Map collector" hint="Enroll the middle server that securely collects WLC, FortiGate, and MikroTik data">
           <a
-            href="/network-map/connections"
+            href="/network-map/config"
             className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-emerald-400 hover:bg-emerald-500/10"
           >
-            <Network size={14} /> Configure
+            <Network size={14} /> Open Config
           </a>
         </Field>
       </Section>

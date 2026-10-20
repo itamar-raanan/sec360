@@ -45,11 +45,17 @@ export interface MapAttachment {
   endpoint: MapEndpoint
 }
 
+export interface NetworkTableEntity extends Omit<MapAttachment, 'attachment_type' | 'equipment_id'> {
+  attachment_type: 'wireless' | 'wired' | 'dhcp'
+  equipment_id: string | null
+}
+
 export interface NetworkMapPayload {
   generated_at: string
   floors: MapFloor[]
-  connections: Array<{ id: string; type: string; name: string; enabled: boolean; status: string; last_collected_at: string | null; last_error: string | null }>
+  connections: Array<{ id: string; type: string; name: string; enabled: boolean; status: string; last_collected_at: string | null; last_error: string | null; collector_id?: string | null; source_identifier?: string | null; managed_by_collector?: boolean }>
   equipment: MapEquipment[]
   attachments: MapAttachment[]
+  table_entities: NetworkTableEntity[]
   summary: { floors: number; building_floors: number; equipment: number; endpoints: number; matched: number; unassigned_equipment: number }
 }

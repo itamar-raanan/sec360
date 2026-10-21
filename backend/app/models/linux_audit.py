@@ -19,15 +19,26 @@ class LinuxAuditReport(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    schema_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
     hostname: Mapped[str] = mapped_column(String(255), index=True)
+    fqdn: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True, index=True)
+    ip_addresses: Mapped[list[str]] = mapped_column(
+        JSON().with_variant(JSONB(), "postgresql"), default=list
+    )
     endpoint_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("endpoints.id", ondelete="SET NULL"), nullable=True, index=True
     )
     os_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    kernel: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    architecture: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    virtualization_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    machine_id_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     profile: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     benchmark_name: Mapped[str] = mapped_column(String(255))
     benchmark_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    audit_tool_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    audit_tool_git_commit: Mapped[str | None] = mapped_column(String(64), nullable=True)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
     total_count: Mapped[int] = mapped_column(Integer, default=0)

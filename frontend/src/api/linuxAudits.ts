@@ -22,13 +22,22 @@ export interface LinuxAuditResult {
 
 export interface LinuxAuditReport {
   id: string
+  schema_version: string | null
   hostname: string
+  fqdn: string | null
   ip_address: string | null
+  ip_addresses: string[]
   endpoint_id: string | null
   os_name: string | null
+  kernel: string | null
+  architecture: string | null
+  virtualization_type: string | null
+  machine_id_hash: string | null
   profile: string | null
   benchmark_name: string
   benchmark_version: string | null
+  audit_tool_version: string | null
+  audit_tool_git_commit: string | null
   generated_at: string
   total_count: number
   pass_count: number

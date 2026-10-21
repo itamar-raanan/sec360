@@ -25,7 +25,20 @@ def _report() -> dict:
             "target_distribution": "Debian",
             "target_major_version": "13",
         },
+        "schema_version": "1.1",
         "host": "web-01.example.test",
+        "fqdn": "web-01.example.test",
+        "ip_address": "10.20.30.40",
+        "ip_addresses": ["10.20.30.40", "172.17.0.1"],
+        "system": {
+            "distribution": "Debian",
+            "distribution_version": "13.1",
+            "kernel": "6.12.0-amd64",
+            "architecture": "x86_64",
+            "virtualization_type": "kvm",
+            "machine_id_hash": "a" * 64,
+        },
+        "audit_tool": {"version": "1.1.0", "git_commit": "abc1234"},
         "profile": "level1_server",
         "generated_at": "2026-10-20T14:25:00Z",
         "summary": {"total": "4", "pass": "2", "fail": "1", "review": "1", "excluded": "0", "error": "0"},
@@ -50,7 +63,7 @@ async def test_linux_audit_is_feature_gated_and_imports_exact_report(
 
     db_session.add(SystemSettings(id=1, linux_audit_enabled=True))
     db_session.add(Endpoint(
-        hostname="web-01.example.test",
+        hostname="inventory-web-01",
         ip_address="10.20.30.40",
         os_version="Debian GNU/Linux 13",
         last_seen=datetime.now(timezone.utc),
@@ -73,8 +86,17 @@ async def test_linux_audit_is_feature_gated_and_imports_exact_report(
     assert uploaded.status_code == 201, uploaded.text
     body = uploaded.json()
     assert body["hostname"] == "web-01.example.test"
+    assert body["fqdn"] == "web-01.example.test"
     assert body["ip_address"] == "10.20.30.40"
-    assert body["os_name"] == "Debian 13"
+    assert body["ip_addresses"] == ["10.20.30.40", "172.17.0.1"]
+    assert body["os_name"] == "Debian 13.1"
+    assert body["kernel"] == "6.12.0-amd64"
+    assert body["architecture"] == "x86_64"
+    assert body["virtualization_type"] == "kvm"
+    assert body["machine_id_hash"] == "a" * 64
+    assert body["audit_tool_version"] == "1.1.0"
+    assert body["audit_tool_git_commit"] == "abc1234"
+    assert body["endpoint_id"] is not None
     assert body["fail_count"] == 1
     assert body["pass_rate"] == pytest.approx(66.7)
 
@@ -99,6 +121,20 @@ async def test_linux_audit_is_feature_gated_and_imports_exact_report(
         files={"file": ("copy.json", report_bytes, "application/json")},
     )
     assert duplicate.status_code == 409
+
+    legacy = _report()
+    for field in ("schema_version", "fqdn", "ip_address", "ip_addresses", "system", "audit_tool"):
+        legacy.pop(field)
+    legacy["host"] = "legacy-01"
+    legacy["generated_at"] = "2026-10-19T14:25:00Z"
+    legacy_upload = await client.post(
+        "/api/linux-audits/upload",
+        headers=headers,
+        files={"file": ("legacy.json", json.dumps(legacy).encode(), "application/json")},
+    )
+    assert legacy_upload.status_code == 201
+    assert legacy_upload.json()["os_name"] == "Debian 13"
+    assert legacy_upload.json()["schema_version"] is None
 
 
 async def test_linux_audit_upload_requires_analyst(

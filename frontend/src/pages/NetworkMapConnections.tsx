@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Activity, AlertTriangle, Check, Clipboard, KeyRound, Loader2, Plus, RadioTower, RotateCw, Server, ShieldCheck, Trash2 } from 'lucide-react'
+import { AlertTriangle, Check, Clipboard, KeyRound, Loader2, Plus, RotateCw, Server, ShieldCheck, Trash2 } from 'lucide-react'
 
 import apiClient from '../api/client'
 import { useConfirm } from '../components/shared/ConfirmDialog'

@@ -66,6 +66,7 @@ interface SystemSettings {
   min_wss_version: string
   endpoint_product_tags: EndpointProductTag[]
   network_map_enabled: boolean
+  linux_audit_enabled: boolean
 }
 
 type EndpointProductTag = 'S1' | 'DLP' | 'WSS'
@@ -788,6 +789,7 @@ function PlatformTab() {
         queryClient.invalidateQueries({ queryKey: ['endpoint-detail'] }),
         queryClient.invalidateQueries({ queryKey: ['user-identity'] }),
         queryClient.invalidateQueries({ queryKey: ['network-map-status'] }),
+        queryClient.invalidateQueries({ queryKey: ['linux-audit-status'] }),
       ])
       setMsg({ type: 'success', msg: 'Settings saved and security posture recalculated' })
       refetch()
@@ -924,6 +926,12 @@ function PlatformTab() {
           >
             <Network size={14} /> Open Config
           </a>
+        </Field>
+      </Section>
+
+      <Section title="Linux Audit" hint="Optional manual ingestion and review of Debian 13 CIS audit evidence.">
+        <Field label="Enable Linux Audit" hint="Shows the Linux Audit inventory, upload flow, and safe report viewer">
+          <Toggle checked={form.linux_audit_enabled} onChange={v => set('linux_audit_enabled', v)} />
         </Field>
       </Section>
 

@@ -74,3 +74,6 @@ class SystemSettings(Base):
     # Optional Network Map feature. Connection configuration remains available
     # to administrators while operational collection and views are disabled.
     network_map_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Optional manual ingestion and review of Linux CIS audit reports.
+    linux_audit_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -17,6 +17,7 @@ from app.models.network_map import (
     NetworkMapFloor,
     NetworkMapObservation,
 )
+from app.models.linux_audit import LinuxAuditReport
 
 __all__ = [
     "User",
@@ -45,4 +46,5 @@ __all__ = [
     "NetworkMapEquipment",
     "NetworkMapFloor",
     "NetworkMapObservation",
+    "LinuxAuditReport",
 ]

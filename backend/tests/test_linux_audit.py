@@ -1,0 +1,119 @@
+from datetime import datetime, timezone
+import json
+
+import pytest
+from httpx import AsyncClient
+
+from app.models.endpoint import Endpoint
+from app.models.system_settings import SystemSettings
+
+
+pytestmark = pytest.mark.asyncio
+
+
+async def _headers(client: AsyncClient, email: str, password: str) -> dict[str, str]:
+    response = await client.post("/api/auth/login", json={"email": email, "password": password})
+    assert response.status_code == 200
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+def _report() -> dict:
+    return {
+        "benchmark": {
+            "name": "CIS Debian Linux 13 Benchmark",
+            "version": "1.0.0",
+            "target_distribution": "Debian",
+            "target_major_version": "13",
+        },
+        "host": "web-01.example.test",
+        "profile": "level1_server",
+        "generated_at": "2026-10-20T14:25:00Z",
+        "summary": {"total": "4", "pass": "2", "fail": "1", "review": "1", "excluded": "0", "error": "0"},
+        "results": [
+            {"id": "1.1.1", "title": "Disable unused filesystem", "status": "PASS", "actual": "disabled"},
+            {"id": "1.2.1", "title": "Configure repositories", "status": "PASS", "actual": "configured"},
+            {"id": "2.1.1", "title": "Remove legacy service", "status": "FAIL", "actual": "installed", "remediation": "Remove the package."},
+            {"id": "3.1.1", "title": "Review network policy", "status": "REVIEW", "actual": "manual review"},
+        ],
+    }
+
+
+async def test_linux_audit_is_feature_gated_and_imports_exact_report(
+    client: AsyncClient, db_session, admin_user
+):
+    headers = await _headers(client, "admin@test.local", "Admin123!")
+
+    status_response = await client.get("/api/linux-audits/status", headers=headers)
+    assert status_response.status_code == 200
+    assert status_response.json() == {"enabled": False}
+    assert (await client.get("/api/linux-audits", headers=headers)).status_code == 409
+
+    db_session.add(SystemSettings(id=1, linux_audit_enabled=True))
+    db_session.add(Endpoint(
+        hostname="web-01.example.test",
+        ip_address="10.20.30.40",
+        os_version="Debian GNU/Linux 13",
+        last_seen=datetime.now(timezone.utc),
+    ))
+    await db_session.commit()
+
+    invalid = await client.post(
+        "/api/linux-audits/upload",
+        headers=headers,
+        files={"file": ("broken.json", b"not-json", "application/json")},
+    )
+    assert invalid.status_code == 422
+
+    report_bytes = json.dumps(_report()).encode()
+    uploaded = await client.post(
+        "/api/linux-audits/upload",
+        headers=headers,
+        files={"file": ("cis_report_web-01.json", report_bytes, "application/json")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    body = uploaded.json()
+    assert body["hostname"] == "web-01.example.test"
+    assert body["ip_address"] == "10.20.30.40"
+    assert body["os_name"] == "Debian 13"
+    assert body["fail_count"] == 1
+    assert body["pass_rate"] == pytest.approx(66.7)
+
+    listing = await client.get("/api/linux-audits?search=10.20.30.40&result=attention", headers=headers)
+    assert listing.status_code == 200
+    assert listing.headers["x-total-count"] == "1"
+    assert listing.json()[0]["filename"] == "cis_report_web-01.json"
+
+    detail = await client.get(f"/api/linux-audits/{body['id']}", headers=headers)
+    assert detail.status_code == 200
+    assert len(detail.json()["results"]) == 4
+    assert detail.json()["results"][2]["status"] == "FAIL"
+
+    summary = await client.get("/api/linux-audits/summary", headers=headers)
+    assert summary.status_code == 200
+    assert summary.json()["servers"] == 1
+    assert summary.json()["failed_controls"] == 1
+
+    duplicate = await client.post(
+        "/api/linux-audits/upload",
+        headers=headers,
+        files={"file": ("copy.json", report_bytes, "application/json")},
+    )
+    assert duplicate.status_code == 409
+
+
+async def test_linux_audit_upload_requires_analyst(
+    client: AsyncClient, db_session, viewer_user
+):
+    db_session.add(SystemSettings(id=1, linux_audit_enabled=True))
+    await db_session.commit()
+    headers = await _headers(client, "viewer@test.local", "Viewer123!")
+
+    forbidden = await client.post(
+        "/api/linux-audits/upload",
+        headers=headers,
+        files={"file": ("report.json", b"{}", "application/json")},
+    )
+    assert forbidden.status_code == 403
+
+    listing = await client.get("/api/linux-audits", headers=headers)
+    assert listing.status_code == 200

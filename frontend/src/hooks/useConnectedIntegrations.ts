@@ -17,6 +17,12 @@ export function useConnectedIntegrations() {
     staleTime: 15_000,
     refetchInterval: 30_000,
   })
+  const linuxAudit = useQuery<{ enabled: boolean }>({
+    queryKey: ['linux-audit-status'],
+    queryFn: () => apiClient.get('/linux-audits/status').then(response => response.data),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  })
 
   const connected = useMemo(
     () => new Set(
@@ -46,10 +52,11 @@ export function useConnectedIntegrations() {
         .filter(item => item.is_enabled && item.status === 'connected')
         .flatMap(item => item.available_features ?? []),
         ...(networkMap.data?.enabled ? ['network_map'] : []),
+        ...(linuxAudit.data?.enabled ? ['linux_audit'] : []),
       ],
     ),
-    [query.data, networkMap.data?.enabled],
+    [query.data, networkMap.data?.enabled, linuxAudit.data?.enabled],
   )
 
-  return { ...query, isLoading: query.isLoading || networkMap.isLoading, connected, configured, features }
+  return { ...query, isLoading: query.isLoading || networkMap.isLoading || linuxAudit.isLoading, connected, configured, features }
 }

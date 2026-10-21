@@ -39,7 +39,7 @@ async def get_db() -> AsyncSession:
 async def init_db():
     """Create all tables and apply incremental schema patches."""
     async with engine.begin() as conn:
-        from app.models import user, endpoint, agent, activity, compliance, application, audit, system_settings, report, note, puppet, change_event, network_map  # noqa
+        from app.models import user, endpoint, agent, activity, compliance, application, audit, system_settings, report, note, puppet, change_event, network_map, linux_audit  # noqa
         await conn.run_sync(Base.metadata.create_all)
         # Incremental patches — safe to run repeatedly
         from sqlalchemy import text
@@ -114,6 +114,7 @@ async def init_db():
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS siem_enabled BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS siem_config JSONB",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS network_map_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS linux_audit_enabled BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE network_map_floors ADD COLUMN IF NOT EXISTS managed BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE network_map_connections ADD COLUMN IF NOT EXISTS collector_id UUID REFERENCES network_map_collectors(id) ON DELETE CASCADE",
             "ALTER TABLE network_map_connections ADD COLUMN IF NOT EXISTS source_identifier VARCHAR(160)",

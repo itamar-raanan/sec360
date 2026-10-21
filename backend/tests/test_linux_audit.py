@@ -153,3 +153,88 @@ async def test_linux_audit_upload_requires_analyst(
 
     listing = await client.get("/api/linux-audits", headers=headers)
     assert listing.status_code == 200
+
+
+async def test_linux_audit_automated_ingest_tokens_are_revocable_and_idempotent(
+    client: AsyncClient, db_session, admin_user
+):
+    db_session.add(SystemSettings(id=1, linux_audit_enabled=True))
+    await db_session.commit()
+    headers = await _headers(client, "admin@test.local", "Admin123!")
+
+    created = await client.post(
+        "/api/linux-audits/ingest-tokens",
+        headers=headers,
+        json={"name": "Debian CIS production"},
+    )
+    assert created.status_code == 201, created.text
+    token = created.json()["token"]
+    assert token.startswith("lai_")
+
+    listing = await client.get("/api/linux-audits/ingest-tokens", headers=headers)
+    assert listing.status_code == 200
+    assert listing.json()[0]["name"] == "Debian CIS production"
+    assert "token" not in listing.json()[0]
+    assert "token_hash" not in listing.json()[0]
+
+    report_bytes = json.dumps(_report()).encode()
+    unauthenticated = await client.post(
+        "/api/linux-audits/ingest",
+        content=report_bytes,
+        headers={"Content-Type": "application/json"},
+    )
+    assert unauthenticated.status_code == 401
+
+    ingest_headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "X-Report-Filename": "cis_report_web-01.json",
+    }
+    uploaded = await client.post(
+        "/api/linux-audits/ingest",
+        content=report_bytes,
+        headers=ingest_headers,
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    assert uploaded.json()["duplicate"] is False
+    assert uploaded.json()["uploaded_by_email"] == "automation:Debian CIS production"
+
+    retried = await client.post(
+        "/api/linux-audits/ingest",
+        content=report_bytes,
+        headers=ingest_headers,
+    )
+    assert retried.status_code == 200
+    assert retried.json()["duplicate"] is True
+    assert retried.json()["id"] == uploaded.json()["id"]
+
+    refreshed = await client.get("/api/linux-audits/ingest-tokens", headers=headers)
+    assert refreshed.json()[0]["last_used_at"] is not None
+    assert refreshed.json()[0]["last_used_ip"] == "127.0.0.1"
+
+    revoked = await client.delete(
+        f"/api/linux-audits/ingest-tokens/{created.json()['id']}",
+        headers=headers,
+    )
+    assert revoked.status_code == 200
+    rejected = await client.post(
+        "/api/linux-audits/ingest",
+        content=report_bytes,
+        headers=ingest_headers,
+    )
+    assert rejected.status_code == 401
+
+
+async def test_linux_audit_ingest_token_management_requires_admin(
+    client: AsyncClient, db_session, analyst_user
+):
+    db_session.add(SystemSettings(id=1, linux_audit_enabled=True))
+    await db_session.commit()
+    headers = await _headers(client, "analyst@test.local", "Analyst123!")
+
+    assert (await client.get("/api/linux-audits/ingest-tokens", headers=headers)).status_code == 403
+    assert (await client.post(
+        "/api/linux-audits/ingest-tokens",
+        headers=headers,
+        json={"name": "Unauthorized"},
+    )).status_code == 403

@@ -1,21 +1,27 @@
 """Manual ingestion and review of Debian CIS audit reports."""
 
 import hashlib
+import hmac
 import ipaddress
 import json
 import re
+import secrets
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile, status
+from pydantic import BaseModel, Field
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import audit_action, get_current_user, get_db, require_role
+from app.core.config import settings
+from app.core.request import get_client_ip
+from app.models.audit import AuditLog
 from app.models.endpoint import Endpoint
-from app.models.linux_audit import LinuxAuditReport
+from app.models.linux_audit import LinuxAuditIngestToken, LinuxAuditReport
 from app.models.system_settings import SystemSettings
 from app.models.user import AuthUser
 
@@ -24,16 +30,18 @@ router = APIRouter(prefix="/linux-audits", tags=["linux-audits"])
 MAX_REPORT_BYTES = 15 * 1024 * 1024
 MAX_RESULTS = 5_000
 VALID_STATUSES = {"PASS", "FAIL", "REVIEW", "EXCLUDED", "ERROR", "NOT_APPLICABLE"}
+INGEST_TOKEN_MARKER = "lai"
+
+
+class IngestTokenCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
 
 
 def _reject_json_constant(value: str) -> None:
     raise ValueError(f"Unsupported JSON value: {value}")
 
 
-async def _require_enabled(
-    _: AuthUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> None:
+async def _ensure_enabled(db: AsyncSession) -> None:
     enabled = await db.scalar(
         select(SystemSettings.linux_audit_enabled).where(SystemSettings.id == 1)
     )
@@ -42,6 +50,54 @@ async def _require_enabled(
             status_code=status.HTTP_409_CONFLICT,
             detail="Enable Linux Audit in Platform Settings to use this feature.",
         )
+
+
+async def _require_enabled(
+    _: AuthUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await _ensure_enabled(db)
+
+
+def _token_hash(token: str) -> str:
+    return hmac.new(settings.JWT_SECRET.encode(), token.encode(), hashlib.sha256).hexdigest()
+
+
+def _issue_ingest_token(token_id: uuid.UUID) -> tuple[str, str, str]:
+    token = f"{INGEST_TOKEN_MARKER}_{token_id}_{secrets.token_urlsafe(32)}"
+    return token, _token_hash(token), token[:20]
+
+
+def _token_id(token: str) -> uuid.UUID | None:
+    parts = token.split("_", 2)
+    if len(parts) != 3 or parts[0] != INGEST_TOKEN_MARKER:
+        return None
+    try:
+        return uuid.UUID(parts[1])
+    except ValueError:
+        return None
+
+
+async def _require_ingest_token(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> LinuxAuditIngestToken:
+    scheme, _, raw_token = request.headers.get("Authorization", "").partition(" ")
+    token_id = _token_id(raw_token) if scheme.casefold() == "bearer" else None
+    credential = await db.get(LinuxAuditIngestToken, token_id) if token_id else None
+    if (
+        credential is None
+        or credential.revoked_at is not None
+        or not hmac.compare_digest(credential.token_hash, _token_hash(raw_token))
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or revoked Linux audit upload token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    credential.last_used_at = datetime.now(timezone.utc)
+    credential.last_used_ip = get_client_ip(request)
+    return credential
 
 
 def _as_int(value: Any) -> int:
@@ -263,6 +319,112 @@ def _report_payload(report: LinuxAuditReport, *, include_results: bool = False) 
     return data
 
 
+def _token_payload(token: LinuxAuditIngestToken) -> dict[str, Any]:
+    return {
+        "id": str(token.id),
+        "name": token.name,
+        "token_prefix": token.token_prefix,
+        "created_by_email": token.created_by_email,
+        "created_at": token.created_at,
+        "last_used_at": token.last_used_at,
+        "last_used_ip": token.last_used_ip,
+        "revoked_at": token.revoked_at,
+    }
+
+
+async def _ingest_report(
+    *,
+    content: bytes,
+    filename: str,
+    db: AsyncSession,
+    uploaded_by_email: str,
+    uploaded_by_id: uuid.UUID | None = None,
+    ip_override: str | None = None,
+) -> tuple[LinuxAuditReport, bool]:
+    if not content:
+        raise HTTPException(400, "The uploaded report is empty")
+    if len(content) > MAX_REPORT_BYTES:
+        raise HTTPException(413, "Linux audit reports must be 15 MB or smaller")
+    try:
+        payload = json.loads(content.decode("utf-8-sig"), parse_constant=_reject_json_constant)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(422, "The uploaded file is not valid UTF-8 JSON") from exc
+
+    metadata = _validate_report(payload)
+    digest = hashlib.sha256(content).hexdigest()
+    duplicate = await db.scalar(
+        select(LinuxAuditReport).where(LinuxAuditReport.content_hash == digest)
+    )
+    if duplicate:
+        return duplicate, True
+
+    normalized_ip = (
+        _normalize_ip(ip_override, field="IP override")
+        if ip_override else metadata["ip_address"]
+    )
+    correlation_ips = list(dict.fromkeys(
+        [value for value in [normalized_ip, *metadata["ip_addresses"]] if value]
+    ))
+    endpoint = await _find_endpoint(
+        db,
+        metadata["hostname"],
+        metadata["fqdn"],
+        correlation_ips,
+        metadata["machine_id_hash"],
+    )
+    if endpoint:
+        inventory_ip = endpoint.ip_address
+        if not inventory_ip and endpoint.all_ips:
+            inventory_ip = endpoint.all_ips.split(",", 1)[0].strip() or None
+        normalized_ip = normalized_ip or inventory_ip
+        metadata["os_name"] = metadata["os_name"] or endpoint.os_version
+
+    if normalized_ip and normalized_ip not in metadata["ip_addresses"]:
+        metadata["ip_addresses"].insert(0, normalized_ip)
+    metadata["ip_address"] = normalized_ip
+
+    report = LinuxAuditReport(
+        **metadata,
+        endpoint_id=endpoint.id if endpoint else None,
+        filename=filename,
+        content_hash=digest,
+        report_data=payload,
+        uploaded_by_id=uploaded_by_id,
+        uploaded_by_email=uploaded_by_email,
+    )
+    db.add(report)
+    await db.flush()
+    return report, False
+
+
+async def _audit_automated_ingest(
+    request: Request,
+    db: AsyncSession,
+    token: LinuxAuditIngestToken,
+    report: LinuxAuditReport,
+) -> None:
+    log = AuditLog(
+        user_id=None,
+        action="automated_linux_audit_ingest",
+        resource_type="linux_audit_report",
+        resource_id=str(report.id),
+        timestamp=datetime.now(timezone.utc),
+        ip_address=get_client_ip(request),
+        details={
+            "ingest_token_id": str(token.id),
+            "ingest_token_name": token.name,
+            "hostname": report.hostname,
+            "filename": report.filename,
+            "generated_at": report.generated_at.isoformat(),
+        },
+    )
+    db.add(log)
+    await db.flush()
+    from app.services.siem import queue_audit_log
+
+    await queue_audit_log(db, log)
+
+
 @router.get("/status")
 async def linux_audit_status(
     db: AsyncSession = Depends(get_db),
@@ -339,6 +501,118 @@ async def list_linux_audits(
     return [_report_payload(report) for report in reports]
 
 
+@router.get("/ingest-tokens", dependencies=[Depends(_require_enabled)])
+async def list_ingest_tokens(
+    db: AsyncSession = Depends(get_db),
+    _: AuthUser = Depends(require_role("admin")),
+):
+    rows = (await db.execute(
+        select(LinuxAuditIngestToken).order_by(
+            LinuxAuditIngestToken.revoked_at.asc().nullsfirst(),
+            desc(LinuxAuditIngestToken.created_at),
+        )
+    )).scalars().all()
+    return [_token_payload(item) for item in rows]
+
+
+@router.post("/ingest-tokens", status_code=status.HTTP_201_CREATED, dependencies=[Depends(_require_enabled)])
+async def create_ingest_token(
+    data: IngestTokenCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_role("admin")),
+):
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(422, "Upload token name cannot be blank")
+    existing = await db.scalar(
+        select(LinuxAuditIngestToken.id).where(func.lower(LinuxAuditIngestToken.name) == name.lower())
+    )
+    if existing:
+        raise HTTPException(409, "A Linux audit upload token with this name already exists")
+    token_id = uuid.uuid4()
+    raw_token, token_hash, token_prefix = _issue_ingest_token(token_id)
+    item = LinuxAuditIngestToken(
+        id=token_id,
+        name=name,
+        token_hash=token_hash,
+        token_prefix=token_prefix,
+        created_by_id=current.id,
+        created_by_email=current.email,
+    )
+    db.add(item)
+    await db.flush()
+    await audit_action(
+        "create_linux_audit_ingest_token",
+        "linux_audit_ingest_token",
+        str(item.id),
+        request,
+        db,
+        current,
+        {"name": item.name},
+    )
+    return {**_token_payload(item), "token": raw_token}
+
+
+@router.delete("/ingest-tokens/{token_id}", dependencies=[Depends(_require_enabled)])
+async def revoke_ingest_token(
+    token_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_role("admin")),
+):
+    item = await db.get(LinuxAuditIngestToken, token_id)
+    if not item:
+        raise HTTPException(404, "Linux audit upload token not found")
+    if item.revoked_at is None:
+        item.revoked_at = datetime.now(timezone.utc)
+        await audit_action(
+            "revoke_linux_audit_ingest_token",
+            "linux_audit_ingest_token",
+            str(item.id),
+            request,
+            db,
+            current,
+            {"name": item.name},
+        )
+    return {"ok": True}
+
+
+@router.post("/ingest", status_code=status.HTTP_201_CREATED)
+async def ingest_linux_audit(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    credential: LinuxAuditIngestToken = Depends(_require_ingest_token),
+):
+    await _ensure_enabled(db)
+    content_type = request.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
+    if content_type != "application/json" and not content_type.endswith("+json"):
+        raise HTTPException(415, "Send the report as application/json")
+    content_length = request.headers.get("Content-Length")
+    if content_length:
+        try:
+            if int(content_length) > MAX_REPORT_BYTES:
+                raise HTTPException(413, "Linux audit reports must be 15 MB or smaller")
+        except ValueError as exc:
+            raise HTTPException(400, "Invalid Content-Length header") from exc
+    content = await request.body()
+    filename = Path(request.headers.get("X-Report-Filename") or "linux-audit.json").name[:500]
+    if not filename.lower().endswith(".json"):
+        filename = f"{filename}.json"
+    report, duplicate = await _ingest_report(
+        content=content,
+        filename=filename,
+        db=db,
+        uploaded_by_email=f"automation:{credential.name}",
+    )
+    if duplicate:
+        response.status_code = status.HTTP_200_OK
+    else:
+        await _audit_automated_ingest(request, db, credential, report)
+    return {**_report_payload(report), "duplicate": duplicate}
+
+
 @router.post("/upload", status_code=status.HTTP_201_CREATED, dependencies=[Depends(_require_enabled)])
 async def upload_linux_audit(
     request: Request,
@@ -351,59 +625,16 @@ async def upload_linux_audit(
     if not filename.lower().endswith(".json"):
         raise HTTPException(415, "Upload the JSON report generated by debian13-cis-audit")
     content = await file.read(MAX_REPORT_BYTES + 1)
-    if not content:
-        raise HTTPException(400, "The uploaded report is empty")
-    if len(content) > MAX_REPORT_BYTES:
-        raise HTTPException(413, "Linux audit reports must be 15 MB or smaller")
-    try:
-        payload = json.loads(
-            content.decode("utf-8-sig"),
-            parse_constant=_reject_json_constant,
-        )
-    except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
-        raise HTTPException(422, "The uploaded file is not valid UTF-8 JSON") from exc
-
-    metadata = _validate_report(payload)
-    digest = hashlib.sha256(content).hexdigest()
-    duplicate = await db.scalar(
-        select(LinuxAuditReport.id).where(LinuxAuditReport.content_hash == digest)
+    report, duplicate = await _ingest_report(
+        content=content,
+        filename=filename,
+        db=db,
+        uploaded_by_email=current.email,
+        uploaded_by_id=current.id,
+        ip_override=ip_address,
     )
     if duplicate:
         raise HTTPException(409, "This exact audit report has already been uploaded")
-
-    normalized_ip = _normalize_ip(ip_address, field="IP override") if ip_address else metadata["ip_address"]
-    correlation_ips = list(dict.fromkeys(
-        [value for value in [normalized_ip, *metadata["ip_addresses"]] if value]
-    ))
-    endpoint = await _find_endpoint(
-        db,
-        metadata["hostname"],
-        metadata["fqdn"],
-        correlation_ips,
-        metadata["machine_id_hash"],
-    )
-    if endpoint:
-        inventory_ip = endpoint.ip_address
-        if not inventory_ip and endpoint.all_ips:
-            inventory_ip = endpoint.all_ips.split(",", 1)[0].strip() or None
-        normalized_ip = normalized_ip or inventory_ip
-        metadata["os_name"] = metadata["os_name"] or endpoint.os_version
-
-    if normalized_ip and normalized_ip not in metadata["ip_addresses"]:
-        metadata["ip_addresses"].insert(0, normalized_ip)
-    metadata["ip_address"] = normalized_ip
-
-    report = LinuxAuditReport(
-        **metadata,
-        endpoint_id=endpoint.id if endpoint else None,
-        filename=filename,
-        content_hash=digest,
-        report_data=payload,
-        uploaded_by_id=current.id,
-        uploaded_by_email=current.email,
-    )
-    db.add(report)
-    await db.flush()
     await audit_action(
         "upload_linux_audit",
         "linux_audit_report",

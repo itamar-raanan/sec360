@@ -3,15 +3,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  AlertCircle, ArrowLeft, ArrowRight, ChevronDown, ChevronLeft,
-  ChevronRight, FileJson, FileSearch, HardDrive, Info, Monitor,
-  RefreshCw, Search, Server, Upload, X,
+  AlertCircle, ArrowLeft, ArrowRight, Check, ChevronDown, ChevronLeft,
+  ChevronRight, Clipboard, FileJson, FileSearch, HardDrive, Info, KeyRound,
+  Loader2, Monitor, Plus, RefreshCw, Search, Server, ShieldCheck, Trash2, Upload, X,
 } from 'lucide-react'
 
 import {
-  fetchLinuxAudit, fetchLinuxAudits, fetchLinuxAuditSummary, uploadLinuxAudit,
-  type LinuxAuditReport,
+  createLinuxAuditIngestToken, fetchLinuxAudit, fetchLinuxAuditIngestTokens,
+  fetchLinuxAudits, fetchLinuxAuditSummary, revokeLinuxAuditIngestToken,
+  uploadLinuxAudit, type LinuxAuditIngestToken, type LinuxAuditReport,
 } from '../api/linuxAudits'
+import { useConfirm } from '../components/shared/ConfirmDialog'
 import { useAuthStore } from '../store/auth'
 import { usePanelStore } from '../store/panels'
 
@@ -138,6 +140,80 @@ function UploadDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
+function AutomationDialog({ onClose }: { onClose: () => void }) {
+  const queryClient = useQueryClient()
+  const confirm = useConfirm()
+  const [name, setName] = useState('')
+  const [issued, setIssued] = useState<LinuxAuditIngestToken | null>(null)
+  const [copied, setCopied] = useState(false)
+  const tokens = useQuery({ queryKey: ['linux-audit-ingest-tokens'], queryFn: fetchLinuxAuditIngestTokens })
+  const createToken = useMutation({
+    mutationFn: () => createLinuxAuditIngestToken(name.trim()),
+    onSuccess: async value => {
+      setIssued(value)
+      setName('')
+      await queryClient.invalidateQueries({ queryKey: ['linux-audit-ingest-tokens'] })
+    },
+  })
+  const revokeToken = useMutation({
+    mutationFn: revokeLinuxAuditIngestToken,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['linux-audit-ingest-tokens'] }),
+  })
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => event.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+
+  const copyToken = async () => {
+    if (!issued?.token) return
+    await navigator.clipboard.writeText(issued.token)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1800)
+  }
+  const revoke = async (item: LinuxAuditIngestToken) => {
+    const approved = await confirm({
+      title: 'Revoke upload token?',
+      message: `${item.name} will immediately stop uploading reports. This cannot be undone.`,
+      confirmLabel: 'Revoke token',
+      tone: 'danger',
+    })
+    if (approved) revokeToken.mutate(item.id)
+  }
+
+  return <div className="dialog-backdrop" onMouseDown={onClose}>
+    <section className="flex max-h-[88vh] w-full max-w-[720px] flex-col overflow-hidden rounded-2xl border shadow-2xl fade-up" style={{ background: 'var(--surface-2)', borderColor: 'var(--border-lit)' }} onMouseDown={event => event.stopPropagation()} role="dialog" aria-modal="true" aria-label="Linux audit automation">
+      <header className="flex items-start justify-between border-b px-5 py-5" style={{ borderColor: 'var(--border)' }}>
+        <div className="flex items-start gap-3"><span className="dialog-icon"><KeyRound size={16} /></span><div><h2 className="text-[15px] font-semibold" style={{ color: 'var(--text-1)' }}>Automatic report delivery</h2><p className="mt-1 max-w-xl text-[10px] leading-4" style={{ color: 'var(--text-4)' }}>Create a revocable machine token for debian13-cis-audit. SEC360 stores only a cryptographic hash of the credential.</p></div></div>
+        <button className="ui-icon-button" onClick={onClose} aria-label="Close automation settings"><X size={15} /></button>
+      </header>
+
+      <div className="overflow-y-auto p-5">
+        {issued?.token && <section className="mb-5 rounded-xl border p-4" style={{ borderColor: 'rgba(251,191,36,.28)', background: 'rgba(251,191,36,.055)' }}>
+          <div className="flex items-start gap-3"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-amber-300" /><div><p className="text-[12px] font-semibold text-amber-200">Copy this token now</p><p className="mt-1 text-[10px] leading-4" style={{ color: 'var(--text-4)' }}>This is the only time the complete credential will be shown. Store it in Ansible Vault or another secrets manager.</p></div></div>
+          <div className="mt-3 flex items-center gap-2 rounded-lg border p-2" style={{ borderColor: 'var(--border)', background: 'var(--surface-inset)' }}><code className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap px-2 text-[10px] text-amber-100">{issued.token}</code><button onClick={copyToken} className="ui-secondary-button shrink-0">{copied ? <Check size={13} /> : <Clipboard size={13} />}{copied ? 'Copied' : 'Copy'}</button></div>
+        </section>}
+
+        <section className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'var(--surface-inset)' }}>
+          <label className="block"><span className="ui-eyebrow">Credential name</span><div className="mt-2 flex flex-col gap-2 sm:flex-row"><input value={name} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && name.trim()) createToken.mutate() }} placeholder="Production Debian audit" className="ui-control min-w-0 flex-1 px-3 text-[11px]" maxLength={120} /><button onClick={() => createToken.mutate()} disabled={!name.trim() || createToken.isPending} className="ui-primary-button shrink-0 disabled:opacity-40">{createToken.isPending ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />} Create token</button></div></label>
+          {createToken.isError && <p className="mt-2 text-[10px] text-red-400">{errorText(createToken.error, 'The upload token could not be created.')}</p>}
+        </section>
+
+        <div className="mt-5 flex items-end justify-between gap-3"><div><p className="ui-eyebrow">Upload credentials</p><p className="mt-1 text-[10px]" style={{ color: 'var(--text-4)' }}>POST JSON to <code className="select-all" style={{ color: 'var(--text-3)' }}>/api/linux-audits/ingest</code> using Bearer authentication.</p></div><span className="text-[9px]" style={{ color: 'var(--text-4)' }}>{tokens.data?.filter(item => !item.revoked_at).length || 0} active</span></div>
+        <div className="mt-3 overflow-hidden rounded-xl border" style={{ borderColor: 'var(--border)' }}>
+          {tokens.isLoading && <div className="space-y-3 p-4">{[0, 1].map(value => <div key={value} className="shimmer h-12 rounded-lg" />)}</div>}
+          {tokens.isError && <div className="flex items-start gap-2 p-4 text-[10px] text-red-400"><AlertCircle size={13} className="mt-0.5 shrink-0" />{errorText(tokens.error, 'Upload credentials could not be loaded.')}</div>}
+          {!tokens.isLoading && !tokens.isError && !tokens.data?.length && <div className="px-5 py-10 text-center"><KeyRound size={22} className="mx-auto" style={{ color: 'var(--text-4)' }} /><p className="mt-3 text-[11px] font-semibold" style={{ color: 'var(--text-2)' }}>No automation credentials yet</p><p className="mt-1 text-[10px]" style={{ color: 'var(--text-4)' }}>Create one for the audit controller that sends reports.</p></div>}
+          <div className="divide-y" style={{ borderColor: 'var(--border)' }}>{tokens.data?.map(item => <article key={item.id} className="flex items-center justify-between gap-4 px-4 py-3" style={{ opacity: item.revoked_at ? .55 : 1 }}><div className="min-w-0"><div className="flex items-center gap-2"><span className={`h-1.5 w-1.5 rounded-full ${item.revoked_at ? 'bg-slate-500' : 'bg-emerald-400'}`} /><p className="truncate text-[11px] font-semibold" style={{ color: 'var(--text-2)' }}>{item.name}</p><code className="text-[9px]" style={{ color: 'var(--text-4)' }}>{item.token_prefix}…</code></div><p className="mt-1 text-[9px]" style={{ color: 'var(--text-4)' }}>{item.revoked_at ? `Revoked ${relative(item.revoked_at)}` : item.last_used_at ? `Last used ${relative(item.last_used_at)}${item.last_used_ip ? ` from ${item.last_used_ip}` : ''}` : `Created ${relative(item.created_at)} · never used`}</p></div>{!item.revoked_at && <button onClick={() => revoke(item)} disabled={revokeToken.isPending} className="ui-icon-button shrink-0" aria-label={`Revoke ${item.name}`} title="Revoke token"><Trash2 size={13} /></button>}</article>)}</div>
+        </div>
+        {revokeToken.isError && <p className="mt-2 text-[10px] text-red-400">{errorText(revokeToken.error, 'The token could not be revoked.')}</p>}
+      </div>
+      <footer className="flex justify-end border-t px-5 py-4" style={{ borderColor: 'var(--border)' }}><button className="ui-secondary-button" onClick={onClose}>Done</button></footer>
+    </section>
+  </div>
+}
+
 function AuditDetail({ reportId }: { reportId: string }) {
   const navigate = useNavigate()
   const { openPanel } = usePanelStore()
@@ -214,6 +290,7 @@ function AuditInventory() {
   const user = useAuthStore(state => state.user)
   const navigate = useNavigate()
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [automationOpen, setAutomationOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [debounced, setDebounced] = useState('')
   const [result, setResult] = useState<'' | 'pass' | 'attention'>('')
@@ -233,7 +310,7 @@ function AuditInventory() {
   const failed = summary.isError || reports.isError
 
   return <div className="ui-page"><div className="ui-page-container">
-    <header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end"><div className="max-w-2xl"><div className="mb-3 flex items-center gap-2"><span className="status-pulse" data-status={(summary.data?.failed_controls || 0) + (summary.data?.error_controls || 0) > 0 ? 'warning' : 'healthy'} /><p className="ui-eyebrow">Manual CIS evidence</p></div><h1 className="text-[clamp(1.65rem,3vw,2.4rem)] font-semibold leading-[1.03] tracking-[-.05em]" style={{ color: 'var(--text-1)' }}>Linux Audit</h1><p className="mt-3 max-w-xl text-[12px] leading-5" style={{ color: 'var(--text-3)' }}>A searchable server inventory for Debian 13 CIS results, collected evidence, and remediation guidance.</p></div>{user?.role !== 'viewer' && <button onClick={() => setUploadOpen(true)} className="ui-primary-button"><Upload size={13} /> Upload report</button>}</header>
+    <header className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end"><div className="max-w-2xl"><div className="mb-3 flex items-center gap-2"><span className="status-pulse" data-status={(summary.data?.failed_controls || 0) + (summary.data?.error_controls || 0) > 0 ? 'warning' : 'healthy'} /><p className="ui-eyebrow">CIS evidence workspace</p></div><h1 className="text-[clamp(1.65rem,3vw,2.4rem)] font-semibold leading-[1.03] tracking-[-.05em]" style={{ color: 'var(--text-1)' }}>Linux Audit</h1><p className="mt-3 max-w-xl text-[12px] leading-5" style={{ color: 'var(--text-3)' }}>A searchable server inventory for Debian 13 CIS results, collected evidence, and remediation guidance.</p></div>{user?.role !== 'viewer' && <div className="flex flex-wrap gap-2">{user?.role === 'admin' && <button onClick={() => setAutomationOpen(true)} className="ui-secondary-button"><KeyRound size={13} /> Automation</button>}<button onClick={() => setUploadOpen(true)} className="ui-primary-button"><Upload size={13} /> Upload report</button></div>}</header>
 
     {failed ? <section className="ui-command-surface mt-6 flex items-start gap-3 p-5"><AlertCircle size={18} className="mt-0.5 text-red-400" /><div><p className="text-[12px] font-semibold text-red-300">Linux audit data is unavailable</p><p className="mt-1 text-[10px] leading-4" style={{ color: 'var(--text-4)' }}>{errorText(summary.error || reports.error, 'Try refreshing the page or verify the feature is enabled.')}</p></div></section> : <>
       <section className="ui-command-surface mt-6 grid grid-cols-2 divide-x divide-y overflow-hidden lg:grid-cols-4 lg:divide-y-0"><Metric label="Audited servers" value={summary.data?.servers || 0} detail={`${summary.data?.reports || 0} uploaded reports`} /><Metric label="Failed controls" value={summary.data?.failed_controls || 0} detail="Across retained reports" color={(summary.data?.failed_controls || 0) ? '#fb7185' : '#34d399'} /><Metric label="Audit errors" value={summary.data?.error_controls || 0} detail="Collection issues" color={(summary.data?.error_controls || 0) ? '#f87171' : 'var(--text-1)'} /><Metric label="Latest audit" value={relative(summary.data?.last_audit || null)} detail={summary.data?.last_audit ? dateTime(summary.data.last_audit) : 'Upload the first JSON report'} /></section>
@@ -251,6 +328,7 @@ function AuditInventory() {
       </section>
     </>}
     {uploadOpen && <UploadDialog onClose={() => setUploadOpen(false)} />}
+    {automationOpen && <AutomationDialog onClose={() => setAutomationOpen(false)} />}
   </div></div>
 }
 

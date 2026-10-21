@@ -60,3 +60,24 @@ class LinuxAuditReport(Base):
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )
+
+
+class LinuxAuditIngestToken(Base):
+    """Revocable machine credential for automated Linux audit delivery."""
+
+    __tablename__ = "linux_audit_ingest_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(120), unique=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    token_prefix: Mapped[str] = mapped_column(String(24))
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("auth_users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_by_email: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

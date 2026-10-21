@@ -69,6 +69,18 @@ export interface LinuxAuditParams {
   offset?: number
 }
 
+export interface LinuxAuditIngestToken {
+  id: string
+  name: string
+  token_prefix: string
+  created_by_email: string
+  created_at: string
+  last_used_at: string | null
+  last_used_ip: string | null
+  revoked_at: string | null
+  token?: string
+}
+
 export async function fetchLinuxAudits(params: LinuxAuditParams = {}) {
   const response = await apiClient.get<LinuxAuditReport[]>('/linux-audits', { params })
   return {
@@ -92,4 +104,19 @@ export async function uploadLinuxAudit(file: File, ipAddress?: string) {
   return apiClient.post<LinuxAuditReport>('/linux-audits/upload', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }).then(response => response.data)
+}
+
+export async function fetchLinuxAuditIngestTokens() {
+  return apiClient.get<LinuxAuditIngestToken[]>('/linux-audits/ingest-tokens')
+    .then(response => response.data)
+}
+
+export async function createLinuxAuditIngestToken(name: string) {
+  return apiClient.post<LinuxAuditIngestToken>('/linux-audits/ingest-tokens', { name })
+    .then(response => response.data)
+}
+
+export async function revokeLinuxAuditIngestToken(tokenId: string) {
+  return apiClient.delete(`/linux-audits/ingest-tokens/${tokenId}`)
+    .then(response => response.data as { ok: boolean })
 }

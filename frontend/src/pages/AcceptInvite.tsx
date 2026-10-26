@@ -6,8 +6,8 @@ import { useAuthStore } from '../store/auth'
 
 type Step = 'loading' | 'set-password' | 'setup-2fa' | 'success' | 'error'
 
-const inputClass = "w-full text-sm text-white rounded-xl px-4 py-3 focus:outline-none transition-[border-color,box-shadow] duration-150"
-const inputStyle = { background: 'var(--surface-3)', border: '1px solid var(--border-mid)' }
+const inputClass = "ui-input min-h-11 px-4 py-3 text-sm focus:outline-none"
+const inputStyle = {}
 
 function focusHandlers() {
   return {
@@ -90,11 +90,10 @@ export default function AcceptInvite() {
 
         {/* Logo */}
         <div className="flex items-center justify-center gap-2.5 mb-8">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{ background: 'var(--accent)', boxShadow: '0 0 16px rgba(16,185,129,0.25)' }}>
+          <div className="brand-mark">
             <Shield size={17} className="text-white" strokeWidth={2.5} />
           </div>
-          <span className="text-white font-bold text-lg tracking-tight">SEC360</span>
+          <span className="font-bold text-lg tracking-tight" style={{ color: 'var(--text-1)' }}>SEC360</span>
         </div>
 
         {/* Step stepper */}
@@ -114,7 +113,7 @@ export default function AcceptInvite() {
                   >
                     {i < stepIndex ? 'Done' : i + 1}
                   </div>
-                  <span className="text-[12px]" style={{ color: i === stepIndex ? '#f1f5f9' : '#52525e' }}>{label}</span>
+                  <span className="text-[12px]" style={{ color: i === stepIndex ? 'var(--text-1)' : 'var(--text-4)' }}>{label}</span>
                 </div>
                 {i < 1 && <div className="w-8 h-px" style={{ background: i < stepIndex ? 'var(--accent)' : 'var(--border)' }} />}
               </React.Fragment>
@@ -123,7 +122,7 @@ export default function AcceptInvite() {
         )}
 
         {/* Card */}
-        <div className="rounded-2xl p-8" style={{ background: 'var(--surface-2)', border: '1px solid var(--border-mid)' }}>
+        <div className="ui-command-surface p-8" style={{ background: 'var(--surface-2)' }}>
 
           {step === 'loading' && (
             <div className="flex flex-col items-center gap-3 py-8">
@@ -138,7 +137,7 @@ export default function AcceptInvite() {
                 style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.15)' }}>
                 <AlertCircle size={22} style={{ color: '#f87171' }} />
               </div>
-              <h2 className="text-[15px] font-semibold text-white">Invalid or expired invitation</h2>
+              <h1 className="ui-page-title">Invalid or expired invitation</h1>
               <p className="text-[13px]" style={{ color: 'var(--text-4)' }}>This link may have been used already or expired (7 days).</p>
               <button onClick={() => navigate('/login')}
                 className="mt-2 text-[13px] transition-[color] duration-150"
@@ -154,7 +153,7 @@ export default function AcceptInvite() {
                 style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.15)' }}>
                 <CheckCircle2 size={22} style={{ color: 'var(--accent)' }} />
               </div>
-              <h2 className="text-[15px] font-semibold text-white">Account activated!</h2>
+              <h1 className="ui-page-title">Account activated</h1>
               <p className="text-[13px]" style={{ color: 'var(--text-4)' }}>Redirecting to sign in with 2FA…</p>
             </div>
           )}
@@ -162,7 +161,7 @@ export default function AcceptInvite() {
           {step === 'set-password' && (
             <div className="fade-in">
               <div className="mb-6">
-                <h2 className="text-[17px] font-bold text-white tracking-tight">Set your password</h2>
+                <h1 className="ui-page-title">Set your password</h1>
                 <p className="text-[13px] mt-1.5" style={{ color: 'var(--text-3)' }}>
                   Invited as <span className="text-white font-medium">{inviteEmail}</span>
                   {' '}· <span className="capitalize font-medium" style={{ color: 'var(--accent)' }}>{inviteRole}</span>
@@ -178,7 +177,7 @@ export default function AcceptInvite() {
 
               <form onSubmit={handleSetPassword} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-4)' }}>New password</label>
+                  <label className="ui-form-label">New password</label>
                   <div className="relative">
                     <input type={showPw ? 'text' : 'password'} value={password}
                       onChange={e => setPassword(e.target.value)} placeholder="At least 8 characters"
@@ -192,7 +191,7 @@ export default function AcceptInvite() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-4)' }}>Confirm password</label>
+                  <label className="ui-form-label">Confirm password</label>
                   <div className="relative">
                     <input type={showConfirm ? 'text' : 'password'} value={confirmPw}
                       onChange={e => setConfirmPw(e.target.value)} placeholder="Repeat password"
@@ -206,8 +205,7 @@ export default function AcceptInvite() {
                 </div>
 
                 <button type="submit" disabled={loading || !password || !confirmPw}
-                  className="w-full text-white text-[13px] font-semibold py-3 px-4 rounded-xl pressable disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  style={{ background: 'var(--accent)', boxShadow: '0 0 20px rgba(16,185,129,0.15)' }}>
+                  className="ui-primary-button ui-button-lg w-full pressable disabled:opacity-40 disabled:cursor-not-allowed">
                   {loading ? <><Loader2 size={14} className="animate-spin" /> Setting up…</> : 'Continue →'}
                 </button>
               </form>
@@ -219,7 +217,7 @@ export default function AcceptInvite() {
               <div className="mb-5">
                 <div className="flex items-center gap-2 mb-1.5">
                   <Smartphone size={16} style={{ color: 'var(--accent)' }} />
-                  <h2 className="text-[17px] font-bold text-white tracking-tight">Set up two-factor authentication</h2>
+                  <h1 className="ui-page-title">Set up two-factor authentication</h1>
                 </div>
                 <p className="text-[13px]" style={{ color: 'var(--text-3)' }}>
                   Scan the QR code with Google Authenticator or Authy, then enter the 6-digit code.
@@ -250,7 +248,7 @@ export default function AcceptInvite() {
 
               <form onSubmit={handleSetup2FA} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-4)' }}>Authenticator code</label>
+                  <label className="ui-form-label">Authenticator code</label>
                   <input type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6}
                     value={totpCode} onChange={e => setTotpCode(e.target.value.replace(/\D/g, ''))}
                     placeholder="000 000" autoFocus
@@ -258,8 +256,7 @@ export default function AcceptInvite() {
                     style={inputStyle} {...focusHandlers()} />
                 </div>
                 <button type="submit" disabled={loading || totpCode.length !== 6}
-                  className="w-full text-white text-[13px] font-semibold py-3 px-4 rounded-xl pressable disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  style={{ background: 'var(--accent)', boxShadow: '0 0 20px rgba(16,185,129,0.15)' }}>
+                  className="ui-primary-button ui-button-lg w-full pressable disabled:opacity-40 disabled:cursor-not-allowed">
                   {loading ? <><Loader2 size={14} className="animate-spin" /> Verifying…</> : 'Enable 2FA & finish'}
                 </button>
               </form>

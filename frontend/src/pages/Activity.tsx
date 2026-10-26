@@ -362,9 +362,9 @@ export default function Activity() {
         style={{ background: 'color-mix(in srgb, var(--surface-0) 92%, transparent)', backdropFilter: 'blur(12px)', borderBottom: '1px solid var(--border)' }}>
         <div className="flex items-center gap-2">
           <LogIn size={14} style={{ color: 'var(--accent)' }} />
-          <span className="text-[13px] font-semibold" style={{ color: 'var(--text-1)' }}>
+          <h1 className="ui-section-title">
             {eventType === 'cloud_access' ? 'Cloud Access' : 'Login Activity'}
-          </span>
+          </h1>
         </div>
         <div className="flex items-center gap-2 ml-4 flex-wrap">
           <select value={eventType} onChange={e => { setEventType(e.target.value); setPage(1) }}

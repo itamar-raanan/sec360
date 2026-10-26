@@ -30,13 +30,11 @@ export default function SsoMfa() {
   }
 
   const inputStyle: React.CSSProperties = {
-    background: 'var(--hover-1)',
-    border: '1px solid var(--border-mid)',
     transition: 'border-color 120ms ease, box-shadow 120ms ease',
   }
   const onFocus = (e: React.FocusEvent<HTMLInputElement>) => {
-    e.target.style.borderColor = 'rgba(16,185,129,0.7)'
-    e.target.style.boxShadow   = '0 0 0 3px rgba(16,185,129,0.12)'
+    e.target.style.borderColor = 'var(--accent)'
+    e.target.style.boxShadow   = '0 0 0 3px var(--accent-dim)'
   }
   const onBlur = (e: React.FocusEvent<HTMLInputElement>) => {
     e.target.style.borderColor = 'var(--border-mid)'
@@ -44,26 +42,24 @@ export default function SsoMfa() {
   }
 
   return (
-    <div className="min-h-[100dvh] flex" style={{ background: 'var(--surface-0)' }}>
+    <div className="min-h-[100dvh] flex" style={{ background: 'var(--surface-1)' }}>
       <AuthLeftPanel />
 
       {/* Right — form */}
       <div className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden">
         {/* Mobile logo */}
         <div className="lg:hidden flex items-center gap-2.5 mb-10 relative z-10">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ background: 'var(--accent)' }}>
+          <div className="brand-mark">
             <ShieldCheck size={16} className="text-white" strokeWidth={2.5} />
           </div>
-          <span className="text-white font-bold text-lg tracking-tight">SEC360</span>
+          <span className="font-bold text-lg tracking-tight" style={{ color: 'var(--text-1)' }}>SEC360</span>
         </div>
 
         {/* Form card */}
         <div
-          className="auth-card w-full max-w-[360px] relative z-10 rounded-xl p-8 fade-up"
+          className="auth-card ui-command-surface w-full max-w-[360px] relative z-10 p-8 fade-up"
           style={{
-            background: 'var(--surface-1)',
-            border: '1px solid var(--border-mid)',
+            background: 'var(--surface-2)',
             boxShadow: 'var(--shadow-float)',
             animationDuration: '300ms',
           }}
@@ -74,8 +70,8 @@ export default function SsoMfa() {
               style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.18)' }}>
               <Smartphone size={17} style={{ color: 'var(--accent)' }} />
             </div>
-            <h1 className="text-white font-bold mb-1" style={{ fontSize: 20, letterSpacing: '-0.025em' }}>Two-factor auth</h1>
-            <p style={{ fontSize: 12.5, color: 'var(--text-4)' }}>
+            <h1 className="ui-page-title mb-1">Two-factor auth</h1>
+            <p className="ui-page-description !mt-0">
               SSO identity verified — enter your authenticator code to continue
             </p>
           </div>
@@ -92,7 +88,7 @@ export default function SsoMfa() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="block font-medium" style={{ fontSize: 13, color: 'var(--text-2)' }}>
+              <label className="ui-form-label">
                 Authenticator code
               </label>
               <input
@@ -105,7 +101,7 @@ export default function SsoMfa() {
                 placeholder="000 000"
                 required
                 autoFocus
-                className="w-full text-[13px] text-white placeholder-zinc-700 rounded-lg px-3.5 py-2.5 text-center font-mono tracking-[0.5em] focus:outline-none"
+                className="ui-input min-h-11 text-center font-mono tracking-[0.5em] focus:outline-none"
                 style={inputStyle}
                 onFocus={onFocus}
                 onBlur={onBlur}
@@ -115,8 +111,7 @@ export default function SsoMfa() {
             <button
               type="submit"
               disabled={loading || code.length !== 6}
-              className="w-full flex items-center justify-center gap-2 text-white font-bold rounded-lg py-2.5 pressable disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ fontSize: 13, background: 'var(--accent)', letterSpacing: '-0.01em' }}
+              className="ui-primary-button ui-button-lg w-full pressable disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {loading ? 'Verifying…' : <><span>Verify &amp; sign in</span><ArrowRight size={14} /></>}
             </button>
@@ -134,7 +129,7 @@ export default function SsoMfa() {
         </div>
 
         {/* Footer */}
-        <div className="mt-8 relative z-10 flex items-center gap-4" style={{ fontSize: 11, color: 'var(--text-4)' }}>
+        <div className="mt-8 relative z-10 flex items-center gap-4" style={{ fontSize: 12, color: 'var(--text-4)' }}>
           <span>© 2026 SEC360</span>
           <span>·</span>
           <div className="flex items-center gap-1.5">

@@ -1211,7 +1211,7 @@ function IntegrationPanel({
                     {!adManualMode && <button
                       type="submit"
                       disabled={saveMutation.isPending}
-                      className="flex items-center gap-2 px-4 py-2.5 bg-[var(--accent)] hover:bg-emerald-400 disabled:bg-emerald-900 disabled:cursor-not-allowed text-black text-sm font-semibold rounded-lg pressable transition-colors"
+                      className="ui-primary-button ui-button-lg pressable disabled:cursor-not-allowed"
                     >
                       {saveMutation.isPending && <Loader2 size={14} className="animate-spin" />}
                       Save & Enable
@@ -1546,7 +1546,7 @@ function AddCustomModal({ onClose }: { onClose: () => void }) {
           <button
             onClick={handleSubmit as unknown as React.MouseEventHandler}
             disabled={createMutation.isPending || !displayName.trim()}
-            className="flex items-center gap-2 px-5 py-2.5 bg-[var(--accent)] hover:bg-emerald-400 disabled:bg-emerald-900 disabled:cursor-not-allowed text-black text-sm font-semibold rounded-lg pressable transition-colors"
+            className="ui-primary-button ui-button-lg pressable disabled:cursor-not-allowed"
           >
             {createMutation.isPending && <Loader2 size={14} className="animate-spin" />}
             Create Integration
@@ -1679,17 +1679,17 @@ export default function Integrations() {
           <div className="mb-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] p-5">
             <div className="flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-white font-bold text-xl">
+              <h1 className="ui-page-title">
                 {CATEGORIES.find((c) => c.id === category)?.label ?? 'Product Store'}
               </h1>
-              <p className="text-zinc-500 text-xs mt-0.5">
+              <p className="ui-page-description !mt-1">
                 Connect trusted products and enable their tools across SEC360.
               </p>
             </div>
             <button
               onClick={() => correlateMutation.mutate()}
               disabled={correlateMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 bg-[var(--accent)]/10 border border-[var(--accent)]/30 hover:bg-[var(--accent)]/20 disabled:opacity-60 text-emerald-400 text-xs font-medium rounded-lg pressable"
+              className="ui-secondary-button pressable disabled:opacity-60"
             >
               {correlateMutation.isPending ? (
                 <Loader2 size={13} className="animate-spin" />

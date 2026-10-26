@@ -287,7 +287,7 @@ export default function Users() {
           className="entity-toolbar flex-shrink-0 px-5 py-4 flex items-center gap-3"
           style={{ borderBottom: '1px solid var(--border)' }}
         >
-          <h1 className="text-[17px] font-semibold text-white tracking-[-0.02em]">Users</h1>
+          <h1 className="ui-page-title">Users</h1>
           <div className="flex-1" />
           <button
             onClick={() => exportCSV(users)}

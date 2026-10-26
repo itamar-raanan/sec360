@@ -222,7 +222,7 @@ function ScheduleModal({
         </div>
         <div className="flex gap-2 px-6 py-4 border-t border-white/[0.06]">
           <button onClick={handleSave}
-            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-lg pressable">
+            className="ui-primary-button pressable">
             <Calendar size={14} /> {initial ? 'Save changes' : 'Schedule report'}
           </button>
           <button onClick={onClose} className="text-sm text-zinc-400 hover:text-white px-3 py-2">Cancel</button>
@@ -357,8 +357,8 @@ export default function Reports() {
   return (
     <div className="reports-page ui-page-container space-y-5">
       <div>
-        <h1 className="text-[18px] font-semibold tracking-[-0.025em] text-white">Reports</h1>
-        <p className="text-sm text-zinc-500 mt-1">Generate, export, and schedule security reports.</p>
+        <h1 className="ui-page-title">Reports</h1>
+        <p className="ui-page-description">Generate, export, and schedule security reports.</p>
       </div>
 
       {/* ── Ad-hoc report ── */}
@@ -390,7 +390,7 @@ export default function Reports() {
         {/* Actions */}
         <div className="flex flex-wrap gap-2">
           <button onClick={handleGenerate} disabled={previewLoading}
-            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-900 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 rounded-lg pressable">
+            className="ui-primary-button pressable disabled:cursor-not-allowed">
             {previewLoading ? 'Generating…' : <><ChevronDown size={14} /> Generate preview</>}
           </button>
           <button onClick={handleExportCSV}

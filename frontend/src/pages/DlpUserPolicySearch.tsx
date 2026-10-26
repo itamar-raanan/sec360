@@ -239,8 +239,8 @@ export default function DlpUserPolicySearch() {
             <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-400">
               <Database size={14} /> Live Symantec DLP intelligence
             </div>
-            <h2 className="text-[22px] font-semibold tracking-[-0.035em] sm:text-[26px]" style={{ color: 'var(--text-1)' }}>DLP User Policy Search</h2>
-            <p className="mt-2 max-w-2xl text-[13px] leading-5" style={{ color: 'var(--text-3)' }}>
+            <h1 className="ui-page-title">DLP User Policy Search</h1>
+            <p className="ui-page-description">
               Find user, sender, and recipient exclusions across nested DLP policy conditions. Results come directly from the configured Oracle database.
             </p>
           </div>
@@ -263,7 +263,7 @@ export default function DlpUserPolicySearch() {
               type="button"
               onClick={exportCsv}
               disabled={!filtered.length}
-              className="focus-accent pressable inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-3 text-[12px] font-semibold text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+              className="ui-primary-button focus-accent pressable disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Download size={15} /> Export {filtered.length.toLocaleString()} rows
             </button>
@@ -337,7 +337,7 @@ export default function DlpUserPolicySearch() {
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10 text-red-400"><AlertCircle size={23} /></div>
               <h3 className="text-[15px] font-semibold" style={{ color: 'var(--text-1)' }}>DLP query unavailable</h3>
               <p className="mt-2 max-w-md text-[12px] leading-5" style={{ color: 'var(--text-3)' }}>{errorMessage}</p>
-              <button type="button" onClick={() => query.refetch()} className="pressable mt-5 inline-flex h-9 items-center gap-2 rounded-lg bg-emerald-600 px-4 text-[12px] font-semibold text-white hover:bg-emerald-500"><RefreshCw size={14} /> Try again</button>
+              <button type="button" onClick={() => query.refetch()} className="ui-primary-button pressable mt-5"><RefreshCw size={14} /> Try again</button>
             </div>
           ) : filtered.length === 0 ? (
             <div className="flex min-h-[340px] flex-col items-center justify-center px-6 py-12 text-center">

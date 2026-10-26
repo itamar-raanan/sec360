@@ -243,7 +243,7 @@ function ExclusionDialog({ endpoint, agents, onClose }: {
               type="button"
               onClick={() => mutation.mutate()}
               disabled={!canSave || mutation.isPending}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-zinc-950 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40"
+              className="ui-primary-button disabled:cursor-not-allowed disabled:opacity-40"
             >
               {mutation.isPending ? <RefreshCw size={12} className="animate-spin" /> : <Check size={12} />}
               Save scope
@@ -562,13 +562,13 @@ export default function Compliance() {
         {/* Header */}
         <div className="flex-shrink-0 px-5 pt-5 pb-3 flex items-center justify-between">
           <div>
-            <h1 className="text-base font-bold text-white">Compliance</h1>
-            <p className="text-xs text-zinc-500 mt-0.5">{inventoryTotal} endpoints in inventory</p>
+            <h1 className="ui-page-title">Compliance</h1>
+            <p className="ui-page-description !mt-1">{inventoryTotal} endpoints in inventory</p>
           </div>
           <button
             onClick={() => evaluateMutation.mutate()}
             disabled={evaluateMutation.isPending || isRefetching}
-            className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 border border-emerald-500/15 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+            className="ui-primary-button disabled:opacity-50"
           >
             <RefreshCw size={12} className={(evaluateMutation.isPending || isRefetching) ? 'animate-spin' : ''} />
             Re-evaluate

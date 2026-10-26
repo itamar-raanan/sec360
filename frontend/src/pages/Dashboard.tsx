@@ -195,10 +195,10 @@ export default function Dashboard() {
       <div className="mx-auto w-full max-w-[1540px] px-4 py-5 sm:px-6 lg:px-8 lg:py-7">
         <section className="flex flex-col gap-5 border-b pb-6 sm:flex-row sm:items-end sm:justify-between" style={{ borderColor: 'var(--border)' }}>
           <div>
-            <h1 className="text-[26px] font-semibold leading-none tracking-[-0.045em] sm:text-[30px]" style={{ color: 'var(--text-1)' }}>
+            <h1 className="ui-page-title">
               Security overview
             </h1>
-            <p className="mt-2 text-[13px]" style={{ color: 'var(--text-3)' }}>
+            <p className="ui-page-description">
               {attention.length ? `${attention.length} active conditions prioritized from current control and source evidence.` : 'No active conditions exceed the configured control baselines.'}
             </p>
           </div>

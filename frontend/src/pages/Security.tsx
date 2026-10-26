@@ -884,7 +884,7 @@ function SiemTab() {
           <div className="grid grid-cols-[1fr_120px] gap-3"><div><label className="mb-1 block text-xs text-zinc-400">Elastic Agent host</label><input className={fieldClass} value={form.syslog_host} onChange={e => setForm({ ...form, syslog_host: e.target.value })} placeholder="host.docker.internal" /></div><div><label className="mb-1 block text-xs text-zinc-400">Port</label><input type="number" min={1} max={65535} className={fieldClass} value={form.syslog_port} onChange={e => setForm({ ...form, syslog_port: Number(e.target.value) })} /></div></div>
           <div><label className="mb-1 block text-xs text-zinc-400">Protocol</label><select className={fieldClass} value={form.syslog_protocol} onChange={e => setForm({ ...form, syslog_protocol: e.target.value as SiemSettings['syslog_protocol'] })}><option value="udp">UDP — standard port 514</option><option value="tcp">TCP — delivery connection verified</option></select><p className="mt-1.5 text-[11px] leading-4 text-zinc-500">Events use RFC 5424 framing with compact ECS JSON in the message field. For an agent on this server, enter <span className="font-mono text-zinc-400">127.0.0.1</span> or <span className="font-mono text-zinc-400">host.docker.internal</span>; SEC360 routes loopback through the Docker host gateway.</p></div>
         </>}
-        <div className="flex gap-2"><button onClick={() => test.mutate()} disabled={test.isPending || (form.transport === 'http' ? !form.url : !form.syslog_host)} className="flex items-center gap-2 rounded-lg border border-emerald-500/30 px-4 py-2 text-sm text-emerald-300 disabled:opacity-40"><Send size={14} />{test.isPending ? 'Testing…' : 'Send test event'}</button><button onClick={() => save.mutate()} disabled={save.isPending} className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-40">{save.isPending ? 'Saving…' : 'Save settings'}</button></div>
+        <div className="flex gap-2"><button onClick={() => test.mutate()} disabled={test.isPending || (form.transport === 'http' ? !form.url : !form.syslog_host)} className="ui-secondary-button disabled:opacity-40"><Send size={14} />{test.isPending ? 'Testing…' : 'Send test event'}</button><button onClick={() => save.mutate()} disabled={save.isPending} className="ui-primary-button disabled:opacity-40">{save.isPending ? 'Saving…' : 'Save settings'}</button></div>
       </div>
     </div>
   )
@@ -913,8 +913,8 @@ export default function Security() {
             <ShieldCheck size={16} className="text-emerald-400" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white leading-none">Security</h1>
-            <p className="text-xs text-zinc-500 mt-0.5">Compliance changes, audit trail, and SIEM forwarding</p>
+            <h1 className="ui-page-title">Security</h1>
+            <p className="ui-page-description !mt-1">Compliance changes, audit trail, and SIEM forwarding</p>
           </div>
         </div>
 
@@ -922,14 +922,12 @@ export default function Security() {
         <div className="flex gap-0.5 border-b border-white/[0.06]">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button key={id} onClick={() => setTab(id)}
-              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px"
+              className="ui-tab -mb-px"
+              aria-selected={tab === id}
               style={{
-                color: tab === id ? '#34d399' : '#71717a',
-                borderBottomColor: tab === id ? 'var(--accent)' : 'transparent',
                 transition: 'color 150ms ease, border-color 150ms ease',
               }}
-              onMouseEnter={e => { if (tab !== id) e.currentTarget.style.color = '#d4d4d8' }}
-              onMouseLeave={e => { if (tab !== id) e.currentTarget.style.color = 'var(--text-3)' }}>
+            >
               <Icon size={15} />
               {label}
             </button>

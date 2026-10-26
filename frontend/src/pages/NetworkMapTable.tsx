@@ -42,7 +42,7 @@ export default function NetworkMapTable() {
   return <div className="h-full overflow-y-auto bg-[#070b12] px-5 py-6 text-slate-200 lg:px-8">
     <div className="mx-auto max-w-[1600px]">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-        <div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-300">Network Map</p><h1 className="mt-1 text-2xl font-semibold tracking-tight text-white">Connected entities</h1><p className="mt-1 text-sm text-slate-500">One operational view of discovered clients, their network attachment, identity match, products, and source evidence.</p></div>
+        <div><p className="ui-context">Network Map</p><h1 className="ui-page-title mt-1">Connected entities</h1><p className="ui-page-description !mt-1">One operational view of discovered clients, their network attachment, identity match, products, and source evidence.</p></div>
         <NetworkMapTabs />
       </div>
 
@@ -55,7 +55,7 @@ export default function NetworkMapTable() {
 
       <section className="mt-4 overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0a111b]">
         <div className="flex flex-wrap gap-2 border-b border-white/[0.06] p-3">
-          <div className="relative min-w-[220px] flex-1"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search hostname, user, IP, MAC, SSID, switch…" className="w-full rounded-lg border border-white/[0.07] bg-black/20 py-2.5 pl-9 pr-3 text-xs text-white outline-none placeholder:text-slate-700 focus:border-cyan-300/35" /></div>
+          <div className="relative min-w-[220px] flex-1"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" /><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search hostname, user, IP, MAC, SSID, switch…" className="ui-input w-full pl-9" /></div>
           <Select value={attachmentType} onChange={setAttachmentType} options={[['all', 'All observations'], ['wireless', 'Wi-Fi'], ['wired', 'Ethernet'], ['dhcp', 'DHCP only']]} />
           <Select value={match} onChange={setMatch} options={[['all', 'All identities'], ['matched', 'Matched'], ['ambiguous', 'Ambiguous'], ['no_current_match', 'Unmatched']]} />
           <Select value={floor} onChange={setFloor} options={[['all', 'All floors'], ['unassigned', 'Unassigned'], ...data.floors.filter(item => item.managed).map(item => [item.id, item.label])]} />
@@ -90,4 +90,4 @@ function TableRow({ item, equipmentName, floorName, expanded, onToggle }: { item
 }
 
 function Metric({ label, value, icon: Icon }: { label: string; value: number; icon: typeof CircleDot }) { return <div className="rounded-xl border border-white/[0.07] bg-white/[0.025] p-3"><div className="flex items-center justify-between"><p className="text-[10px] uppercase tracking-wider text-slate-600">{label}</p><Icon size={13} className="text-cyan-300/50" /></div><p className="mt-2 text-xl font-semibold text-white">{value.toLocaleString()}</p></div> }
-function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[][] }) { return <select value={value} onChange={event => onChange(event.target.value)} className="rounded-lg border border-white/[0.07] bg-[#090f18] px-3 py-2 text-xs text-slate-400 outline-none focus:border-cyan-300/35">{options.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select> }
+function Select({ value, onChange, options }: { value: string; onChange: (value: string) => void; options: string[][] }) { return <select value={value} onChange={event => onChange(event.target.value)} className="ui-input">{options.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select> }

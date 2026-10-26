@@ -145,7 +145,7 @@ function SaveViewDialog({ view, definition, onClose, onSave, saving, error }: {
         {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={onClose} className="focus-accent h-9 rounded-lg border px-4 text-xs" style={{ borderColor: 'var(--border-mid)', color: 'var(--text-3)' }}>Cancel</button>
-          <button type="submit" disabled={!name.trim() || saving} className="focus-accent inline-flex h-9 items-center gap-2 rounded-lg bg-amber-400 px-4 text-xs font-semibold text-black disabled:opacity-50"><Save size={14} /> {saving ? 'Saving…' : view ? 'Update view' : 'Save view'}</button>
+          <button type="submit" disabled={!name.trim() || saving} className="ui-primary-button focus-accent disabled:opacity-50"><Save size={14} /> {saving ? 'Saving…' : view ? 'Update view' : 'Save view'}</button>
         </div>
       </form>
     </div>
@@ -261,12 +261,12 @@ export default function PuppetFacts() {
         <section className="mb-5 flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between" style={{ borderColor: 'var(--border)' }}>
           <div>
             <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-400"><Database size={14} /> PuppetDB inventory</div>
-            <h2 className="text-[22px] font-semibold tracking-[-0.035em] sm:text-[26px]" style={{ color: 'var(--text-1)' }}>Puppet Facts</h2>
-            <p className="mt-2 max-w-2xl text-[13px] leading-5" style={{ color: 'var(--text-3)' }}>Build reusable fact dashboards across managed nodes, then save the exact facts and filters your team uses.</p>
+            <h1 className="ui-page-title">Puppet Facts</h1>
+            <p className="ui-page-description">Build reusable fact dashboards across managed nodes, then save the exact facts and filters your team uses.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={refresh} className="focus-accent pressable inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-[12px]" style={{ borderColor: 'var(--border-mid)', color: 'var(--text-2)', background: 'var(--surface-2)' }}><RefreshCw size={14} className={facts.isFetching ? 'animate-spin' : ''} /> Refresh</button>
-            <button type="button" onClick={runExport} disabled={exporting} className="focus-accent pressable inline-flex h-9 items-center gap-2 rounded-lg bg-amber-400 px-3 text-[12px] font-semibold text-black disabled:opacity-60"><Download size={14} /> {exporting ? 'Exporting…' : 'Export CSV'}</button>
+            <button type="button" onClick={refresh} className="ui-secondary-button pressable"><RefreshCw size={14} className={facts.isFetching ? 'animate-spin' : ''} /> Refresh</button>
+            <button type="button" onClick={runExport} disabled={exporting} className="ui-primary-button pressable disabled:opacity-60"><Download size={14} /> {exporting ? 'Exporting…' : 'Export CSV'}</button>
           </div>
         </section>
 
@@ -306,7 +306,7 @@ export default function PuppetFacts() {
                   <div className="border-b p-3" style={{ borderColor: 'var(--border)' }}><div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-4)' }} /><input autoFocus value={pickerSearch} onChange={event => setPickerSearch(event.target.value)} placeholder="Find a fact…" className="focus-accent h-9 w-full rounded-lg border bg-[var(--surface-inset)] pl-8 pr-3 text-xs outline-none" style={{ borderColor: 'var(--border-mid)', color: 'var(--text-1)' }} /></div></div>
                   <div className="flex items-center justify-between border-b px-3 py-2 text-[10px]" style={{ borderColor: 'var(--border)', color: 'var(--text-4)' }}><span>{visiblePickerFacts.length.toLocaleString()} fact names</span><button type="button" onClick={() => setSelectedFacts([])} className="text-amber-400">Clear selection</button></div>
                   <div className="max-h-72 overflow-y-auto">{visiblePickerFacts.map(name => { const selected = selectedFacts.includes(name); const favorite = favoriteByName.has(name); return <div key={name} className="flex items-center gap-1 px-2 py-0.5 hover:bg-white/[0.03]"><button type="button" onClick={() => setSelectedFacts(current => selected ? current.filter(item => item !== name) : [...current, name])} className="flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-2 text-left"><span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${selected ? 'border-amber-400 bg-amber-400 text-black' : ''}`} style={selected ? undefined : { borderColor: 'var(--border-mid)' }}>{selected && <Check size={11} />}</span><span className="truncate font-mono text-[11px]" style={{ color: 'var(--text-2)' }}>{name}</span></button><button type="button" onClick={() => favoriteMutation.mutate(name)} aria-label={favorite ? `Remove ${name} from favourites` : `Add ${name} to favourites`} className="rounded p-2" style={{ color: favorite ? '#fbbf24' : 'var(--text-4)' }}><Star size={13} fill={favorite ? 'currentColor' : 'none'} /></button></div> })}{visiblePickerFacts.length === 0 && <div className="px-4 py-8 text-center text-xs" style={{ color: 'var(--text-4)' }}>No fact names match.</div>}</div>
-                  <div className="border-t p-2 text-right" style={{ borderColor: 'var(--border)' }}><button type="button" onClick={() => setPickerOpen(false)} className="rounded-md bg-amber-400 px-3 py-1.5 text-[11px] font-semibold text-black">Done</button></div>
+                  <div className="border-t p-2 text-right" style={{ borderColor: 'var(--border)' }}><button type="button" onClick={() => setPickerOpen(false)} className="ui-primary-button">Done</button></div>
                 </div>}
               </div>
               <select value={environment} onChange={event => setEnvironment(event.target.value)} className="focus-accent h-10 min-w-0 rounded-lg border bg-[var(--surface-inset)] px-3 text-[12px]" style={{ borderColor: 'var(--border-mid)', color: 'var(--text-2)' }}><option value="">All environments</option>{(facets.data?.environments ?? []).map(value => <option key={value} value={value}>{value}</option>)}</select>

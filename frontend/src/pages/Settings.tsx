@@ -207,7 +207,7 @@ function UsersTab() {
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-3.5 py-2 rounded-lg pressable"
+          className="ui-primary-button pressable"
         >
           <Plus size={15} /> Create user
         </button>
@@ -277,7 +277,7 @@ function UsersTab() {
             <button
               onClick={() => createMutation.mutate({ email: createEmail, role: createRole, auth_method: createAuthMethod })}
               disabled={createMutation.isPending || !createEmail}
-              className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-900 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 rounded-lg pressable"
+              className="ui-primary-button pressable disabled:cursor-not-allowed"
             >
               {createMutation.isPending
                 ? 'Creating...'
@@ -598,7 +598,7 @@ function AccountTab() {
           </div>
           <button
             type="submit"
-            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-lg pressable mt-1"
+            className="ui-primary-button pressable mt-1"
           >
             <Save size={14} /> Update password
           </button>
@@ -631,7 +631,7 @@ function AccountTab() {
               <button
                 onClick={startMfaSetup}
                 disabled={mfaLoading}
-                className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-900 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 rounded-lg pressable"
+                className="ui-primary-button pressable disabled:cursor-not-allowed"
               >
                 <Smartphone size={14} /> {mfaLoading ? 'Loading…' : 'Enable 2FA'}
               </button>
@@ -680,7 +680,7 @@ function AccountTab() {
               <button
                 onClick={enableMfa}
                 disabled={mfaLoading || mfaCode.length !== 6}
-                className="flex items-center gap-1.5 bg-green-600 hover:bg-emerald-500 disabled:bg-green-800 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+                className="ui-primary-button disabled:cursor-not-allowed"
               >
                 {mfaLoading ? 'Verifying…' : 'Activate 2FA'}
               </button>
@@ -923,7 +923,7 @@ function PlatformTab() {
       <button
         onClick={save}
         disabled={saving}
-        className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-900 text-white text-sm font-semibold px-5 py-2.5 rounded-lg pressable"
+        className="ui-primary-button pressable"
       >
         <Save size={14} /> {saving ? 'Saving…' : 'Save changes'}
       </button>
@@ -1003,7 +1003,7 @@ function FeaturesTab() {
       </Field>
     </Section>
 
-    <button onClick={save} disabled={saving} className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 disabled:bg-emerald-900 pressable"><Save size={14} />{saving ? 'Saving…' : 'Save features'}</button>
+    <button onClick={save} disabled={saving} className="ui-primary-button pressable"><Save size={14} />{saving ? 'Saving…' : 'Save features'}</button>
   </div>
 }
 
@@ -1613,7 +1613,7 @@ function SsoTab() {
       <button
         onClick={save}
         disabled={saving}
-        className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-900 text-white text-sm font-semibold px-5 py-2.5 rounded-lg pressable"
+        className="ui-primary-button pressable"
       >
         <Save size={14} /> {saving ? 'Saving…' : 'Save authentication settings'}
       </button>
@@ -1715,7 +1715,7 @@ function CertificateTab() {
             <span className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-800 text-zinc-400"><FileKey2 size={15} /></span><span className="min-w-0"><span className="block text-xs font-medium text-zinc-300">Private key</span><span className="mt-0.5 block truncate text-[10px] text-zinc-500">{privateKey?.name ?? 'Choose .pem or .key'}</span></span></span>
           </label>
           {!current?.writable && current && <p className="rounded-lg border border-amber-500/20 bg-amber-500/[0.07] px-3 py-2 text-xs text-amber-300">The certificate store is read-only. Recreate the containers with the updated Docker Compose configuration.</p>}
-          <button onClick={() => uploadMutation.mutate()} disabled={!certificate || !privateKey || uploadMutation.isPending || current?.writable === false} className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-[background-color,transform] duration-150 hover:bg-emerald-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-emerald-900 disabled:text-emerald-300/60"><Upload size={14} />{uploadMutation.isPending ? 'Validating and installing…' : 'Validate and install'}</button>
+          <button onClick={() => uploadMutation.mutate()} disabled={!certificate || !privateKey || uploadMutation.isPending || current?.writable === false} className="ui-primary-button ui-button-lg w-full active:scale-[0.98] disabled:cursor-not-allowed"><Upload size={14} />{uploadMutation.isPending ? 'Validating and installing…' : 'Validate and install'}</button>
           <p className="text-[10px] leading-relaxed text-zinc-600">A protected backup of the previous pair is retained. Private-key contents are never returned by the API or written to the audit log.</p>
         </aside>
       </div>
@@ -1855,7 +1855,7 @@ export default function Settings() {
     <div className="settings-page absolute inset-0 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="settings-page-header flex-shrink-0 px-6 pt-6 pb-0">
-        <h1 className="text-[18px] font-semibold tracking-[-0.025em] text-white mb-4">Settings</h1>
+        <h1 className="ui-page-title mb-4">Settings</h1>
         {passwordChangeRequired && (
           <div className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
             Change the temporary bootstrap password before continuing to SEC360.
@@ -1872,14 +1872,11 @@ export default function Settings() {
             <button
               key={id}
               onClick={() => setTab(id)}
-              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px"
+              className="ui-tab -mb-px"
+              aria-selected={tab === id}
               style={{
-                color: tab === id ? '#34d399' : '#71717a',
-                borderBottomColor: tab === id ? 'var(--accent)' : 'transparent',
                 transition: 'color 150ms ease, border-color 150ms ease',
               }}
-              onMouseEnter={e => { if (tab !== id) e.currentTarget.style.color = '#d4d4d8' }}
-              onMouseLeave={e => { if (tab !== id) e.currentTarget.style.color = 'var(--text-3)' }}
             >
               <Icon size={15} />
               {label}

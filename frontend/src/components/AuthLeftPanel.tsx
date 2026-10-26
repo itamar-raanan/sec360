@@ -45,8 +45,8 @@ export default function AuthLeftPanel() {
     <aside
       className="relative hidden flex-col overflow-hidden lg:flex lg:w-[54%]"
       style={{
-        background: 'linear-gradient(145deg, #0c0c18 0%, #080812 58%, #0b1020 100%)',
-        borderRight: '1px solid rgba(255,255,255,0.08)',
+        background: 'var(--surface-1)',
+        borderRight: '1px solid var(--border)',
       }}
     >
       <div
@@ -76,7 +76,7 @@ export default function AuthLeftPanel() {
             <span style={{ color: 'var(--accent)' }}>Operations</span><br />
             Center
           </h2>
-          <p className="max-w-[300px] text-[13px] leading-[1.65]" style={{ color: '#9090a0' }}>
+          <p className="max-w-[300px] text-[13px] leading-[1.65]" style={{ color: 'var(--text-3)' }}>
             Real-time endpoint protection, identity compliance, and threat detection — unified.
           </p>
         </div>
@@ -91,7 +91,7 @@ export default function AuthLeftPanel() {
               <span className="h-2.5 w-2.5 rounded-full" style={{ background: 'rgba(234,179,8,0.5)' }} />
               <span className="h-2.5 w-2.5 rounded-full" style={{ background: 'rgba(34,197,94,0.5)' }} />
             </div>
-            <span className="ml-2 font-mono text-[10px]" style={{ color: '#6f6f7c' }}>sec360 — threat_activity.log</span>
+            <span className="ml-2 font-mono text-[10px]" style={{ color: 'var(--text-3)' }}>sec360 — threat_activity.log</span>
             <div className="ml-auto flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" style={{ animation: 'pulse-dot 1.2s ease-in-out infinite' }} />
               <span className="font-mono text-[10px] font-bold text-emerald-500">LIVE</span>
@@ -106,10 +106,10 @@ export default function AuthLeftPanel() {
                   className="flex items-center gap-2.5 font-mono text-[10.5px]"
                   style={{ opacity: Math.max(0.18, 1 - index * 0.14), animation: index === 0 ? 'fade-in 0.25s ease both' : undefined }}
                 >
-                  <span className="flex-shrink-0" style={{ color: '#6f6f7c' }}>{event.time}</span>
+                  <span className="flex-shrink-0" style={{ color: 'var(--text-3)' }}>{event.time}</span>
                   <span className="w-11 flex-shrink-0 text-right font-bold" style={{ color: event.color }}>[{event.level}]</span>
-                  <span className="truncate" style={{ color: '#777784' }}>{event.msg}</span>
-                  <span className="ml-auto flex-shrink-0" style={{ color: '#6f6f7c' }}>{event.host}</span>
+                  <span className="truncate" style={{ color: 'var(--text-3)' }}>{event.msg}</span>
+                  <span className="ml-auto flex-shrink-0" style={{ color: 'var(--text-4)' }}>{event.host}</span>
                 </div>
               ))}
             </div>
@@ -122,9 +122,9 @@ export default function AuthLeftPanel() {
             { label: 'Threats/24h', value: '38', color: '#f97316' },
             { label: 'Compliant', value: '94%', color: '#10b981' },
           ].map(stat => (
-            <div key={stat.label} className="rounded-lg px-3 py-2.5" style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <div key={stat.label} className="rounded-[var(--radius-panel)] px-3 py-2.5" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
               <div className="text-xl font-bold tabular-nums tracking-[-0.03em]" style={{ color: stat.color }}>{stat.value}</div>
-              <div className="mt-0.5 text-[9px] font-semibold uppercase tracking-widest" style={{ color: '#777784' }}>{stat.label}</div>
+              <div className="mt-0.5 text-[10px] font-semibold" style={{ color: 'var(--text-4)' }}>{stat.label}</div>
             </div>
           ))}
         </div>

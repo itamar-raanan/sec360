@@ -294,7 +294,7 @@ function ComplianceScopeControl({ endpoint }: { endpoint: EndpointDetail }) {
               type="button"
               onClick={save}
               disabled={mutation.isPending || (hasExclusion && !reason.trim())}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-1.5 text-[11px] font-semibold text-zinc-950 hover:bg-emerald-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+              className="ui-primary-button active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
             >
               {mutation.isPending ? <RefreshCw size={11} className="animate-spin" /> : <Check size={11} />}
               Save scope

@@ -67,6 +67,7 @@ interface SystemSettings {
   endpoint_product_tags: EndpointProductTag[]
   network_map_enabled: boolean
   linux_audit_enabled: boolean
+  proxy_audit_enabled: boolean
 }
 
 type EndpointProductTag = 'S1' | 'DLP' | 'WSS'
@@ -790,6 +791,7 @@ function PlatformTab() {
         queryClient.invalidateQueries({ queryKey: ['user-identity'] }),
         queryClient.invalidateQueries({ queryKey: ['network-map-status'] }),
         queryClient.invalidateQueries({ queryKey: ['linux-audit-status'] }),
+        queryClient.invalidateQueries({ queryKey: ['proxy-audit-status'] }),
       ])
       setMsg({ type: 'success', msg: 'Settings saved and security posture recalculated' })
       refetch()
@@ -932,6 +934,12 @@ function PlatformTab() {
       <Section title="Linux Audit" hint="Optional manual ingestion and review of Debian 13 CIS audit evidence.">
         <Field label="Enable Linux Audit" hint="Shows the Linux Audit inventory, upload flow, and safe report viewer">
           <Toggle checked={form.linux_audit_enabled} onChange={v => set('linux_audit_enabled', v)} />
+        </Field>
+      </Section>
+
+      <Section title="Proxy Audit" hint="Optional revision audit for Symantec Management Center policies and shared objects.">
+        <Field label="Enable Proxy Audit" hint="Shows the Proxy Audit workspace and its page-local Management Center connection">
+          <Toggle checked={form.proxy_audit_enabled} onChange={v => set('proxy_audit_enabled', v)} />
         </Field>
       </Section>
 

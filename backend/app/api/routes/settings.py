@@ -116,6 +116,7 @@ class SystemSettingsIn(BaseModel):
     endpoint_product_tags: Optional[list[Literal["S1", "DLP", "WSS"]]] = None
     network_map_enabled: Optional[bool] = None
     linux_audit_enabled: Optional[bool] = None
+    proxy_audit_enabled: Optional[bool] = None
 
 
 class SystemSettingsOut(BaseModel):
@@ -146,6 +147,7 @@ class SystemSettingsOut(BaseModel):
     endpoint_product_tags: list[str]
     network_map_enabled: bool
     linux_audit_enabled: bool
+    proxy_audit_enabled: bool
 
 
 class SamlSettingsIn(BaseModel):

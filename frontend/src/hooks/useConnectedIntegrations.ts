@@ -23,6 +23,12 @@ export function useConnectedIntegrations() {
     staleTime: 15_000,
     refetchInterval: 30_000,
   })
+  const proxyAudit = useQuery<{ enabled: boolean }>({
+    queryKey: ['proxy-audit-status'],
+    queryFn: () => apiClient.get('/proxy-audit/status').then(response => response.data),
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  })
 
   const connected = useMemo(
     () => new Set(
@@ -53,10 +59,11 @@ export function useConnectedIntegrations() {
         .flatMap(item => item.available_features ?? []),
         ...(networkMap.data?.enabled ? ['network_map'] : []),
         ...(linuxAudit.data?.enabled ? ['linux_audit'] : []),
+        ...(proxyAudit.data?.enabled ? ['proxy_audit'] : []),
       ],
     ),
-    [query.data, networkMap.data?.enabled, linuxAudit.data?.enabled],
+    [query.data, networkMap.data?.enabled, linuxAudit.data?.enabled, proxyAudit.data?.enabled],
   )
 
-  return { ...query, isLoading: query.isLoading || networkMap.isLoading || linuxAudit.isLoading, connected, configured, features }
+  return { ...query, isLoading: query.isLoading || networkMap.isLoading || linuxAudit.isLoading || proxyAudit.isLoading, connected, configured, features }
 }

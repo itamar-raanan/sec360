@@ -39,7 +39,7 @@ async def get_db() -> AsyncSession:
 async def init_db():
     """Create all tables and apply incremental schema patches."""
     async with engine.begin() as conn:
-        from app.models import user, endpoint, agent, activity, compliance, application, audit, system_settings, report, note, puppet, change_event, network_map, linux_audit  # noqa
+        from app.models import user, endpoint, agent, activity, compliance, application, audit, system_settings, report, note, puppet, change_event, network_map, linux_audit, proxy_audit  # noqa
         await conn.run_sync(Base.metadata.create_all)
         # Incremental patches — safe to run repeatedly
         from sqlalchemy import text
@@ -115,6 +115,8 @@ async def init_db():
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS siem_config JSONB",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS network_map_enabled BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS linux_audit_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+            "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS proxy_audit_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+            "UPDATE proxy_audit_connections SET sync_in_progress = FALSE WHERE sync_in_progress = TRUE",
             "ALTER TABLE linux_audit_reports ADD COLUMN IF NOT EXISTS schema_version VARCHAR(20)",
             "ALTER TABLE linux_audit_reports ADD COLUMN IF NOT EXISTS fqdn VARCHAR(255)",
             "ALTER TABLE linux_audit_reports ADD COLUMN IF NOT EXISTS ip_addresses JSONB NOT NULL DEFAULT '[]'::jsonb",

@@ -51,7 +51,7 @@ const DEFAULT_VIEW: PuppetFactViewDefinition = {
 }
 
 const TYPE_COLORS: Record<PuppetFactValueType, string> = {
-  string: '#60a5fa', number: '#c084fc', boolean: '#34d399',
+  string: '#60a5fa', number: '#d6a72d', boolean: '#34d399',
   object: '#fbbf24', array: '#fb923c', null: '#71717a',
 }
 

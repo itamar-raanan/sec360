@@ -41,7 +41,7 @@ export default function Login() {
 
   if (isAuthenticated) return <Navigate to={from} replace />
 
-  const inputBase = "w-full text-[15px] rounded-lg px-4 py-3 focus:outline-none"
+  const inputBase = "w-full min-h-11 text-[15px] rounded-[6px] px-4 py-3 focus:outline-none"
   const inputStyle: React.CSSProperties = {
     background: 'var(--surface-3)',
     border: '1px solid var(--border-mid)',
@@ -91,11 +91,10 @@ export default function Login() {
       <AuthLeftPanel />
 
       {/* Right — form */}
-      <div className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden">
+      <main className="flex-1 flex flex-col items-center justify-center px-6 py-10 sm:px-10 relative overflow-hidden">
         {/* Mobile logo */}
         <div className="lg:hidden flex items-center gap-2.5 mb-10 relative z-10">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ background: 'var(--accent)' }}>
+          <div className="brand-mark">
             <ShieldCheck size={16} className="text-white" strokeWidth={2.5} />
           </div>
           <span className="font-bold text-lg tracking-tight" style={{ color: 'var(--text-1)' }}>SEC360</span>
@@ -103,23 +102,17 @@ export default function Login() {
 
         {/* Form card */}
         <div
-          className="auth-card w-full max-w-[440px] relative z-10 rounded-xl p-8 sm:p-10"
+          className="auth-card w-full max-w-[390px] relative z-10"
           style={{
-            background: 'var(--surface-1)',
-            border: '1px solid var(--border-mid)',
-            boxShadow: 'var(--shadow-float)',
+            background: 'transparent',
           }}
         >
           {step === 'credentials' ? (
             <div className="fade-up" style={{ animationDuration: '300ms' }}>
               {/* Header */}
-              <div className="mb-8">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-5"
-                  style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.18)' }}>
-                  <ShieldCheck size={22} style={{ color: 'var(--accent)' }} strokeWidth={2.5} />
-                </div>
-                <h1 className="font-bold mb-1.5" style={{ color: 'var(--text-1)', fontSize: 26, letterSpacing: '-0.03em' }}>Welcome back</h1>
-                <p style={{ fontSize: 14, color: 'var(--text-4)' }}>Sign in to your workspace</p>
+              <div className="mb-9">
+                <h1 className="font-semibold mb-2" style={{ color: 'var(--text-1)', fontSize: 28, letterSpacing: '-0.035em' }}>Sign in to SEC360</h1>
+                <p style={{ fontSize: 14, color: 'var(--text-3)' }}>Continue to your security workspace.</p>
               </div>
 
               {error && (
@@ -134,7 +127,7 @@ export default function Login() {
 
               <form onSubmit={handleCredentials} className="space-y-5">
                 <div className="space-y-2">
-                  <label className="block font-bold uppercase tracking-[0.1em]" style={{ fontSize: 11, color: 'var(--text-4)' }}>
+                  <label className="block font-medium" style={{ fontSize: 13, color: 'var(--text-2)' }}>
                     Email address
                   </label>
                   <input
@@ -151,7 +144,7 @@ export default function Login() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="block font-bold uppercase tracking-[0.1em]" style={{ fontSize: 11, color: 'var(--text-4)' }}>
+                  <label className="block font-medium" style={{ fontSize: 13, color: 'var(--text-2)' }}>
                     Password
                   </label>
                   <div className="relative">
@@ -182,8 +175,8 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full flex items-center justify-center gap-2 text-white font-bold rounded-lg py-3.5 pressable disabled:opacity-50 disabled:cursor-not-allowed mt-2"
-                  style={{ fontSize: 15, background: 'var(--accent)', letterSpacing: '-0.01em' }}
+                  className="w-full min-h-11 flex items-center justify-center gap-2 font-semibold rounded-[6px] pressable disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+                  style={{ fontSize: 14, background: 'var(--text-1)', color: 'var(--surface-0)', letterSpacing: '-0.01em' }}
                 >
                   {loading ? (
                     <>
@@ -206,7 +199,7 @@ export default function Login() {
                 <>
                   <div className="flex items-center gap-3 my-5">
                     <div className="flex-1 h-px" style={{ background: 'var(--shimmer-a)' }} />
-                    <span className="font-bold uppercase tracking-[0.12em]" style={{ fontSize: 9.5, color: 'var(--text-4)' }}>or</span>
+                    <span className="font-medium" style={{ fontSize: 12, color: 'var(--text-3)' }}>or</span>
                     <div className="flex-1 h-px" style={{ background: 'var(--shimmer-a)' }} />
                   </div>
 
@@ -214,10 +207,10 @@ export default function Login() {
                     type="button"
                     onClick={() => { window.location.href = '/api/auth/saml/login' }}
                     disabled={loading}
-                    className="flex w-full items-center justify-center gap-2.5 rounded-lg px-4 py-3.5 font-medium text-white pressable disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ fontSize: 15, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-mid)', transition: 'border-color 120ms ease, background 120ms ease' }}
+                    className="flex min-h-11 w-full items-center justify-center gap-2.5 rounded-[6px] px-4 font-medium pressable disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ fontSize: 14, color: 'var(--text-1)', background: 'var(--surface-2)', border: '1px solid var(--border-mid)', transition: 'border-color 120ms ease, background 120ms ease' }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-lit)'; e.currentTarget.style.background = 'var(--shimmer-a)' }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-mid)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-mid)'; e.currentTarget.style.background = 'var(--surface-2)' }}
                   >
                     {sso.provider === 'google' ? (
                       <svg width="14" height="14" viewBox="0 0 48 48">
@@ -235,12 +228,9 @@ export default function Login() {
           ) : (
             <div className="fade-up" style={{ animationDuration: '300ms' }}>
               <div className="mb-8">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-5"
-                  style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.18)' }}>
-                  <Smartphone size={22} style={{ color: 'var(--accent)' }} />
-                </div>
-                <h1 className="font-bold mb-1.5" style={{ color: 'var(--text-1)', fontSize: 26, letterSpacing: '-0.03em' }}>Two-factor auth</h1>
-                <p style={{ fontSize: 14, color: 'var(--text-4)' }}>Enter the 6-digit code from your authenticator app</p>
+                <div className="mb-5 flex items-center gap-2" style={{ color: 'var(--accent)' }}><Smartphone size={18} /><span className="text-[13px] font-medium">Identity verification</span></div>
+                <h1 className="font-semibold mb-1.5" style={{ color: 'var(--text-1)', fontSize: 28, letterSpacing: '-0.035em' }}>Two-factor authentication</h1>
+                <p style={{ fontSize: 14, color: 'var(--text-3)' }}>Enter the six-digit code from your authenticator app.</p>
               </div>
 
               {error && (
@@ -255,7 +245,7 @@ export default function Login() {
 
               <form onSubmit={handleTotp} className="space-y-5">
                 <div className="space-y-2">
-                  <label className="block font-bold uppercase tracking-[0.1em]" style={{ fontSize: 11, color: 'var(--text-4)' }}>
+                  <label className="block font-medium" style={{ fontSize: 13, color: 'var(--text-2)' }}>
                     Authenticator code
                   </label>
                   <input
@@ -278,8 +268,8 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={loading || totpCode.length !== 6}
-                  className="w-full flex items-center justify-center gap-2 text-white font-bold rounded-lg py-3.5 pressable disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{ fontSize: 15, background: 'var(--accent)', boxShadow: '0 0 24px rgba(16,185,129,0.22)', letterSpacing: '-0.01em' }}
+                  className="w-full min-h-11 flex items-center justify-center gap-2 font-semibold rounded-[6px] pressable disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ fontSize: 14, background: 'var(--text-1)', color: 'var(--surface-0)', letterSpacing: '-0.01em' }}
                 >
                   {loading ? 'Verifying…' : <><span>Verify &amp; sign in</span><ArrowRight size={14} /></>}
                 </button>
@@ -300,15 +290,12 @@ export default function Login() {
         </div>
 
         {/* Footer */}
-        <div className="mt-8 relative z-10 flex items-center gap-4" style={{ fontSize: 11, color: 'var(--text-4)' }}>
+        <div className="mt-10 relative z-10 flex items-center gap-3" style={{ fontSize: 13, color: 'var(--text-3)' }}>
           <span>© 2026 SEC360</span>
           <span>·</span>
-          <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-            <span>All systems operational</span>
-          </div>
+          <span>Secure access</span>
         </div>
-      </div>
+      </main>
     </div>
   )
 }

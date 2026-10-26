@@ -76,21 +76,19 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
           collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-3 py-2'
         } ${
           isActive
-            ? 'nav-item--active text-emerald-500'
+            ? 'nav-item--active'
             : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04]'
         }`
       }
     >
       {({ isActive }) => (
         <>
-          {isActive && !collapsed && (
-            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full" style={{ background: 'var(--accent)' }} />
-          )}
+          {isActive && !collapsed && <span className="absolute bottom-0 left-3 h-px w-5" style={{ background: 'var(--accent)' }} />}
           <span
             className={`rounded-md p-1 transition-[background-color] duration-150 flex-shrink-0 ${
-              isActive ? 'text-emerald-400' : 'text-zinc-600 group-hover:text-zinc-300'
+              isActive ? '' : 'text-zinc-600 group-hover:text-zinc-300'
             }`}
-            style={isActive ? { background: 'var(--accent-dim)' } : {}}
+            style={isActive ? { color: 'var(--text-1)' } : {}}
           >
             <Icon size={14} strokeWidth={isActive ? 2.5 : 2} />
           </span>
@@ -126,7 +124,7 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
       >
         <div
           className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ background: 'var(--accent)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.18)' }}
+          style={{ background: 'var(--accent)' }}
         >
           <ShieldCheck size={15} className="text-white" strokeWidth={2.5} />
         </div>
@@ -173,7 +171,7 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
           >
             <Search size={12} className="flex-shrink-0" />
             <span className="flex-1 text-left overflow-hidden" style={{ whiteSpace: 'nowrap' }}>Search…</span>
-            <kbd className="px-1 py-0.5 rounded text-[9px] font-mono flex-shrink-0"
+            <kbd className="px-1 py-0.5 rounded text-[11px] flex-shrink-0"
               style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', color: 'var(--text-4)' }}>⌘K</kbd>
           </button>
         )}
@@ -210,7 +208,7 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
                     aria-expanded={isExpanded}
                   >
                     <span
-                      className="text-[9px] font-semibold uppercase tracking-[0.13em] flex-1 whitespace-nowrap"
+                      className="text-[12px] font-medium flex-1 whitespace-nowrap"
                       style={{ color: hasActiveItem ? 'var(--text-2)' : 'var(--text-4)' }}
                     >
                       {group.label}
@@ -305,7 +303,7 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
             <div className="text-[12px] font-medium truncate leading-none whitespace-nowrap" style={{ color: 'var(--text-1)' }}>
               {user?.email?.split('@')[0]}
             </div>
-            <div className="text-[10px] capitalize mt-0.5 whitespace-nowrap" style={{ color: 'var(--text-4)' }}>{user?.role}</div>
+            <div className="text-[11px] capitalize mt-0.5 whitespace-nowrap" style={{ color: 'var(--text-3)' }}>{user?.role}</div>
           </div>
           <button
             onClick={handleLogout}

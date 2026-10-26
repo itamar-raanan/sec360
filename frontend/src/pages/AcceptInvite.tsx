@@ -112,7 +112,7 @@ export default function AcceptInvite() {
                         : { background: 'var(--surface-3)', color: 'var(--text-4)', border: '1px solid var(--border)' }
                     }
                   >
-                    {i < stepIndex ? '✓' : i + 1}
+                    {i < stepIndex ? 'Done' : i + 1}
                   </div>
                   <span className="text-[12px]" style={{ color: i === stepIndex ? '#f1f5f9' : '#52525e' }}>{label}</span>
                 </div>

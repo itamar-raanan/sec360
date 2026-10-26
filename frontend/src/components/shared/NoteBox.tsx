@@ -57,7 +57,7 @@ export default function NoteBox({ entityType, entityId, currentUserEmail, curren
   return (
     <div className="space-y-3">
       {/* Section header */}
-      <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+      <div className="text-xs font-medium text-zinc-500 flex items-center gap-1.5">
         <MessageSquare className="w-3.5 h-3.5" />
         Notes {notes.length > 0 && <span className="text-zinc-600">({notes.length})</span>}
       </div>

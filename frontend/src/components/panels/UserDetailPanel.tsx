@@ -21,7 +21,7 @@ const PRODUCT_LABELS: Record<string, string> = {
 }
 
 const PRODUCT_COLORS: Record<string, string> = {
-  sentinelone: 'bg-emerald-500/15 text-purple-300 border-emerald-500/30',
+  sentinelone: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
   symantec: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30',
   symantec_wss: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
   jumpcloud: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
@@ -135,7 +135,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
         </div>
 
         <div className="space-y-1.5">
-          <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Profile</div>
+          <div className="text-xs font-medium text-zinc-500">Profile</div>
           <div className="bg-zinc-900 rounded-lg divide-y divide-gray-700/60">
             {identity.job_title && (
               <div className="flex items-center gap-3 px-4 py-2.5">
@@ -211,7 +211,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
         </div>
 
         <div className="space-y-1.5">
-          <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Agent Coverage</div>
+          <div className="text-xs font-medium text-zinc-500">Agent coverage</div>
           <div className="grid grid-cols-2 gap-2">
             {[
               ...(productEnabled('S1') ? [{ label: 'SentinelOne', count: identity.endpoints_with_sentinelone }] : []),
@@ -239,7 +239,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
         />
 
         <div className="space-y-1.5">
-          <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+          <div className="text-xs font-medium text-zinc-500">
             Endpoints ({identity.total_endpoints})
           </div>
           {identity.endpoints.length === 0 ? (

@@ -859,8 +859,8 @@ export default function NetworkMapScene(props: Props) {
       <line x1="22" y1={guideTop} x2="45" y2="33" stroke="url(#floor-guide)" strokeWidth=".18" vectorEffect="non-scaling-stroke" filter="url(#floor-guide-glow)" />
       <line x1="22" y1={guideTop} x2="45" y2="67" stroke="url(#floor-guide)" strokeWidth=".18" vectorEffect="non-scaling-stroke" filter="url(#floor-guide-glow)" />
     </svg>}
-    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_34%_44%,transparent_0%,transparent_27%,rgba(3,9,19,.08)_48%,rgba(3,9,19,.35)_100%)]" />
-    <div className={`pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_at_73%_51%,rgba(3,9,19,.76)_0%,rgba(3,9,19,.58)_34%,rgba(3,9,19,.12)_64%,transparent_80%)] transition-opacity duration-1000 ease-[cubic-bezier(.22,1,.36,1)] motion-reduce:transition-none ${selectedFloor ? 'opacity-100' : 'opacity-0'}`} />
+    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_34%_44%,transparent_0%,transparent_27%,rgba(3,9,19,.08)_48%,rgba(3,9,19,.35)_100%)]" /> {/* taste-skill-ignore: vignette is a depth cue inside the 3D topology renderer */}
+    <div className={`pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(ellipse_at_73%_51%,rgba(3,9,19,.76)_0%,rgba(3,9,19,.58)_34%,rgba(3,9,19,.12)_64%,transparent_80%)] transition-opacity duration-1000 ease-[cubic-bezier(.22,1,.36,1)] motion-reduce:transition-none ${selectedFloor ? 'opacity-100' : 'opacity-0'}`} /> {/* taste-skill-ignore: selected-floor spotlight communicates spatial focus */}
     {!failed && <div ref={hostRef} className="absolute inset-0 z-[2] h-full w-full" />}
     {failed && <div className="absolute right-[8%] top-1/2 z-[3] -translate-y-1/2 text-center"><p className="text-sm font-medium text-zinc-300">Live floor rendering is unavailable</p><p className="mt-1 text-xs text-zinc-600">The building and floor directory remain available.</p></div>}
   </div>

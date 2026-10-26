@@ -86,7 +86,7 @@ export default function MobileNavigation({ onOpenCmd }: MobileNavigationProps) {
                 const groupItems = sheetItems.filter(item => item.group === group.id)
                 if (!groupItems.length) return null
                 return <section key={group.id} aria-labelledby={`mobile-group-${group.id}`}>
-                  <p className="ui-eyebrow px-1" id={`mobile-group-${group.id}`}>{group.label}</p>
+                  <p className="ui-context px-1" id={`mobile-group-${group.id}`}>{group.label}</p>
                   <div className="mt-2 grid grid-cols-2 gap-1.5">
                     {groupItems.map(({ to, icon: Icon, label, shortLabel }) => (
                       <NavLink key={to} to={to} className={({ isActive }) => `mobile-sheet-link ${isActive ? 'is-active' : ''}`}>

@@ -32,11 +32,11 @@ const EVENT_CONFIG: Record<EventType, { icon: React.ElementType; label: string; 
   login:        { icon: LogIn,        label: 'Login',        accent: '#10b981', bg: 'rgba(16,185,129,0.10)' },
   logout:       { icon: LogOut,       label: 'Logout',       accent: '#71717a', bg: 'rgba(113,113,122,0.10)' },
   app_usage:    { icon: MonitorSmartphone, label: 'App Usage', accent: '#06b6d4', bg: 'rgba(6,182,212,0.10)' },
-  network:      { icon: Globe,        label: 'Network',      accent: '#8b5cf6', bg: 'rgba(139,92,246,0.10)' },
+  network:      { icon: Globe,        label: 'Network',      accent: '#2aa198', bg: 'rgba(42,161,152,0.10)' },
   vpn:          { icon: Wifi,         label: 'VPN',          accent: '#10b981', bg: 'rgba(16,185,129,0.10)' },
   file_access:  { icon: FileText,     label: 'File Access',  accent: '#f59e0b', bg: 'rgba(245,158,11,0.10)' },
   oauth_grant:  { icon: Key,          label: 'OAuth',        accent: '#f97316', bg: 'rgba(249,115,22,0.10)' },
-  saml:         { icon: Fingerprint,  label: 'SAML',         accent: '#6366f1', bg: 'rgba(99,102,241,0.10)' },
+  saml:         { icon: Fingerprint,  label: 'SAML',         accent: '#3a9d8f', bg: 'rgba(58,157,143,0.10)' },
   user_account: { icon: User,         label: 'Account',      accent: '#ec4899', bg: 'rgba(236,72,153,0.10)' },
   access_eval:  { icon: ShieldCheck,  label: 'Access Eval',  accent: '#14b8a6', bg: 'rgba(20,184,166,0.10)' },
   cloud_access: { icon: Cloud,        label: 'Cloud Access', accent: '#0ea5e9', bg: 'rgba(14,165,233,0.10)' },
@@ -297,7 +297,7 @@ function DateDivider({ date, count }: { date: string; count: number }) {
     <div className="flex items-center gap-3 px-5 py-2 sticky top-0 z-10"
       style={{ background: 'color-mix(in srgb, var(--surface-1) 92%, transparent)', backdropFilter: 'blur(8px)', borderBottom: '1px solid var(--border)' }}>
       <Shield size={11} style={{ color: 'var(--text-4)' }} />
-      <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--text-4)' }}>
+      <span className="text-[12px] font-medium" style={{ color: 'var(--text-3)' }}>
         {date}
       </span>
       <span className="text-[10px] tabular-nums ml-auto" style={{ color: 'var(--text-4)' }}>

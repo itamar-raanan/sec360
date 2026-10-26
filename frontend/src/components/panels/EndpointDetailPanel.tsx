@@ -64,7 +64,7 @@ function InfoRow({ icon: Icon, label, value, mono = false, colorClass }: {
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest px-1">
+    <div className="text-[12px] font-medium text-zinc-500 px-1">
       {children}
     </div>
   )
@@ -251,7 +251,7 @@ function ComplianceScopeControl({ endpoint }: { endpoint: EndpointDetail }) {
 
           {agents.length > 0 && (
             <div className={excludeAll ? 'pointer-events-none opacity-40' : ''}>
-              <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">Specific agent exceptions</div>
+              <div className="mb-1.5 text-[12px] font-medium text-zinc-500">Specific agent exceptions</div>
               <div className="divide-y divide-white/[0.05] rounded-lg border border-white/[0.07]">
                 {agents.map(agent => (
                   <label key={agent.key} className="flex cursor-pointer items-center gap-2.5 px-3 py-2">
@@ -507,7 +507,7 @@ export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
         <div className="flex items-center gap-2.5 flex-shrink-0">
           <RiskBadge score={ep.risk_score_override ?? ep.risk_score} />
           {ep.risk_score_override != null && (
-            <span className="text-[10px] text-amber-400" title="Risk score is overridden">⚑</span>
+            <span className="text-[11px] text-amber-400" title="Risk score is overridden">Override</span>
           )}
         </div>
       </div>

@@ -39,7 +39,7 @@ const TYPE_LABELS: Record<ReportType, string> = {
 const TYPE_COLORS: Record<ReportType, string> = {
   compliance: 'blue',
   risk:       'red',
-  users:      'purple',
+  users:      'emerald',
   endpoints:  'orange',
   activity:   'green',
 }
@@ -350,7 +350,6 @@ export default function Reports() {
   const colorCls = (color: string) => ({
     blue:   'bg-emerald-500/10 text-emerald-400 border-emerald-500/15',
     red:    'bg-red-500/10 text-red-400 border-red-500/20',
-    purple: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
     orange: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
     green:  'bg-emerald-500/10 text-emerald-300 border-green-500/20',
   })[color] ?? ''
@@ -458,7 +457,7 @@ export default function Reports() {
             <p className="text-xs text-zinc-500 mt-0.5">Reports are sent by email on the configured frequency.</p>
           </div>
           <button onClick={() => setShowScheduleModal(true)}
-            className="flex items-center gap-1.5 bg-purple-600 hover:bg-emerald-500 text-white text-sm font-medium px-3.5 py-2 rounded-lg transition-colors">
+            className="flex items-center gap-1.5 text-sm font-medium px-3.5 py-2 rounded-md transition-colors" style={{ background: 'var(--text-1)', color: 'var(--surface-0)' }}>
             <Plus size={14} /> Schedule report
           </button>
         </div>

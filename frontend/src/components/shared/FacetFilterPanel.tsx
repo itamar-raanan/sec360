@@ -48,7 +48,7 @@ export default function FacetFilterPanel({
         className="flex items-center justify-between px-3 py-2.5 flex-shrink-0"
         style={{ borderBottom: '1px solid var(--border)' }}
       >
-        <span className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-4)', letterSpacing: '0.1em' }}>
+        <span className="text-xs font-medium" style={{ color: 'var(--text-3)' }}>
           Filters
         </span>
         <button

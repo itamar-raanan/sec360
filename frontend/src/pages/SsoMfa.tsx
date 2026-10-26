@@ -92,7 +92,7 @@ export default function SsoMfa() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="block font-bold uppercase tracking-[0.1em]" style={{ fontSize: 10, color: 'var(--text-4)' }}>
+              <label className="block font-medium" style={{ fontSize: 13, color: 'var(--text-2)' }}>
                 Authenticator code
               </label>
               <input

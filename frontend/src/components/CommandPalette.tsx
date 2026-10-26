@@ -87,7 +87,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { kind: 'nav', id: 'dlp-policy-search', label: 'DLP Search', description: 'Find user exclusions across DLP policies', icon: Database, action: () => navigate('/dlp-user-policy-search'), keywords: ['user', 'policy', 'symantec', 'exclusion', 'sender', 'recipient'], requiredIntegration: 'symantec_dlp' },
     { kind: 'nav', id: 'reports',      label: 'Reports',       description: 'Generate and export reports',    icon: FileText,        action: () => navigate('/reports'),       keywords: ['export', 'pdf', 'csv'] },
     { kind: 'nav', id: 'security',     label: 'Security',      description: 'Change log, audit log & SIEM',   icon: Lock,            action: () => navigate('/security'),      keywords: ['changes', 'audit', 'logs', 'siem'] },
-    { kind: 'nav', id: 'integrations', label: 'Integrations', description: 'Connect products and unlock their features', icon: Plug, action: () => navigate('/integrations'), keywords: ['store', 'sentinelone', 'jumpcloud', 'google', 'products'] },
+    { kind: 'nav', id: 'integrations', label: 'Integrations', description: 'Connect products and enable their workspaces', icon: Plug, action: () => navigate('/integrations'), keywords: ['store', 'sentinelone', 'jumpcloud', 'google', 'products'] },
     { kind: 'nav', id: 'settings',     label: 'Settings',      description: 'Platform configuration',        icon: Settings,        action: () => navigate('/settings'),      keywords: ['config', 'platform', 'sso', 'mfa'] },
   ], [navigate])
 
@@ -341,7 +341,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
               {/* Navigation section */}
               {navResults.length > 0 && (
                 <>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest px-4 pt-2 pb-1.5 text-zinc-600">
+                  <p className="text-[12px] font-medium px-4 pt-2 pb-1.5 text-zinc-500">
                     {query ? 'Navigation' : 'Jump to'}
                   </p>
                   {navResults.map((r, i) => (
@@ -353,7 +353,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
               {/* Endpoints section */}
               {epResults.length > 0 && (
                 <>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest px-4 pt-3 pb-1.5 text-zinc-600">
+                  <p className="text-[12px] font-medium px-4 pt-3 pb-1.5 text-zinc-500">
                     Endpoints
                   </p>
                   {epResults.map((r, i) => (
@@ -365,7 +365,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
               {/* Users section */}
               {userResults.length > 0 && (
                 <>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest px-4 pt-3 pb-1.5 text-zinc-600">
+                  <p className="text-[12px] font-medium px-4 pt-3 pb-1.5 text-zinc-500">
                     Users
                   </p>
                   {userResults.map((r, i) => (

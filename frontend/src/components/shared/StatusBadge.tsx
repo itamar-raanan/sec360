@@ -12,7 +12,7 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
   active: { label: 'Active', className: 'bg-green-500/15 text-green-400 border-green-500/30' },
   inactive: { label: 'Inactive', className: 'bg-red-500/15 text-red-400 border-red-500/30' },
   unknown: { label: 'Unknown', className: 'bg-gray-500/15 text-gray-400 border-gray-500/30' },
-  on_leave: { label: 'On Leave', className: 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/30' },
+  on_leave: { label: 'On Leave', className: 'bg-zinc-500/10 text-zinc-300 border-zinc-500/30' },
 }
 
 export default function StatusBadge({ status }: StatusBadgeProps) {

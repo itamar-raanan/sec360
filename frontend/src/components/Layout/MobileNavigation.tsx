@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { LogOut, Menu, Moon, Search, ShieldCheck, Sun, X } from 'lucide-react'
 import { useAuthStore } from '../../store/auth'
 import { useThemeStore } from '../../store/theme'
-import { visibleNavigation } from './navigation'
+import { NAV_GROUPS, visibleNavigation } from './navigation'
 import { useConnectedIntegrations } from '../../hooks/useConnectedIntegrations'
 
 const PRIMARY_PATHS = ['/dashboard', '/endpoints', '/compliance', '/activity']
@@ -22,6 +22,7 @@ export default function MobileNavigation({ onOpenCmd }: MobileNavigationProps) {
   const { connected, features } = useConnectedIntegrations()
   const items = visibleNavigation(user?.role, connected, features)
   const primary = items.filter(item => PRIMARY_PATHS.includes(item.to))
+  const sheetItems = items.filter(item => !PRIMARY_PATHS.includes(item.to))
 
   useEffect(() => setOpen(false), [location.pathname])
   useEffect(() => {
@@ -81,11 +82,11 @@ export default function MobileNavigation({ onOpenCmd }: MobileNavigationProps) {
             </button>
 
             <div className="mobile-sheet-content">
-              {(['Monitor', 'Analyze', 'Manage'] as const).map(group => {
-                const groupItems = items.filter(item => item.group === group)
+              {NAV_GROUPS.map(group => {
+                const groupItems = sheetItems.filter(item => item.group === group.id)
                 if (!groupItems.length) return null
-                return <section key={group} aria-labelledby={`mobile-group-${group}`}>
-                  <p className="ui-eyebrow px-1" id={`mobile-group-${group}`}>{group}</p>
+                return <section key={group.id} aria-labelledby={`mobile-group-${group.id}`}>
+                  <p className="ui-eyebrow px-1" id={`mobile-group-${group.id}`}>{group.label}</p>
                   <div className="mt-2 grid grid-cols-2 gap-1.5">
                     {groupItems.map(({ to, icon: Icon, label, shortLabel }) => (
                       <NavLink key={to} to={to} className={({ isActive }) => `mobile-sheet-link ${isActive ? 'is-active' : ''}`}>

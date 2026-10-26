@@ -1,6 +1,6 @@
 # SEC360
 
-SEC360 is a self-hosted security visibility and posture-management platform. It combines identity, endpoint, security-agent, activity, vulnerability, and DLP data in one analyst interface. The platform correlates records from multiple systems, evaluates endpoint compliance, calculates risk, records security-relevant changes, and can forward audit and change events to a SIEM.
+SEC360 is a self-hosted security visibility, posture-management, and audit platform. It combines identity, endpoint, security-agent, activity, vulnerability, DLP, Linux CIS, proxy-policy, and network-topology data in one analyst interface. The platform correlates records from multiple systems, evaluates endpoint compliance, calculates risk, preserves audit evidence, records security-relevant changes, and can forward audit and change events to a SIEM.
 
 This document describes the current implementation: its components, features, integrations, security controls, deployment model, configuration, and operational workflows.
 
@@ -26,18 +26,32 @@ This document describes the current implementation: its components, features, in
 
 ```mermaid
 flowchart LR
-    Sources["Security and identity systems"] --> Collectors["Collectors and scheduled jobs"]
-    Collectors --> DB[(PostgreSQL)]
-    DB --> Engines["Correlation, compliance, risk, and change engines"]
-    Engines --> DB
-    Browser["Analyst browser"] --> Nginx["Nginx / React application"]
+    Browser["Analyst browser"] --> Nginx["Nginx<br/>TLS + React SPA + /api proxy"]
     Nginx --> API["FastAPI backend"]
-    API --> DB
-    API --> Redis[(Redis login throttling)]
-    API --> Sources
+    API --> Redis[("Redis<br/>login throttling")]
+
+    Integrations["Identity, endpoint, DLP,<br/>Puppet and cloud APIs"] <--> Jobs["Scheduled and manual<br/>integration collectors"]
+    API -->|"test / sync now"| Jobs
+
+    NetworkSources["WLC, FortiGate,<br/>MikroTik"] --> EdgeCollector["On-prem Network Map collector<br/>durable SQLite queue"]
+    EdgeCollector -->|"token-authenticated snapshots"| API
+
+    LinuxHosts["Debian CIS audit hosts"] -->|"JSON + ingest token"| API
+    AnalystUpload["Analyst JSON upload"] --> API
+
+    ManagementCenter["Symantec Management Center"] <--> ProxySync["Policy revision collector<br/>and diff engine"]
+    API -->|"configure / sync now"| ProxySync
+
+    API <--> DB[("PostgreSQL<br/>inventory + evidence + configuration")]
+    Jobs --> DB
+    ProxySync --> DB
+    DB --> Engines["Correlation, compliance,<br/>risk and change engines"]
+    Engines --> DB
     DB --> Outbox["Durable SIEM outbox"]
     Outbox --> SIEM["HTTP(S) SIEM endpoint"]
 ```
+
+SEC360 therefore supports four ingestion patterns: scheduled integration pulls, outbound pushes from the Network Map collector, manual or token-authenticated Linux audit uploads, and scheduled Symantec Management Center revision collection. External pushes and browser actions pass through the FastAPI authorization and validation layer; internal scheduled jobs use isolated backend service and database sessions.
 
 The production deployment consists of five Docker Compose services:
 
@@ -76,6 +90,8 @@ The FastAPI service owns:
 - Reports and scheduled email delivery.
 - DLP policy search and DLP change tracking.
 - Puppet Facts and SentinelOne application-vulnerability views.
+- Linux CIS audit ingestion, endpoint association, token management, and evidence views.
+- Symantec Management Center connection management, revision collection, and policy diffs.
 - Optional Network Map collection, correlation, and topology APIs.
 - Audit logs, change events, SIEM delivery, and system settings.
 
@@ -93,6 +109,8 @@ PostgreSQL stores the canonical inventory and operational state, including:
 - DLP search and policy-tracking state.
 - Puppet nodes, facts, favorites, and saved views.
 - Application vulnerabilities.
+- Linux CIS reports, full control evidence, and revocable machine-ingest tokens.
+- Proxy Audit connection state, policy/shared-object revisions, and generated diffs.
 - Network Map collectors, source snapshots, floors, infrastructure placement, collection runs, and retained observations.
 - Reports, system settings, analyst notes, audit logs, change events, and SIEM deliveries.
 
@@ -106,7 +124,7 @@ APScheduler runs inside the backend. A normal collection cycle is deliberately o
 2. Google Workspace and ADFS run in parallel.
 3. Correlation runs, followed by compliance evaluation and risk calculation.
 
-Other scheduled jobs handle report delivery, data retention, and SIEM retries. The default full collection interval is 15 minutes and is configurable.
+Proxy Audit runs as a separate single-instance scheduled job at the same configurable interval. It only performs work when the feature is enabled and a Management Center connection is configured. Other scheduled jobs handle report delivery, data retention, and SIEM retries. The default collection interval is 15 minutes and is configurable.
 
 Network Map device collection runs in the separate on-premises `collector/` service. The collector reaches private sources locally and pushes complete snapshots outbound to SEC360. The backend does not need routes or credentials for WLC, FortiGate, or MikroTik devices.
 
@@ -179,6 +197,31 @@ The backend also runs these recurring tasks:
 Current defaults retain Google activity/raw records for 7 days, audit logs for 90 days, and successfully delivered SIEM queue records for 30 days.
 
 ## Features
+
+### Feature availability and navigation
+
+SEC360 exposes capabilities only when their prerequisites are available:
+
+- Integration-backed pages appear after the required product is connected. DLP Search requires Symantec DLP, Puppet Facts requires Puppet, and Application Vulnerabilities requires a compatible SentinelOne cloud connection.
+- Activity appears when Google Workspace, ADFS, or Active Directory is connected.
+- Administrator-controlled workspaces—Network Map, Linux Audit, and Proxy Audit—are enabled under **Settings → Features**.
+- Disabling an optional workspace hides its navigation and blocks its feature APIs without deleting retained data.
+- Backend role checks and feature checks remain authoritative even when a route is hidden in the browser.
+
+Navigation is organized into Overview, Monitor, Security Posture, Audit & Policy, Infrastructure, and Manage groups so new workspaces do not flatten into one long menu.
+
+| Workspace | Availability | Minimum role |
+| --- | --- | --- |
+| Dashboard, Endpoints, Users, Compliance | Always available after sign-in | Viewer |
+| Activity | Google Workspace, ADFS, or Active Directory connected | Viewer |
+| Application Vulnerabilities | Compatible SentinelOne cloud integration connected | Viewer |
+| DLP Search | Symantec DLP connected | Analyst |
+| Puppet Facts | Puppet connected | Analyst |
+| Linux Audit | Enabled under Settings → Features | Viewer for evidence; Analyst for manual upload; Admin for tokens |
+| Proxy Audit | Enabled under Settings → Features | Viewer for history; Admin for connection and sync |
+| Network Map | Enabled under Settings → Features | Viewer for Visual/Table; Admin for Config |
+| Reports | Always available after sign-in | Analyst |
+| Integrations, Security, Settings | Always available after sign-in | Admin |
 
 ### Dashboard
 
@@ -264,9 +307,37 @@ When Puppet is connected, analysts can explore PuppetDB data:
 - Saved and default views.
 - Sorting, pagination, and CSV export.
 
+### Linux Audit
+
+Linux Audit is an optional workspace for Debian 13 CIS audit evidence. After an administrator enables it under **Settings → Features**, SEC360 provides:
+
+- A searchable report inventory with server, FQDN, IP address, operating system, kernel, architecture, virtualization, benchmark, profile, and audit timestamp.
+- Pass, fail, review, excluded, and error totals with a calculated pass rate.
+- A full per-control evidence viewer with status and text filtering.
+- Manual JSON upload by analysts, including an optional IP override for reports that do not contain an address.
+- Automated `application/json` ingestion using named, revocable bearer tokens created by an administrator.
+- Duplicate detection by SHA-256 content hash and validation limits of 15 MB and 5,000 controls per report.
+- Association to an existing endpoint by normalized hostname/FQDN, IP address, retained machine-ID hash relationship, or known endpoint IP history.
+
+Automated tokens are shown in full only when created. SEC360 stores their HMAC hashes, tracks last-use time and source IP, records automated ingestion in the Audit Log, and queues that event for SIEM delivery.
+
+### Proxy Audit
+
+Proxy Audit is an optional Symantec Management Center policy-audit workspace. Its connection is configured directly on the page rather than in the Integration Store. It provides:
+
+- Page-local Management Center URL, username, password, timeout, and TLS-verification settings.
+- Connection testing and immediate synchronization.
+- Scheduled synchronization at the normal collection interval.
+- Revision history for policies and shared objects, including author, date, version, and comment.
+- Search and filtering by object type and author.
+- Line-level unified diffs with addition/deletion counts and a concise change summary.
+- Idempotent imports keyed by policy UUID and revision number.
+
+Credentials are encrypted at rest. Each synchronization reads the policy catalog, imports only previously unseen revisions, and uses the preceding revision as the comparison baseline. Initial revisions are labeled as such instead of being presented as a false change.
+
 ### Network Map
 
-Network Map is an optional, administrator-controlled topology workspace. Enable it under **Settings → Platform → Network Map**. Its workspace is divided into **Visual**, **Table**, and **Config**. Visual presents the building/floor experience, Table provides the operational endpoint and attachment inventory, and Config enrolls collectors and places discovered infrastructure.
+Network Map is an optional, administrator-controlled topology workspace. Enable it under **Settings → Features**. Its workspace is divided into **Visual**, **Table**, and **Config**. Visual presents the building/floor experience, Table provides the operational endpoint and attachment inventory, and Config enrolls collectors and places discovered infrastructure.
 
 Network sources are collected by the separate on-premises Docker service in `collector/`, not by the SEC360 backend and not through the Integration Store:
 
@@ -336,8 +407,8 @@ Settings includes:
 - Global MFA enforcement.
 - SAML and RADIUS configuration, including RADIUS connection testing.
 - TLS certificate replacement.
+- A dedicated **Features** tab for enabling Network Map, Linux Audit, and Proxy Audit without deleting retained data, including a direct link to Network Map collector and floor configuration.
 - System settings that immediately trigger derived compliance/risk recalculation where necessary.
-- Network Map activation and a direct link to collector and floor configuration.
 
 ## Integrations
 
@@ -356,6 +427,8 @@ Settings includes:
 HiBob and CloudSOC are retired integrations and are not presented as active catalog choices.
 
 Cisco WLC, FortiGate, and MikroTik SwOS are Network Map sources, not Integration Store products. Enroll the middle server from **Network Map → Config**, then configure device credentials in `collector/config.yml` on that server. Puppet remains the existing source of managed-endpoint identity used by Network Map correlation; the feature does not create a second Puppet connector.
+
+Symantec Management Center is also not an Integration Store product. Enable **Proxy Audit** under Settings, then configure its dedicated connection on the Proxy Audit page. Linux audit hosts use report-upload tokens rather than Integration Store credentials.
 
 ## Data collection and processing
 
@@ -389,6 +462,22 @@ Network Map configuration, collection, and visualization are separate stages:
 5. Current wireless and wired observations are correlated to existing Puppet-managed endpoints by normalized MAC address.
 6. FortiGate leases enrich those observations with current IP and hostname data by the same MAC.
 7. Complete snapshots retire only earlier observations from the same connection; failures retain the last useful topology.
+
+### Audit-ingestion lifecycles
+
+Linux Audit has two supported paths:
+
+1. An analyst uploads a generated JSON report in the workspace, or an administrator creates a named ingest token for automation.
+2. An audit host sends the JSON document to `/api/linux-audits/ingest` with the bearer token and optional `X-Report-Filename` header.
+3. SEC360 validates the schema and limits, rejects malformed addresses and unsupported values, detects exact duplicates, and attempts to associate the report with an existing endpoint.
+4. The source-faithful report and normalized searchable metadata are retained for inventory and evidence review.
+
+Proxy Audit follows a pull model:
+
+1. An administrator enables the feature and saves/tests the Management Center connection on the page.
+2. A manual request or the scheduler starts an isolated, single-instance synchronization.
+3. SEC360 enumerates policies and shared objects, reads their revision histories, and downloads content only where required to build missing revisions.
+4. New revisions and bounded unified diffs are stored; existing policy/revision pairs are not imported again.
 
 ### Credentials
 
@@ -727,6 +816,8 @@ All application APIs are mounted under `/api` except the backend health endpoint
 | `/api/application-vulnerabilities` | SentinelOne vulnerability summaries, facets, records, detail, and CSV |
 | `/api/puppet-facts` | Puppet summaries, facts, favorites, saved views, and export |
 | `/api/network-map` | Feature status, operational topology, connections, tests, collection, floors, infrastructure placement, and port overrides |
+| `/api/linux-audits` | Feature status, report inventory/detail, manual upload, automated ingest, and ingest-token management |
+| `/api/proxy-audit` | Feature status, Management Center connection/test/sync, revision summaries, filters, and diff detail |
 | `/api/search` | Global application search |
 | `/api/notes` | Analyst notes |
 | `/health` | Direct backend database/scheduler health check |
@@ -758,6 +849,7 @@ sec360/
 │   ├── nginx.conf           # Production TLS and reverse-proxy configuration
 │   ├── Dockerfile
 │   └── package.json
+├── collector/                # Outbound Network Map collector and deployment guide
 ├── docker-compose.yml       # Development-oriented Compose stack
 ├── docker-compose.prod.yml  # Hardened production Compose stack
 ├── setup.sh                 # Guided deployment/bootstrap script
@@ -769,6 +861,9 @@ sec360/
 - Inventory is not limited to recently seen endpoints. Retire or remove stale records deliberately.
 - Compliance requirements follow connected product scope; a disabled or never-connected integration is not automatically treated as missing everywhere.
 - SentinelOne application vulnerabilities require a supported cloud deployment and are unavailable for on-premises SentinelOne.
+- Network Map, Linux Audit, and Proxy Audit must be enabled under Settings → Features before their routes and APIs are available; disabling them preserves existing data.
+- Linux Audit accepts the JSON schema generated by the paired Debian CIS audit project, limits reports to 15 MB and 5,000 controls, and treats exact content duplicates idempotently for automated ingestion.
+- Proxy Audit requires a Symantec Management Center account that can read policies, versions, and revision content. Disabling TLS verification should be limited to trusted on-premises deployments.
 - The first entity or DLP policy observation creates a baseline and should not create a change event.
 - SIEM transport is HTTP(S), not native syslog on port 514.
 - RADIUS users can sign in through the standard form and do not need invitation acceptance.

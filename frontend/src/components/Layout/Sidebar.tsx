@@ -1,6 +1,7 @@
-import React from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import React, { useEffect, useMemo, useState } from 'react'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
+  ChevronDown,
   ShieldCheck,
   LogOut,
   Search,
@@ -11,7 +12,7 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '../../store/auth'
 import { useThemeStore } from '../../store/theme'
-import { visibleNavigation } from './navigation'
+import { NAV_GROUPS, type NavigationGroupId, type NavigationItem, visibleNavigation } from './navigation'
 import { useConnectedIntegrations } from '../../hooks/useConnectedIntegrations'
 
 interface SidebarProps {
@@ -24,6 +25,7 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
   const { user, logout } = useAuthStore()
   const { theme, toggle: toggleTheme } = useThemeStore()
   const navigate = useNavigate()
+  const location = useLocation()
   const { connected, features } = useConnectedIntegrations()
 
   const handleLogout = async () => {
@@ -32,6 +34,76 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
   }
 
   const visibleItems = visibleNavigation(user?.role, connected, features)
+  const mainItems = visibleItems.filter(item => item.placement !== 'footer')
+  const footerItems = visibleItems.filter(item => item.placement === 'footer')
+  const storageKey = `sidebar-groups:${user?.email || 'default'}`
+  const [expandedGroups, setExpandedGroups] = useState<Record<NavigationGroupId, boolean>>(() => {
+    const defaults = Object.fromEntries(NAV_GROUPS.map(group => [group.id, group.defaultExpanded])) as Record<NavigationGroupId, boolean>
+    try {
+      const saved = window.localStorage.getItem(storageKey)
+      return saved ? { ...defaults, ...JSON.parse(saved) } : defaults
+    } catch {
+      return defaults
+    }
+  })
+
+  const activeGroup = useMemo(
+    () => mainItems.find(item => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`))?.group,
+    [location.pathname, mainItems],
+  )
+
+  useEffect(() => {
+    if (!activeGroup) return
+    setExpandedGroups(current => current[activeGroup] ? current : { ...current, [activeGroup]: true })
+  }, [activeGroup])
+
+  useEffect(() => {
+    window.localStorage.setItem(storageKey, JSON.stringify(expandedGroups))
+  }, [expandedGroups, storageKey])
+
+  const toggleGroup = (group: NavigationGroupId) => {
+    setExpandedGroups(current => ({ ...current, [group]: !current[group] }))
+  }
+
+  const renderLink = ({ to, icon: Icon, label }: NavigationItem) => (
+    <NavLink
+      key={to}
+      to={to}
+      end={to === '/dashboard'}
+      title={collapsed ? label : undefined}
+      className={({ isActive }) =>
+        `group nav-item relative flex items-center rounded-lg text-[13px] font-medium transition-[background-color,color] duration-150 ${
+          collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-3 py-2'
+        } ${
+          isActive
+            ? 'nav-item--active text-emerald-500'
+            : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04]'
+        }`
+      }
+    >
+      {({ isActive }) => (
+        <>
+          {isActive && !collapsed && (
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full" style={{ background: 'var(--accent)' }} />
+          )}
+          <span
+            className={`rounded-md p-1 transition-[background-color] duration-150 flex-shrink-0 ${
+              isActive ? 'text-emerald-400' : 'text-zinc-600 group-hover:text-zinc-300'
+            }`}
+            style={isActive ? { background: 'var(--accent-dim)' } : {}}
+          >
+            <Icon size={14} strokeWidth={isActive ? 2.5 : 2} />
+          </span>
+          <span
+            className="overflow-hidden whitespace-nowrap flex-1"
+            style={{ maxWidth: collapsed ? 0 : 160, opacity: collapsed ? 0 : 1, transition: 'max-width 200ms ease, opacity 150ms ease' }}
+          >
+            {label}
+          </span>
+        </>
+      )}
+    </NavLink>
+  )
 
   return (
     <aside
@@ -108,60 +180,60 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-2.5 py-2 overflow-y-auto space-y-0.5 overflow-x-hidden">
-        {!collapsed && (
-          <p className="text-[10px] uppercase tracking-[0.12em] font-semibold px-3 pb-2 pt-1 whitespace-nowrap" style={{ color: 'var(--text-4)' }}>
-            Navigation
-          </p>
-        )}
-        {visibleItems.map(({ to, icon: Icon, label }) => {
-          return (
-            <NavLink
-              key={to}
-              to={to}
-              title={collapsed ? label : undefined}
-              className={({ isActive }) =>
-                `group nav-item relative flex items-center rounded-lg text-[13px] font-medium transition-[background-color,color] duration-150 ${
-                  collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-3 py-2.5'
-                } ${
-                  isActive
-                    ? 'nav-item--active text-emerald-500'
-                    : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04]'
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  {isActive && !collapsed && (
+      <nav className="flex-1 px-2.5 py-2 overflow-y-auto overflow-x-hidden" aria-label="Product navigation">
+        {collapsed ? (
+          <div className="space-y-0.5">
+            {NAV_GROUPS.map(group => {
+              const groupItems = mainItems.filter(item => item.group === group.id)
+              if (!groupItems.length) return null
+              return (
+                <div key={group.id} className="space-y-0.5 first:pt-0 pt-1.5 mt-1.5 first:mt-0 border-t first:border-t-0" style={{ borderColor: 'var(--border)' }}>
+                  {groupItems.map(renderLink)}
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {NAV_GROUPS.map(group => {
+              const groupItems = mainItems.filter(item => item.group === group.id)
+              if (!groupItems.length) return null
+              if (!group.collapsible) return <div key={group.id}>{groupItems.map(renderLink)}</div>
+              const isExpanded = expandedGroups[group.id]
+              const hasActiveItem = group.id === activeGroup
+              return (
+                <section key={group.id}>
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.id)}
+                    className="group flex w-full items-center gap-2 rounded-md px-3 py-2 text-left transition-colors hover:bg-white/[0.025]"
+                    aria-expanded={isExpanded}
+                  >
                     <span
-                      className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full"
-                      style={{ background: 'var(--accent)' }}
+                      className="text-[9px] font-semibold uppercase tracking-[0.13em] flex-1 whitespace-nowrap"
+                      style={{ color: hasActiveItem ? 'var(--text-2)' : 'var(--text-4)' }}
+                    >
+                      {group.label}
+                    </span>
+                    {hasActiveItem && <span className="h-1 w-1 rounded-full" style={{ background: 'var(--accent)' }} aria-hidden />}
+                    <ChevronDown
+                      size={12}
+                      style={{ color: 'var(--text-4)', transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 160ms ease' }}
                     />
-                  )}
-                  <span
-                    className={`rounded-md p-1 transition-[background-color] duration-150 flex-shrink-0 ${
-                      isActive ? 'text-emerald-400' : 'text-zinc-600 group-hover:text-zinc-300'
-                    }`}
-                    style={isActive ? { background: 'var(--accent-dim)' } : {}}
-                  >
-                    <Icon size={14} strokeWidth={isActive ? 2.5 : 2} />
-                  </span>
-                  <span
-                    className="overflow-hidden whitespace-nowrap flex-1 flex items-center gap-1.5"
-                    style={{
-                      maxWidth: collapsed ? 0 : 160,
-                      opacity: collapsed ? 0 : 1,
-                      transition: 'max-width 200ms ease, opacity 150ms ease',
-                    }}
-                  >
-                    {label}
-                  </span>
-                </>
-              )}
-            </NavLink>
-          )
-        })}
+                  </button>
+                  <div className={isExpanded ? 'space-y-0.5 pb-1' : 'hidden'}>{groupItems.map(renderLink)}</div>
+                </section>
+              )
+            })}
+          </div>
+        )}
       </nav>
+
+      {footerItems.length > 0 && (
+        <div className="px-2.5 py-2 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
+          {footerItems.map(renderLink)}
+        </div>
+      )}
 
       {/* Theme toggle */}
       <div className="px-2.5 py-2 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>

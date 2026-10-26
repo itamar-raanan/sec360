@@ -1,12 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Navigate, useSearchParams, useLocation } from 'react-router-dom'
 import { Eye, EyeOff, AlertCircle, Smartphone, ShieldCheck, ArrowRight } from 'lucide-react'
-import { gsap } from 'gsap'
-import { useGSAP } from '@gsap/react'
 import { useAuth } from '../hooks/useAuth'
 import AuthLeftPanel from '../components/AuthLeftPanel'
-
-gsap.registerPlugin(useGSAP)
 
 type Step = 'credentials' | 'totp'
 
@@ -17,8 +13,6 @@ const SSO_ERRORS: Record<string, string> = {
 }
 
 export default function Login() {
-  const loginRootRef = useRef<HTMLDivElement>(null)
-  const previousStepRef = useRef<Step>('credentials')
   const { isAuthenticated, login } = useAuth()
   const [searchParams] = useSearchParams()
   const location = useLocation()
@@ -45,71 +39,9 @@ export default function Login() {
       .catch(() => setSso({ enabled: false, provider: 'generic', providerLabel: 'SSO' }))
   }, [])
 
-  useGSAP(() => {
-    const media = gsap.matchMedia()
-
-    media.add(
-      {
-        isDesktop: '(min-width: 1024px)',
-        reduceMotion: '(prefers-reduced-motion: reduce)',
-      },
-      (context) => {
-        const { isDesktop, reduceMotion } = context.conditions as {
-          isDesktop: boolean
-          reduceMotion: boolean
-        }
-        if (reduceMotion) return
-
-        const motionTargets = gsap.utils.toArray<HTMLElement>('[data-login-motion]')
-        gsap.set(motionTargets, { willChange: 'transform, opacity' })
-
-        const timeline = gsap.timeline({
-          defaults: { duration: 0.62, ease: 'power3.out' },
-          onComplete: () => {
-            gsap.set(motionTargets, { clearProps: 'transform,opacity,visibility,willChange' })
-          },
-        })
-
-        timeline
-          .addLabel('open')
-          .from('[data-login-brand]', { autoAlpha: 0, y: -10, duration: 0.45 }, 'open')
-          .from('[data-login-hero]', { autoAlpha: 0, y: 28 }, 'open+=0.08')
-          .from('[data-login-copy]', { autoAlpha: 0, y: 16 }, 'open+=0.2')
-          .from('[data-login-index]', { autoAlpha: 0, y: 12 }, 'open+=0.3')
-          .from('[data-login-row]', { autoAlpha: 0, y: 14, stagger: 0.075 }, 'open+=0.36')
-          .from(
-            '[data-login-form]',
-            { autoAlpha: 0, x: isDesktop ? 18 : 0, y: isDesktop ? 0 : 16 },
-            'open+=0.18',
-          )
-          .from('[data-login-footer]', { autoAlpha: 0, y: 8, duration: 0.45 }, 'open+=0.48')
-      },
-    )
-
-    return () => media.revert()
-  }, { scope: loginRootRef })
-
-  useGSAP(() => {
-    if (previousStepRef.current === step) return
-    previousStepRef.current = step
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-
-    gsap.fromTo(
-      '[data-login-step]',
-      { autoAlpha: 0, y: 12 },
-      {
-        autoAlpha: 1,
-        y: 0,
-        duration: 0.36,
-        ease: 'power2.out',
-        clearProps: 'transform,opacity,visibility',
-      },
-    )
-  }, { dependencies: [step], scope: loginRootRef, revertOnUpdate: true })
-
   if (isAuthenticated) return <Navigate to={from} replace />
 
-  const inputBase = "w-full min-h-11 text-[15px] rounded-[6px] px-4 py-3 focus:outline-none"
+  const inputBase = "w-full text-[15px] rounded-lg px-4 py-3 focus:outline-none"
   const inputStyle: React.CSSProperties = {
     background: 'var(--surface-3)',
     border: '1px solid var(--border-mid)',
@@ -155,14 +87,14 @@ export default function Login() {
   }
 
   return (
-    <div ref={loginRootRef} className="min-h-[100dvh] flex" style={{ background: 'var(--surface-0)' }}>
+    <div className="min-h-[100dvh] flex" style={{ background: 'linear-gradient(135deg, #0b0b17 0%, #111126 100%)' }}>
       <AuthLeftPanel />
 
       {/* Right — form */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6 py-10 sm:px-10 relative overflow-hidden">
+      <main className="relative flex flex-1 flex-col items-center justify-center overflow-hidden p-8">
         {/* Mobile logo */}
-        <div className="lg:hidden flex items-center gap-2.5 mb-10 relative z-10" data-login-brand data-login-motion>
-          <div className="brand-mark">
+        <div className="relative z-10 mb-10 flex items-center gap-2.5 lg:hidden">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: 'var(--accent)' }}>
             <ShieldCheck size={16} className="text-white" strokeWidth={2.5} />
           </div>
           <span className="font-bold text-lg tracking-tight" style={{ color: 'var(--text-1)' }}>SEC360</span>
@@ -170,19 +102,22 @@ export default function Login() {
 
         {/* Form card */}
         <div
-          className="auth-card w-full max-w-[390px] relative z-10"
-          data-login-form
-          data-login-motion
+          className="auth-card relative z-10 w-full max-w-[440px] rounded-xl p-8 sm:p-10"
           style={{
-            background: 'transparent',
+            background: 'rgba(17,17,31,0.96)',
+            border: '1px solid rgba(255,255,255,0.10)',
+            boxShadow: '0 24px 70px rgba(0,0,0,0.34)',
           }}
         >
           {step === 'credentials' ? (
-            <div data-login-step>
+            <div className="fade-up" style={{ animationDuration: '300ms' }}>
               {/* Header */}
-              <div className="mb-9">
-                <h1 className="font-semibold mb-2" style={{ color: 'var(--text-1)', fontSize: 28, letterSpacing: '-0.035em' }}>Sign in to SEC360</h1>
-                <p style={{ fontSize: 14, color: 'var(--text-3)' }}>Continue to your security workspace.</p>
+              <div className="mb-8">
+                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.18)' }}>
+                  <ShieldCheck size={22} style={{ color: 'var(--accent)' }} strokeWidth={2.5} />
+                </div>
+                <h1 className="mb-1.5 text-[26px] font-bold tracking-[-0.03em]" style={{ color: 'var(--text-1)' }}>Welcome back</h1>
+                <p className="text-sm" style={{ color: '#9090a0' }}>Sign in to your workspace</p>
               </div>
 
               {error && (
@@ -197,7 +132,7 @@ export default function Login() {
 
               <form onSubmit={handleCredentials} className="space-y-5">
                 <div className="space-y-2">
-                  <label className="block font-medium" style={{ fontSize: 13, color: 'var(--text-2)' }}>
+                  <label className="block text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: '#9090a0' }}>
                     Email address
                   </label>
                   <input
@@ -214,7 +149,7 @@ export default function Login() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="block font-medium" style={{ fontSize: 13, color: 'var(--text-2)' }}>
+                  <label className="block text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: '#9090a0' }}>
                     Password
                   </label>
                   <div className="relative">
@@ -245,8 +180,8 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full min-h-11 flex items-center justify-center gap-2 font-semibold rounded-[6px] pressable disabled:opacity-50 disabled:cursor-not-allowed mt-2"
-                  style={{ fontSize: 14, background: 'var(--text-1)', color: 'var(--surface-0)', letterSpacing: '-0.01em' }}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg py-3.5 text-[15px] font-bold text-white pressable disabled:cursor-not-allowed disabled:opacity-50"
+                  style={{ background: 'var(--accent)', letterSpacing: '-0.01em' }}
                 >
                   {loading ? (
                     <>
@@ -269,7 +204,7 @@ export default function Login() {
                 <>
                   <div className="flex items-center gap-3 my-5">
                     <div className="flex-1 h-px" style={{ background: 'var(--shimmer-a)' }} />
-                    <span className="font-medium" style={{ fontSize: 12, color: 'var(--text-3)' }}>or</span>
+                    <span className="text-[9.5px] font-bold uppercase tracking-[0.12em]" style={{ color: '#777784' }}>or</span>
                     <div className="flex-1 h-px" style={{ background: 'var(--shimmer-a)' }} />
                   </div>
 
@@ -277,8 +212,8 @@ export default function Login() {
                     type="button"
                     onClick={() => { window.location.href = '/api/auth/saml/login' }}
                     disabled={loading}
-                    className="flex min-h-11 w-full items-center justify-center gap-2.5 rounded-[6px] px-4 font-medium pressable disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ fontSize: 14, color: 'var(--text-1)', background: 'var(--surface-2)', border: '1px solid var(--border-mid)', transition: 'border-color 120ms ease, background 120ms ease' }}
+                    className="flex w-full items-center justify-center gap-2.5 rounded-lg px-4 py-3.5 text-[15px] font-medium text-white pressable disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.10)', transition: 'border-color 120ms ease, background 120ms ease' }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-lit)'; e.currentTarget.style.background = 'var(--shimmer-a)' }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-mid)'; e.currentTarget.style.background = 'var(--surface-2)' }}
                   >
@@ -296,11 +231,13 @@ export default function Login() {
               )}
             </div>
           ) : (
-            <div data-login-step>
+            <div className="fade-up" style={{ animationDuration: '300ms' }}>
               <div className="mb-8">
-                <div className="mb-5 flex items-center gap-2" style={{ color: 'var(--accent)' }}><Smartphone size={18} /><span className="text-[13px] font-medium">Identity verification</span></div>
-                <h1 className="font-semibold mb-1.5" style={{ color: 'var(--text-1)', fontSize: 28, letterSpacing: '-0.035em' }}>Two-factor authentication</h1>
-                <p style={{ fontSize: 14, color: 'var(--text-3)' }}>Enter the six-digit code from your authenticator app.</p>
+                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.18)' }}>
+                  <Smartphone size={22} style={{ color: 'var(--accent)' }} />
+                </div>
+                <h1 className="mb-1.5 text-[26px] font-bold tracking-[-0.03em]" style={{ color: 'var(--text-1)' }}>Two-factor auth</h1>
+                <p className="text-sm" style={{ color: '#9090a0' }}>Enter the 6-digit code from your authenticator app</p>
               </div>
 
               {error && (
@@ -315,7 +252,7 @@ export default function Login() {
 
               <form onSubmit={handleTotp} className="space-y-5">
                 <div className="space-y-2">
-                  <label className="block font-medium" style={{ fontSize: 13, color: 'var(--text-2)' }}>
+                  <label className="block text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: '#9090a0' }}>
                     Authenticator code
                   </label>
                   <input
@@ -338,8 +275,8 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={loading || totpCode.length !== 6}
-                  className="w-full min-h-11 flex items-center justify-center gap-2 font-semibold rounded-[6px] pressable disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={{ fontSize: 14, background: 'var(--text-1)', color: 'var(--surface-0)', letterSpacing: '-0.01em' }}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg py-3.5 text-[15px] font-bold text-white pressable disabled:cursor-not-allowed disabled:opacity-40"
+                  style={{ background: 'var(--accent)', boxShadow: '0 0 24px rgba(16,185,129,0.22)', letterSpacing: '-0.01em' }}
                 >
                   {loading ? 'Verifying…' : <><span>Verify &amp; sign in</span><ArrowRight size={14} /></>}
                 </button>
@@ -360,10 +297,13 @@ export default function Login() {
         </div>
 
         {/* Footer */}
-        <div className="mt-10 relative z-10 flex items-center gap-3" style={{ fontSize: 13, color: 'var(--text-3)' }} data-login-footer data-login-motion>
+        <div className="relative z-10 mt-8 flex items-center gap-4 text-[11px]" style={{ color: '#777784' }}>
           <span>© 2026 SEC360</span>
           <span>·</span>
-          <span>Secure access</span>
+          <div className="flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <span>All systems operational</span>
+          </div>
         </div>
       </main>
     </div>

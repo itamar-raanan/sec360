@@ -9,6 +9,7 @@ import {
   Bug,
   Braces,
   FileCheck2,
+  History,
 } from 'lucide-react'
 import apiClient from '../api/client'
 import { usePanelStore } from '../store/panels'
@@ -82,6 +83,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     { kind: 'nav', id: 'application-vulnerabilities', label: 'Applications Vulnerabilities', description: 'SentinelOne software CVEs and exposure', icon: Bug, action: () => navigate('/application-vulnerabilities'), keywords: ['cve', 'cvss', 'software', 'patch', 'sentinelone'], requiredFeature: 'application_vulnerabilities' },
     { kind: 'nav', id: 'puppet-facts', label: 'Puppet Facts', description: 'Search PuppetDB facts across managed nodes', icon: Braces, action: () => navigate('/puppet-facts'), keywords: ['puppet', 'facts', 'facter', 'nodes', 'configuration'], requiredFeature: 'puppet_facts' },
     { kind: 'nav', id: 'linux-audit', label: 'Linux Audit', description: 'Review uploaded Debian CIS audit evidence', icon: FileCheck2, action: () => navigate('/linux-audit'), keywords: ['linux', 'debian', 'cis', 'audit', 'hardening'], requiredFeature: 'linux_audit' },
+    { kind: 'nav', id: 'proxy-audit', label: 'Proxy Audit', description: 'Review Symantec Management Center policy revisions', icon: History, action: () => navigate('/proxy-audit'), keywords: ['proxy', 'symantec', 'management center', 'policy', 'shared object', 'diff'], requiredFeature: 'proxy_audit' },
     { kind: 'nav', id: 'dlp-policy-search', label: 'DLP User Policy Search', description: 'Find user exclusions across DLP policies', icon: Database, action: () => navigate('/dlp-user-policy-search'), keywords: ['symantec', 'exclusion', 'sender', 'recipient'], requiredIntegration: 'symantec_dlp' },
     { kind: 'nav', id: 'reports',      label: 'Reports',       description: 'Generate and export reports',    icon: FileText,        action: () => navigate('/reports'),       keywords: ['export', 'pdf', 'csv'] },
     { kind: 'nav', id: 'security',     label: 'Security',      description: 'Change log, audit log & SIEM',   icon: Lock,            action: () => navigate('/security'),      keywords: ['changes', 'audit', 'logs', 'siem'] },

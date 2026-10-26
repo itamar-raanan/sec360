@@ -173,7 +173,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
-from app.api.routes import auth, users, endpoints, compliance, risk, activity, search, integrations, reports, notes, dlp_policy_search, application_vulnerabilities, puppet_facts, network_map, linux_audit  # noqa
+from app.api.routes import auth, users, endpoints, compliance, risk, activity, search, integrations, reports, notes, dlp_policy_search, application_vulnerabilities, puppet_facts, network_map, linux_audit, proxy_audit  # noqa
 from app.api.routes import settings as settings_router  # noqa — avoids shadowing app.core.config.settings
 
 app.include_router(auth.router, prefix="/api")
@@ -192,6 +192,7 @@ app.include_router(application_vulnerabilities.router, prefix="/api")
 app.include_router(puppet_facts.router, prefix="/api")
 app.include_router(network_map.router, prefix="/api")
 app.include_router(linux_audit.router, prefix="/api")
+app.include_router(proxy_audit.router, prefix="/api")
 
 
 @app.get("/health")

@@ -23,6 +23,7 @@ const NetworkMap = lazy(() => import('./pages/NetworkMap'))
 const NetworkMapTable = lazy(() => import('./pages/NetworkMapTable'))
 const NetworkMapConnections = lazy(() => import('./pages/NetworkMapConnections'))
 const LinuxAudit = lazy(() => import('./pages/LinuxAudit'))
+const ProxyAudit = lazy(() => import('./pages/ProxyAudit'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 function RouteLoader() {
@@ -109,6 +110,7 @@ export default function App() {
         <Route path="/network-map/connections" element={<Navigate to="/network-map/config" replace />} />
         <Route path="/linux-audit" element={<FeatureOnly feature="linux_audit"><LinuxAudit /></FeatureOnly>} />
         <Route path="/linux-audit/:reportId" element={<FeatureOnly feature="linux_audit"><LinuxAudit /></FeatureOnly>} />
+        <Route path="/proxy-audit" element={<FeatureOnly feature="proxy_audit"><ProxyAudit /></FeatureOnly>} />
         <Route path="/dlp-user-policy-search" element={<AnalystOnly><IntegrationOnly integration="symantec_dlp"><DlpUserPolicySearch /></IntegrationOnly></AnalystOnly>} />
         <Route path="/reports" element={<AnalystOnly><Reports /></AnalystOnly>} />
         <Route path="/integrations" element={<AdminOnly><Integrations /></AdminOnly>} />

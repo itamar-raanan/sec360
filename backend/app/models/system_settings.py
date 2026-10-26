@@ -77,3 +77,6 @@ class SystemSettings(Base):
 
     # Optional manual ingestion and review of Linux CIS audit reports.
     linux_audit_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Optional Symantec Management Center policy revision audit.
+    proxy_audit_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

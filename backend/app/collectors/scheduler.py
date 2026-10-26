@@ -392,6 +392,15 @@ def start_scheduler():
         id="collect_all_and_process",
         replace_existing=True,
     )
+    from app.services.proxy_audit import scheduled_proxy_audit_sync
+
+    scheduler.add_job(
+        scheduled_proxy_audit_sync,
+        trigger=IntervalTrigger(minutes=interval_minutes),
+        id="proxy_audit_sync",
+        replace_existing=True,
+        max_instances=1,
+    )
     scheduler.add_job(
         send_scheduled_reports,
         trigger=IntervalTrigger(minutes=30),

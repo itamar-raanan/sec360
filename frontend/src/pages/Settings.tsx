@@ -25,12 +25,13 @@ import {
   FileKey2,
   Upload,
   Network,
+  ToggleLeft,
 } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
 import apiClient from '../api/client'
 import { useConfirm } from '../components/shared/ConfirmDialog'
 
-type Tab = 'users' | 'account' | 'platform' | 'sso' | 'certificate'
+type Tab = 'users' | 'account' | 'platform' | 'features' | 'sso' | 'certificate'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -779,7 +780,12 @@ function PlatformTab() {
     setSaving(true)
     setMsg(null)
     try {
-      await apiClient.put('/settings/system', form)
+      const platformPayload: Partial<SystemSettings> = { ...form }
+      delete platformPayload.network_map_enabled
+      delete platformPayload.linux_audit_enabled
+      delete platformPayload.proxy_audit_enabled
+      const response = await apiClient.put<SystemSettings>('/settings/system', platformPayload)
+      queryClient.setQueryData(['system-settings'], response.data)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['endpoint-product-tags'] }),
         queryClient.invalidateQueries({ queryKey: ['compliance'] }),
@@ -789,9 +795,6 @@ function PlatformTab() {
         queryClient.invalidateQueries({ queryKey: ['endpoints-all'] }),
         queryClient.invalidateQueries({ queryKey: ['endpoint-detail'] }),
         queryClient.invalidateQueries({ queryKey: ['user-identity'] }),
-        queryClient.invalidateQueries({ queryKey: ['network-map-status'] }),
-        queryClient.invalidateQueries({ queryKey: ['linux-audit-status'] }),
-        queryClient.invalidateQueries({ queryKey: ['proxy-audit-status'] }),
       ])
       setMsg({ type: 'success', msg: 'Settings saved and security posture recalculated' })
       refetch()
@@ -917,32 +920,6 @@ function PlatformTab() {
         </Field>
       </Section>
 
-      <Section title="Network Map" hint="Optional topology visualization and on-premises source collection.">
-        <Field label="Enable Network Map" hint="Shows the Visual, Table, and Config Network Map views">
-          <Toggle checked={form.network_map_enabled} onChange={v => set('network_map_enabled', v)} />
-        </Field>
-        <Field label="Network Map collector" hint="Enroll the middle server that securely collects WLC, FortiGate, and MikroTik data">
-          <a
-            href="/network-map/config"
-            className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-emerald-400 hover:bg-emerald-500/10"
-          >
-            <Network size={14} /> Open Config
-          </a>
-        </Field>
-      </Section>
-
-      <Section title="Linux Audit" hint="Optional manual ingestion and review of Debian 13 CIS audit evidence.">
-        <Field label="Enable Linux Audit" hint="Shows the Linux Audit inventory, upload flow, and safe report viewer">
-          <Toggle checked={form.linux_audit_enabled} onChange={v => set('linux_audit_enabled', v)} />
-        </Field>
-      </Section>
-
-      <Section title="Proxy Audit" hint="Optional revision audit for Symantec Management Center policies and shared objects.">
-        <Field label="Enable Proxy Audit" hint="Shows the Proxy Audit workspace and its page-local Management Center connection">
-          <Toggle checked={form.proxy_audit_enabled} onChange={v => set('proxy_audit_enabled', v)} />
-        </Field>
-      </Section>
-
       <button
         onClick={save}
         disabled={saving}
@@ -952,6 +929,82 @@ function PlatformTab() {
       </button>
     </div>
   )
+}
+
+// ── Optional features tab ────────────────────────────────────────────────────
+
+type FeatureSettings = Pick<SystemSettings, 'network_map_enabled' | 'linux_audit_enabled' | 'proxy_audit_enabled'>
+
+function FeaturesTab() {
+  const queryClient = useQueryClient()
+  const { data: cfg, isLoading } = useQuery<SystemSettings>({
+    queryKey: ['system-settings'],
+    queryFn: () => apiClient.get('/settings/system').then(response => response.data),
+  })
+  const [form, setForm] = useState<FeatureSettings | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState<{ type: 'error' | 'success'; msg: string } | null>(null)
+
+  React.useEffect(() => {
+    if (cfg) setForm({
+      network_map_enabled: cfg.network_map_enabled,
+      linux_audit_enabled: cfg.linux_audit_enabled,
+      proxy_audit_enabled: cfg.proxy_audit_enabled,
+    })
+  }, [cfg])
+
+  if (isLoading || !form) return <div className="max-w-2xl space-y-4 py-2"><div className="shimmer h-20 rounded-xl" />{[0, 1, 2].map(value => <div key={value} className="shimmer h-24 rounded-xl" />)}</div>
+
+  const set = (key: keyof FeatureSettings, value: boolean) => setForm(current => current ? { ...current, [key]: value } : current)
+  const enabledCount = Object.values(form).filter(Boolean).length
+  const save = async () => {
+    setSaving(true)
+    setMsg(null)
+    try {
+      const response = await apiClient.put<SystemSettings>('/settings/system', form)
+      queryClient.setQueryData(['system-settings'], response.data)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['network-map-status'] }),
+        queryClient.invalidateQueries({ queryKey: ['linux-audit-status'] }),
+        queryClient.invalidateQueries({ queryKey: ['proxy-audit-status'] }),
+      ])
+      setMsg({ type: 'success', msg: 'Feature availability updated' })
+    } catch {
+      setMsg({ type: 'error', msg: 'Failed to update features' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return <div className="max-w-2xl space-y-5">
+    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><h2 className="text-base font-semibold text-white">Features</h2><p className="mt-0.5 text-xs text-zinc-500">Control optional SEC360 workspaces without changing their retained data.</p></div><div className="rounded-lg border px-3 py-2 text-right" style={{ borderColor: 'var(--border)', background: 'var(--surface-inset)' }}><p className="font-mono text-lg font-semibold text-emerald-400">{enabledCount}/3</p><p className="text-[9px] uppercase tracking-[.1em] text-zinc-500">Enabled</p></div></div>
+    {msg && <Alert type={msg.type} msg={msg.msg} />}
+
+    <Section title="Network Map" hint="Topology visualization and on-premises network-source collection.">
+      <Field label="Enable Network Map" hint="Shows the Visual, Table, and Config views in navigation">
+        <Toggle checked={form.network_map_enabled} onChange={value => set('network_map_enabled', value)} />
+      </Field>
+      <Field label="Collector configuration" hint="Enroll the middle server used for WLC, FortiGate, and MikroTik collection">
+        {cfg?.network_map_enabled
+          ? <a href="/network-map/config" className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-emerald-400 hover:bg-emerald-500/10"><Network size={14} /> Open Config</a>
+          : <span className="text-xs text-zinc-600">Enable and save first</span>}
+      </Field>
+    </Section>
+
+    <Section title="Linux Audit" hint="Debian 13 CIS report inventory, evidence viewer, and automatic ingestion.">
+      <Field label="Enable Linux Audit" hint="Shows the Linux Audit workspace and preserves uploaded reports when disabled">
+        <Toggle checked={form.linux_audit_enabled} onChange={value => set('linux_audit_enabled', value)} />
+      </Field>
+    </Section>
+
+    <Section title="Proxy Audit" hint="Symantec Management Center policy and shared-object revision history.">
+      <Field label="Enable Proxy Audit" hint="Shows the Proxy Audit workspace and its page-local connection">
+        <Toggle checked={form.proxy_audit_enabled} onChange={value => set('proxy_audit_enabled', value)} />
+      </Field>
+    </Section>
+
+    <button onClick={save} disabled={saving} className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 disabled:bg-emerald-900 pressable"><Save size={14} />{saving ? 'Saving…' : 'Save features'}</button>
+  </div>
 }
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
@@ -1789,6 +1842,7 @@ export default function Settings() {
     { id: 'users', label: 'Users & Access', icon: Users, adminOnly: true },
     { id: 'account', label: 'My Account', icon: User, adminOnly: false },
     { id: 'platform', label: 'Platform', icon: Settings2, adminOnly: true },
+    { id: 'features', label: 'Features', icon: ToggleLeft, adminOnly: true },
     { id: 'sso', label: 'Authentication', icon: KeyRound, adminOnly: true },
     { id: 'certificate', label: 'HTTPS Certificate', icon: FileKey2, adminOnly: true },
   ]
@@ -1839,6 +1893,7 @@ export default function Settings() {
         {tab === 'users' && isAdmin && <UsersTab />}
         {tab === 'account' && <AccountTab />}
         {tab === 'platform' && isAdmin && <PlatformTab />}
+        {tab === 'features' && isAdmin && <FeaturesTab />}
         {tab === 'sso' && isAdmin && <SsoTab />}
         {tab === 'certificate' && isAdmin && <CertificateTab />}
       </div>

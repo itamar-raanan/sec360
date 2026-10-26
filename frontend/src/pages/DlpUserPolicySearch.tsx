@@ -94,7 +94,7 @@ function StatusPill({ value }: { value: string | null }) {
 function UsagePill({ value }: { value: string }) {
   const styles: Record<string, { color: string; background: string; border: string }> = {
     SENDER: { color: '#60a5fa', background: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.18)' },
-    RECIPIENT: { color: '#c084fc', background: 'rgba(168,85,247,0.10)', border: 'rgba(168,85,247,0.18)' },
+    RECIPIENT: { color: '#d6a72d', background: 'rgba(214,167,45,0.10)', border: 'rgba(214,167,45,0.20)' },
     UNUSED: { color: 'var(--text-3)', background: 'var(--surface-3)', border: 'var(--border-mid)' },
   }
   const style = styles[value] || styles.UNUSED

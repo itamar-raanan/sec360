@@ -671,18 +671,18 @@ export default function Endpoints() {
                       </div>
                       <div className={`flex gap-1 flex-wrap ${density === 'compact' ? 'mt-0.5' : 'mt-1'}`}>
                         {enabledProductTags.includes('S1') && (
-                          <span className={`text-xs px-1.5 py-0.5 rounded border ${hasS1 ? 'border-purple-500/30 text-purple-300 bg-purple-500/10' : 'border-red-500/20 text-red-400/60'}`}>
-                            S1{hasS1 ? '' : ' ✗'}
+                          <span className={`text-xs px-1.5 py-0.5 rounded border ${hasS1 ? 'border-emerald-500/30 text-emerald-300 bg-emerald-500/10' : 'border-red-500/20 text-red-400/60'}`}>
+                            S1{hasS1 ? '' : ' missing'}
                           </span>
                         )}
                         {enabledProductTags.includes('DLP') && (
                           <span className={`text-xs px-1.5 py-0.5 rounded border ${hasSym ? 'border-yellow-500/30 text-yellow-300 bg-yellow-500/10' : 'border-red-500/20 text-red-400/60'}`}>
-                            DLP{hasSym ? '' : ' ✗'}
+                            DLP{hasSym ? '' : ' missing'}
                           </span>
                         )}
                         {enabledProductTags.includes('WSS') && (
                           <span className={`text-xs px-1.5 py-0.5 rounded border ${hasWSS ? 'border-orange-500/30 text-orange-300 bg-orange-500/10' : 'border-red-500/20 text-red-400/60'}`}>
-                            WSS{hasWSS ? '' : ' ✗'}
+                            WSS{hasWSS ? '' : ' missing'}
                           </span>
                         )}
                         {connected.has('puppet') && ep.puppet_managed && (

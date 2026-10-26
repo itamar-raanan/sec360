@@ -67,7 +67,7 @@ export default function Layout() {
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           <Header onOpenCmd={() => setCmdOpen(true)} />
           <main id="main-content" className="app-main flex-1 overflow-hidden relative" tabIndex={-1}>
-            <div key={location.pathname} className="route-stage fade-up h-full" style={{ animationDuration: '200ms' }}>
+            <div key={location.pathname} className="route-stage h-full">
               <Outlet />
             </div>
           </main>

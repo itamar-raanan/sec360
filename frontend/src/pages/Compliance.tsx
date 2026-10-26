@@ -65,7 +65,7 @@ const STATUS_COLORS: Record<string, string> = {
 const ISSUE_META: Record<string, { label: string; color: string; icon: React.ElementType; desc: string }> = {
   no_edr:              { label: 'No EDR',             color: '#ef4444', icon: ShieldOff,    desc: 'SentinelOne agent not installed' },
   edr_outdated:        { label: 'EDR Outdated',        color: '#f97316', icon: PackageX,     desc: 'SentinelOne version below minimum' },
-  no_dlp:              { label: 'No DLP',              color: '#a855f7', icon: LockOpen,     desc: 'Symantec DLP agent not installed' },
+  no_dlp:              { label: 'No DLP',              color: '#d6a72d', icon: LockOpen,     desc: 'Symantec DLP agent not installed' },
   dlp_outdated:        { label: 'DLP Outdated',        color: '#f59e0b', icon: Cpu,          desc: 'Symantec DLP version below minimum' },
   not_encrypted:       { label: 'Not Encrypted',       color: '#06b6d4', icon: HardDrive,    desc: 'Disk encryption not enabled (reported by S1)' },
   no_device_control:   { label: 'Device Control Off',  color: '#84cc16', icon: MousePointer, desc: 'S1 Device Control policy not enabled' },
@@ -193,7 +193,7 @@ function ExclusionDialog({ endpoint, agents, onClose }: {
           </label>
 
           <div className={excludeAll ? 'pointer-events-none opacity-40' : ''}>
-            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Or exclude specific requirements</div>
+            <div className="mb-2 text-[12px] font-medium text-zinc-500">Or exclude specific requirements</div>
             <div className="divide-y divide-white/[0.06] rounded-xl border border-white/[0.08]">
               {agents.map(agent => {
                 const selected = selectedAgents.includes(agent.key)
@@ -620,7 +620,7 @@ export default function Compliance() {
 
           {agentCoverage.length > 0 && (
             <div className="rounded-xl card p-4">
-              <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-zinc-400">Agent coverage</div>
+              <div className="mb-1 text-xs font-medium text-zinc-400">Agent coverage</div>
               <p className="mb-3 text-[11px] leading-4 text-zinc-600">Enabled, configured endpoint agents remain compliance requirements during connection errors.</p>
               <div className="space-y-3">
                 {agentCoverage.map(agent => {
@@ -663,7 +663,7 @@ export default function Compliance() {
 
           {/* Donut + legend */}
           <div className="rounded-xl card p-4">
-            <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Distribution</div>
+            <div className="text-xs font-medium text-zinc-400 mb-3">Distribution</div>
             <div className="flex items-center gap-4">
               <div className="flex-shrink-0">
                 <PieChart width={110} height={110}>
@@ -716,7 +716,7 @@ export default function Compliance() {
 
           {/* Issues — interactive rows */}
           <div className="rounded-xl card p-4">
-            <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Issues Breakdown</div>
+            <div className="text-xs font-medium text-zinc-400 mb-3">Issues breakdown</div>
             <div className="space-y-1">
               {Object.entries(ISSUE_META).filter(([key]) => activeAgentKeys.has(ISSUE_AGENT[key])).map(([key, meta]) => {
                 const count = (iss as any)[key] as number ?? 0
@@ -752,7 +752,7 @@ export default function Compliance() {
           {/* OS breakdown — clickable cards */}
           {osd.length > 0 && (
             <div className="rounded-xl card p-4">
-              <div className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">By OS</div>
+              <div className="text-xs font-medium text-zinc-400 mb-3">By OS</div>
               <div className="space-y-1">
                 {osd.map(os => {
                   const pct = os.total > 0 ? Math.round(os.compliant / os.total * 100) : 0

@@ -41,7 +41,7 @@ export default function StatCard({
       />
 
       <div className="flex items-center justify-between gap-3 mb-3">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: 'var(--surface-6, #52525e)' }}>
+        <span className="text-[12px] font-medium" style={{ color: 'var(--text-3)' }}>
           {title}
         </span>
         <div className={`${iconColor} opacity-60`}>

@@ -101,7 +101,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
     label: 'SentinelOne',
     category: 'security',
     description: 'Endpoint detection and response (EDR) platform',
-    color: '#7c3aed',
+    color: '#26c58b',
     icon: Shield,
     dataProduces: ['Endpoints', 'Agents', 'Threats'],
     unlocks: ['Applications Vulnerabilities'],
@@ -172,7 +172,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
         name: 'db_host',
         label: 'Host',
         type: 'text',
-        placeholder: 'db.example.com',
+        placeholder: 'db.company.internal',
         required: true,
         group: 'host',
       },
@@ -222,7 +222,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
         name: 'base_url',
         label: 'PuppetDB URL',
         type: 'url',
-        placeholder: 'http://puppetdb.example.com:8080',
+        placeholder: 'http://puppetdb.company.internal:8080',
         hint: 'Include port if non-standard (default: 8080)',
         required: true,
       },
@@ -269,7 +269,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
         name: 'ldap_host',
         label: 'LDAP Host',
         type: 'text',
-        placeholder: 'dc01.corp.example.com',
+        placeholder: 'dc01.company.internal',
         required: true,
         group: 'server',
         showWhen: { field: 'import_mode', value: 'live' },
@@ -363,7 +363,7 @@ const INTEGRATION_CATALOG: Record<string, CatalogEntry> = {
         name: 'service_url',
         label: 'ADFS Service URL',
         type: 'url',
-        placeholder: 'https://adfs.example.com/adfs',
+        placeholder: 'https://adfs.company.tld/adfs',
         required: true,
       },
       {
@@ -631,7 +631,7 @@ function IntegrationCard({
   const isCustomApi = config.integration_type.startsWith('custom_api')
 
   const Icon = catalog?.icon ?? (isCustomApi ? Activity : Database)
-  const color = catalog?.color ?? '#6366f1'
+  const color = catalog?.color ?? '#26c58b'
   const description = catalog?.description ?? config.display_name
   const produces = catalog?.dataProduces ?? []
   const unlocks = availableUnlocks(config, catalog)
@@ -643,7 +643,7 @@ function IntegrationCard({
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left rounded-xl card card-interactive p-4 transition-all ${
+      className={`w-full text-left rounded-xl card card-interactive p-4 transition-[border-color,background-color,transform] ${
         selected
           ? 'border-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]'
           : ''
@@ -686,7 +686,7 @@ function IntegrationCard({
             <div className="mt-2 flex items-center gap-1.5 text-[10px] font-medium">
               <Lock size={10} className={config.status === 'connected' ? 'text-emerald-400' : 'text-zinc-600'} />
               <span className={config.status === 'connected' ? 'text-emerald-400' : 'text-zinc-500'}>
-                {config.status === 'connected' ? 'Unlocked' : 'Connect to unlock'}: {unlocks.join(', ')}
+                {config.status === 'connected' ? 'Enabled' : 'Connect to enable'}: {unlocks.join(', ')}
               </span>
             </div>
           )}
@@ -860,7 +860,7 @@ function IntegrationPanel({
   const isCustomApi = config?.integration_type.startsWith('custom_api') ?? false
 
   const Icon = catalog?.icon ?? (isCustomApi ? Activity : Database)
-  const color = catalog?.color ?? '#6366f1'
+  const color = catalog?.color ?? '#26c58b'
   const description = catalog?.description ?? config?.display_name ?? ''
   const produces = catalog?.dataProduces ?? []
   const unlocks = config ? availableUnlocks(config, catalog) : []
@@ -875,7 +875,7 @@ function IntegrationPanel({
       saveIntegrationCredentials(config!.integration_type, creds, true),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['integrations'] })
-      setTestResult({ success: true, message: 'Configuration saved. Test the connection to unlock product features.' })
+      setTestResult({ success: true, message: 'Configuration saved. Test the connection to enable product features.' })
       setView('status')
     },
   })
@@ -1010,7 +1010,7 @@ function IntegrationPanel({
                   {/* Status card */}
                   <div className="rounded-xl bg-[var(--surface-2)] border border-[var(--border)] p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-zinc-500 font-medium uppercase tracking-wide">Status</span>
+                      <span className="text-xs text-zinc-500 font-medium">Status</span>
                       <StatusDot status={config.is_enabled ? config.status : 'disabled'} />
                     </div>
                     {relativeSync && (
@@ -1050,7 +1050,7 @@ function IntegrationPanel({
                         </div>
                         <div>
                           <p className={`text-xs font-semibold ${config.status === 'connected' ? 'text-emerald-300' : 'text-zinc-300'}`}>
-                            {config.status === 'connected' ? 'Feature unlocked' : 'Available after connection'}
+                            {config.status === 'connected' ? 'Feature enabled' : 'Available after connection'}
                           </p>
                           <p className="mt-1 text-xs text-zinc-500">{unlocks.join(', ')}</p>
                         </div>
@@ -1073,7 +1073,7 @@ function IntegrationPanel({
                   {/* Data produced */}
                   {produces.length > 0 && (
                     <div>
-                      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+                      <p className="text-xs font-medium text-zinc-500 mb-2">
                         Data Synced
                       </p>
                       <div className="flex flex-wrap gap-2">
@@ -1093,7 +1093,7 @@ function IntegrationPanel({
                   {/* Actions */}
                   {config.credentials_configured && (
                     <div className="space-y-2">
-                      <p className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">Actions</p>
+                      <p className="text-xs font-medium text-zinc-500 mb-2">Actions</p>
 
                       {adManualMode ? (
                         <button type="button" onClick={() => setView('config')} className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-sky-500/10 border border-sky-500/25 text-sm text-sky-300 hover:bg-sky-500/15">
@@ -1350,7 +1350,7 @@ function AddCustomModal({ onClose }: { onClose: () => void }) {
                   type="url"
                   value={apiValues.base_url ?? ''}
                   onChange={(e) => setApiValues((p) => ({ ...p, base_url: e.target.value }))}
-                  placeholder="https://api.example.com"
+                  placeholder="https://api.company.tld"
                   className={inputClass}
                   required
                 />
@@ -1450,7 +1450,7 @@ function AddCustomModal({ onClose }: { onClose: () => void }) {
                     type="text"
                     value={dbValues.db_host ?? ''}
                     onChange={(e) => setDbValues((p) => ({ ...p, db_host: e.target.value }))}
-                    placeholder="db.example.com"
+                    placeholder="db.company.internal"
                     className={inputClass}
                     required
                   />
@@ -1683,7 +1683,7 @@ export default function Integrations() {
                 {CATEGORIES.find((c) => c.id === category)?.label ?? 'Product Store'}
               </h1>
               <p className="text-zinc-500 text-xs mt-0.5">
-                Connect trusted products and unlock their tools across SEC360.
+                Connect trusted products and enable their tools across SEC360.
               </p>
             </div>
             <button

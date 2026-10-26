@@ -311,7 +311,7 @@ function UsersTab() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs text-zinc-500 uppercase tracking-wider" style={{ borderBottom: '1px solid var(--border)' }}>
+              <tr className="text-xs text-zinc-500" style={{ borderBottom: '1px solid var(--border)' }}>
                 <th className="text-left px-4 py-3">User</th>
                 <th className="text-left px-4 py-3">Role</th>
                 <th className="text-left px-4 py-3">Authentication</th>
@@ -346,7 +346,7 @@ function UsersTab() {
                     </select>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs uppercase tracking-wide"
+                    <span className="inline-flex items-center rounded border px-2 py-0.5 text-xs"
                       style={{ color: 'var(--text-2)', borderColor: 'var(--border-mid)', background: 'var(--surface-2)' }}>
                       {u.auth_method}
                     </span>
@@ -977,7 +977,7 @@ function FeaturesTab() {
   }
 
   return <div className="max-w-2xl space-y-5">
-    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><h2 className="text-base font-semibold text-white">Features</h2><p className="mt-0.5 text-xs text-zinc-500">Control optional SEC360 workspaces without changing their retained data.</p></div><div className="rounded-lg border px-3 py-2 text-right" style={{ borderColor: 'var(--border)', background: 'var(--surface-inset)' }}><p className="font-mono text-lg font-semibold text-emerald-400">{enabledCount}/3</p><p className="text-[9px] uppercase tracking-[.1em] text-zinc-500">Enabled</p></div></div>
+    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><h2 className="text-base font-semibold text-white">Features</h2><p className="mt-0.5 text-xs text-zinc-500">Control optional SEC360 workspaces without changing their retained data.</p></div><div className="rounded-md border px-3 py-2 text-right" style={{ borderColor: 'var(--border)', background: 'var(--surface-inset)' }}><p className="tabular-nums text-lg font-semibold text-emerald-400">{enabledCount}/3</p><p className="text-[12px] text-zinc-500">Enabled</p></div></div>
     {msg && <Alert type={msg.type} msg={msg.msg} />}
 
     <Section title="Network Map" hint="Topology visualization and on-premises network-source collection.">
@@ -1011,7 +1011,7 @@ function Section({ title, hint, children }: { title: string; hint?: string; chil
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
       <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-inset-strong)' }}>
-        <div className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">{title}</div>
+        <div className="text-xs font-medium text-zinc-300">{title}</div>
         {hint && <div className="text-xs text-zinc-500 mt-0.5">{hint}</div>}
       </div>
       <div style={{ '--divide-color': 'var(--border)' } as React.CSSProperties}>
@@ -1097,8 +1097,8 @@ const SAML_PROVIDERS: Record<SamlProvider, {
     label: 'Generic SAML 2.0', shortLabel: 'Generic SAML',
     description: 'Connect any standards-compatible SAML 2.0 identity provider',
     consoleName: 'your identity provider',
-    entityPlaceholder: 'https://idp.example.com/entity-id',
-    ssoPlaceholder: 'https://idp.example.com/saml/sso',
+    entityPlaceholder: 'https://idp.company.tld/entity-id',
+    ssoPlaceholder: 'https://idp.company.tld/saml/sso',
     metadataHint: 'Export the IdP metadata XML from your identity provider and upload it here.',
     setupSteps: [
       'Create a new SAML 2.0 application in your identity provider.',
@@ -1127,8 +1127,8 @@ const SAML_PROVIDERS: Record<SamlProvider, {
     label: 'ADFS', shortLabel: 'ADFS',
     description: 'Connect an Active Directory Federation Services relying-party trust',
     consoleName: 'AD FS Management',
-    entityPlaceholder: 'http://adfs.example.com/adfs/services/trust',
-    ssoPlaceholder: 'https://adfs.example.com/adfs/ls/',
+    entityPlaceholder: 'http://adfs.company.internal/adfs/services/trust',
+    ssoPlaceholder: 'https://adfs.company.tld/adfs/ls/',
     metadataHint: 'Download FederationMetadata.xml from ADFS and upload it here.',
     setupSteps: [
       'In AD FS Management, add a Relying Party Trust using the SEC360 metadata URL above.',
@@ -1440,7 +1440,7 @@ function SsoTab() {
       {/* IdP metadata upload */}
       <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
         <div>
-          <div className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">Import IdP metadata</div>
+          <div className="text-xs font-medium text-zinc-300">Import IdP metadata</div>
           <p className="text-xs text-zinc-500 mt-1">
             {provider.metadataHint}
           </p>
@@ -1546,7 +1546,7 @@ function SsoTab() {
           <Toggle checked={form.radius_enabled} onChange={value => set('radius_enabled', value)} />
         </Field>
         <Field label="RADIUS server" hint="DNS name or IP address reachable from the backend container">
-          <input type="text" value={form.radius_host} onChange={event => set('radius_host', event.target.value)} placeholder="radius.corp.example.com" className="bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm w-80 max-w-full focus:outline-none focus:border-emerald-500" />
+          <input type="text" value={form.radius_host} onChange={event => set('radius_host', event.target.value)} placeholder="radius.company.internal" className="bg-zinc-950 border border-white/[0.08] text-white placeholder-gray-600 rounded-lg px-3 py-1.5 text-sm w-80 max-w-full focus:outline-none focus:border-emerald-500" />
         </Field>
         <Field label="Authentication port" hint="Standard RADIUS authentication uses UDP 1812">
           <input type="number" min={1} max={65535} value={form.radius_port} onChange={event => set('radius_port', Number(event.target.value))} className="bg-zinc-950 border border-white/[0.08] text-white rounded-lg px-3 py-1.5 text-sm w-32 focus:outline-none focus:border-emerald-500" />
@@ -1684,7 +1684,7 @@ function CertificateTab() {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
         <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-inset)]">
           <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-inset-strong)] px-4 py-3">
-            <div className="flex items-center gap-2"><ShieldCheck size={15} className={current?.valid ? 'text-emerald-400' : 'text-zinc-500'} /><span className="text-xs font-semibold uppercase tracking-wider text-zinc-300">Active certificate</span></div>
+            <div className="flex items-center gap-2"><ShieldCheck size={15} className={current?.valid ? 'text-emerald-400' : 'text-zinc-500'} /><span className="text-xs font-medium text-zinc-300">Active certificate</span></div>
             {current && <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${current.valid ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400' : 'border-red-500/20 bg-red-500/10 text-red-400'}`}>{current.valid ? 'Valid' : 'Attention required'}</span>}
           </div>
           {statusQuery.isLoading ? (
@@ -1792,7 +1792,7 @@ function AuditTab() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs text-zinc-500 uppercase tracking-wider" style={{ borderBottom: '1px solid var(--border)' }}>
+              <tr className="text-xs text-zinc-500" style={{ borderBottom: '1px solid var(--border)' }}>
                 <th className="text-left px-4 py-3">Timestamp</th>
                 <th className="text-left px-4 py-3">Action</th>
                 <th className="text-left px-4 py-3">Resource</th>

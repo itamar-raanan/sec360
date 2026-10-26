@@ -25,6 +25,7 @@ htmlcov/
 .coverage
 coverage.xml
 *.log
+.taste-skill/
 
 # ── Node / Frontend ──────────────────────────────────────────────
 frontend/node_modules/

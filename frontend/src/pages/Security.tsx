@@ -321,7 +321,7 @@ function UsersTab() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs text-zinc-500 uppercase tracking-wider"
+              <tr className="text-xs text-zinc-500"
                 style={{ borderBottom: '1px solid var(--border)' }}>
                 <th className="text-left px-4 py-3">User</th>
                 <th className="text-left px-4 py-3">Role</th>
@@ -574,7 +574,7 @@ function AuditTab() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-xs text-zinc-500 uppercase tracking-wider"
+              <tr className="text-xs text-zinc-500"
                 style={{ borderBottom: '1px solid var(--border)' }}>
                 <th className="text-left px-4 py-3">Timestamp</th>
                 <th className="text-left px-4 py-3">Actor</th>
@@ -813,7 +813,7 @@ function ChangeLogTab() {
         {isLoading ? <div className="p-8 text-center text-sm text-zinc-500">Loading events…</div>
           : items.length === 0 ? <div className="p-12 text-center text-sm text-zinc-600">No changes recorded yet</div>
           : <table className="w-full min-w-[1000px] text-sm">
-              <thead><tr className="text-xs uppercase tracking-wider text-zinc-500" style={{ borderBottom: '1px solid var(--border)' }}>
+              <thead><tr className="text-xs text-zinc-500" style={{ borderBottom: '1px solid var(--border)' }}>
                 <th className="px-4 py-3 text-left">Timestamp</th><th className="px-4 py-3 text-left">Change</th><th className="px-4 py-3 text-left">Endpoint / user</th><th className="px-4 py-3 text-left">Changed by</th><th className="px-4 py-3 text-left">Before</th><th className="px-4 py-3 text-left">Now</th>
               </tr></thead>
               <tbody>{items.map(item => (
@@ -874,7 +874,7 @@ function SiemTab() {
         <label className="flex items-center justify-between"><span><span className="block text-sm font-medium text-white">Enable forwarding</span><span className="text-xs text-zinc-500">The durable queue is delivered every minute.</span></span><input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })} className="h-4 w-4 accent-emerald-500" /></label>
         <div><label className="mb-1 block text-xs text-zinc-400">Delivery method</label><select className={fieldClass} value={form.transport} onChange={e => setForm({ ...form, transport: e.target.value as SiemSettings['transport'] })}><option value="http">HTTP(S) endpoint</option><option value="syslog">Elastic Agent / syslog</option></select></div>
         {form.transport === 'http' ? <>
-          <div><label className="mb-1 block text-xs text-zinc-400">HTTP ingestion URL</label><input className={fieldClass} value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} placeholder="https://siem.example.com/api/events" /></div>
+          <div><label className="mb-1 block text-xs text-zinc-400">HTTP ingestion URL</label><input className={fieldClass} value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} placeholder="https://siem.company.tld/api/events" /></div>
           <div className="grid grid-cols-2 gap-3"><div><label className="mb-1 block text-xs text-zinc-400">Authentication</label><select className={fieldClass} value={form.auth_type} onChange={e => setForm({ ...form, auth_type: e.target.value as SiemSettings['auth_type'] })}><option value="none">None</option><option value="bearer">Bearer token</option><option value="api_key">Elastic API key</option><option value="basic">Basic auth</option></select></div><div><label className="mb-1 block text-xs text-zinc-400">Payload</label><select className={fieldClass} value={form.payload_format} onChange={e => setForm({ ...form, payload_format: e.target.value as SiemSettings['payload_format'] })}><option value="json">ECS JSON</option><option value="ndjson">Elastic Bulk NDJSON</option></select></div></div>
           {form.auth_type === 'basic' && <div><label className="mb-1 block text-xs text-zinc-400">Username</label><input className={fieldClass} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} /></div>}
           {form.auth_type !== 'none' && <div><label className="mb-1 block text-xs text-zinc-400">{form.has_secret ? 'Secret (leave blank to keep saved value)' : 'Secret'}</label><input type="password" className={fieldClass} value={form.secret ?? ''} onChange={e => setForm({ ...form, secret: e.target.value })} /></div>}

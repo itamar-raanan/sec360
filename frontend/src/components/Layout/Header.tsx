@@ -12,9 +12,9 @@ const PAGE_TITLES: Record<string, { title: string; desc: string }> = {
   '/compliance':   { title: 'Compliance',    desc: 'Control coverage and exceptions' },
   '/activity':     { title: 'Activity',      desc: 'Security event timeline' },
   '/security':     { title: 'Security',      desc: 'Change logs, audit logs, and SIEM forwarding' },
-  '/application-vulnerabilities': { title: 'Applications Vulnerabilities', desc: 'SentinelOne software exposure and CVEs' },
+  '/application-vulnerabilities': { title: 'Vulnerabilities', desc: 'SentinelOne software exposure and CVEs' },
   '/puppet-facts': { title: 'Puppet Facts', desc: 'Searchable PuppetDB node facts' },
-  '/dlp-user-policy-search': { title: 'DLP User Policy Search', desc: 'User exclusions across Symantec DLP policies' },
+  '/dlp-user-policy-search': { title: 'DLP Search', desc: 'User exclusions across Symantec DLP policies' },
   '/reports':      { title: 'Reports',       desc: 'Generated reports and exports' },
   '/integrations': { title: 'Integrations',  desc: 'Connected platforms and APIs' },
   '/settings':     { title: 'Settings',      desc: 'Platform configuration' },
@@ -72,19 +72,17 @@ export default function Header({ onOpenCmd }: HeaderProps) {
     <header
       className="app-header h-14 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-10"
       style={{
-        background: 'color-mix(in srgb, var(--surface-1) 88%, transparent)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
+        background: 'var(--surface-1)',
         borderBottom: '1px solid var(--border)',
       }}
     >
       <div className="flex min-w-0 items-center gap-3">
         <span className="brand-mark md:hidden"><ShieldCheck size={14} strokeWidth={2.4} /></span>
-        <h1 className="truncate text-[14px] font-semibold tracking-[-0.02em]" style={{ color: 'var(--text-1)' }}>{meta.title}</h1>
+        <p className="truncate text-[14px] font-semibold tracking-[-0.02em]" style={{ color: 'var(--text-1)' }}>{meta.title}</p>
         {meta.desc && (
           <>
             <span className="hidden sm:inline" style={{ color: 'var(--border-mid)', fontSize: 13 }}>/</span>
-            <span className="hidden truncate text-[11px] sm:inline" style={{ color: 'var(--text-4)' }}>{meta.desc}</span>
+            <span className="hidden truncate text-[12px] sm:inline" style={{ color: 'var(--text-3)' }}>{meta.desc}</span>
           </>
         )}
       </div>
@@ -92,19 +90,19 @@ export default function Header({ onOpenCmd }: HeaderProps) {
       <div className="flex items-center gap-1.5">
         <button
           onClick={onOpenCmd}
-          className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-[8px] text-[11px] pressable hover:bg-white/[0.025]"
+          className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-[6px] text-[12px] pressable hover:bg-white/[0.025]"
           style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)', color: 'var(--text-4)' }}
           title="Open command palette"
         >
           <Search size={12} />
           <span>Search or run a command</span>
-          <kbd className="ml-2 rounded px-1 py-0.5 font-mono text-[9px]" style={{ background: 'var(--surface-3)', border: '1px solid var(--border)' }}>⌘K</kbd>
+          <kbd className="ml-2 rounded px-1 py-0.5 text-[11px]" style={{ background: 'var(--surface-3)', border: '1px solid var(--border)' }}>⌘K</kbd>
         </button>
 
         <div className="relative" ref={statusRef}>
           <button
             onClick={() => setStatusOpen(open => !open)}
-            className="relative flex items-center gap-2 rounded-[8px] px-2.5 py-1.5 text-[11px] hover:bg-white/[0.04]"
+            className="relative flex items-center gap-2 rounded-[6px] px-2.5 py-1.5 text-[12px] hover:bg-white/[0.04]"
             style={{ color: 'var(--text-3)', background: statusOpen ? 'var(--hover-1)' : 'transparent' }}
             title="Open operational status"
             aria-expanded={statusOpen}
@@ -118,26 +116,26 @@ export default function Header({ onOpenCmd }: HeaderProps) {
             <div className="ui-float-surface absolute right-0 top-[calc(100%+10px)] w-[min(360px,calc(100vw-24px))] overflow-hidden fade-in">
               <div className="flex items-start justify-between border-b px-4 py-3.5" style={{ borderColor: 'var(--border)' }}>
                 <div>
-                  <p className="ui-eyebrow">Operational status</p>
+                  <p className="ui-context">Operational status</p>
                   <p className="mt-1.5 text-[13px] font-semibold" style={{ color: 'var(--text-1)' }}>{healthState === 'healthy' ? 'Collection plane healthy' : 'Attention required'}</p>
                 </div>
                 {healthState === 'healthy' ? <CheckCircle2 size={15} className="text-emerald-400" /> : <AlertTriangle size={15} className="text-amber-400" />}
               </div>
 
               <button onClick={() => { setStatusOpen(false); navigate('/integrations') }} className="ui-data-row flex w-full items-center gap-3 px-4 py-3 text-left">
-                <span className="flex h-8 w-8 items-center justify-center rounded-[8px]" style={{ background: 'var(--surface-3)', color: 'var(--text-3)' }}><Plug size={14} /></span>
+                <span className="flex h-8 w-8 items-center justify-center" style={{ color: 'var(--text-3)' }}><Plug size={14} /></span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[12px] font-medium" style={{ color: 'var(--text-2)' }}>Data sources</span>
-                  <span className="block text-[10px]" style={{ color: 'var(--text-4)' }}>{healthySources.length} healthy · {errorSources.length} degraded · {activeSources.length} enabled</span>
+                  <span className="block text-[11px]" style={{ color: 'var(--text-3)' }}>{healthySources.length} healthy · {errorSources.length} degraded · {activeSources.length} enabled</span>
                 </span>
                 <ArrowRight size={13} style={{ color: 'var(--text-4)' }} />
               </button>
 
               <div className="flex items-center gap-3 border-y px-4 py-3" style={{ borderColor: 'var(--border)' }}>
-                <span className="flex h-8 w-8 items-center justify-center rounded-[8px]" style={{ background: 'var(--surface-3)', color: 'var(--text-3)' }}><Clock3 size={14} /></span>
+                <span className="flex h-8 w-8 items-center justify-center" style={{ color: 'var(--text-3)' }}><Clock3 size={14} /></span>
                 <span>
                   <span className="block text-[12px] font-medium" style={{ color: 'var(--text-2)' }}>Latest source observation</span>
-                  <span className="block text-[10px]" style={{ color: 'var(--text-4)' }}>{latestSync ? formatDistanceToNow(latestSync, { addSuffix: true }) : 'No completed synchronization'}</span>
+                  <span className="block text-[11px]" style={{ color: 'var(--text-3)' }}>{latestSync ? formatDistanceToNow(latestSync, { addSuffix: true }) : 'No completed synchronization'}</span>
                 </span>
               </div>
 

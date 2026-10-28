@@ -236,7 +236,7 @@ export default function DlpUserPolicySearch() {
       <div className="mx-auto max-w-[1700px] px-4 py-5 sm:px-6 lg:px-8">
         <section className="mb-5 flex flex-col gap-4 border-b pb-5 lg:flex-row lg:items-end lg:justify-between" style={{ borderColor: 'var(--border)' }}>
           <div className="max-w-3xl">
-            <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-400">
+            <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: 'var(--accent)' }}>
               <Database size={14} /> Live Symantec DLP intelligence
             </div>
             <h1 className="ui-page-title">DLP User Policy Search</h1>
@@ -277,7 +277,7 @@ export default function DlpUserPolicySearch() {
           </div>
         )}
 
-        <section className="mb-4 grid grid-cols-2 border lg:grid-cols-4" style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}>
+        <section className="ui-command-surface mb-4 grid grid-cols-2 overflow-hidden lg:grid-cols-4">
           {[
             { label: 'Exclusion objects', value: stats.objects, icon: UserSearch, note: 'Unique pattern objects' },
             { label: 'Policies', value: stats.policies, icon: ShieldCheck, note: 'Unique policy matches' },
@@ -287,7 +287,7 @@ export default function DlpUserPolicySearch() {
             <div key={label} className={`min-w-0 px-4 py-4 sm:px-5 ${index % 2 ? '' : 'border-r'} ${index < 2 ? 'border-b lg:border-b-0' : ''} ${index === 1 ? 'lg:border-r' : ''} ${index === 2 ? 'lg:border-r' : ''}`} style={{ borderColor: 'var(--border)' }}>
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: 'var(--text-4)' }}>{label}</span>
-                <Icon size={16} className="text-emerald-400" />
+                <Icon size={16} style={{ color: 'var(--accent)' }} />
               </div>
               <div className="text-2xl font-semibold tabular-nums tracking-tight" style={{ color: 'var(--text-1)' }}>{value.toLocaleString()}</div>
               <div className="mt-1 text-[10px]" style={{ color: 'var(--text-4)' }}>{note}</div>
@@ -295,7 +295,7 @@ export default function DlpUserPolicySearch() {
           ))}
         </section>
 
-        <section className="overflow-hidden rounded-xl border" style={{ background: 'var(--surface-2)', borderColor: 'var(--border)' }}>
+        <section className="ui-command-surface overflow-hidden">
           <div className="border-b px-4 py-4" style={{ borderColor: 'var(--border)' }}>
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
               <div className="relative min-w-0 flex-1">

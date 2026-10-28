@@ -84,14 +84,14 @@ export default function AcceptInvite() {
   const stepIndex = step === 'set-password' ? 0 : step === 'setup-2fa' ? 1 : -1
 
   return (
-    <div className="min-h-[100dvh] flex items-center justify-center p-4" style={{ background: 'var(--surface-0)' }}>
+    <div className="auth-shell min-h-[100dvh] flex items-center justify-center p-4">
       <div className="grain-overlay" aria-hidden />
       <div className="w-full max-w-[420px]">
 
         {/* Logo */}
         <div className="flex items-center justify-center gap-2.5 mb-8">
           <div className="brand-mark">
-            <Shield size={17} className="text-white" strokeWidth={2.5} />
+            <Shield size={17} strokeWidth={2.5} />
           </div>
           <span className="font-bold text-lg tracking-tight" style={{ color: 'var(--text-1)' }}>SEC360</span>
         </div>
@@ -122,7 +122,7 @@ export default function AcceptInvite() {
         )}
 
         {/* Card */}
-        <div className="ui-command-surface p-8" style={{ background: 'var(--surface-2)' }}>
+        <div className="auth-card ui-command-surface p-8" style={{ background: 'var(--glass-panel-strong)' }}>
 
           {step === 'loading' && (
             <div className="flex flex-col items-center gap-3 py-8">

@@ -637,10 +637,10 @@ export default function Endpoints() {
                     className={`flex items-center gap-3 px-5 cursor-pointer ${density === 'compact' ? 'py-2' : 'py-3.5'} ${isInactive ? 'opacity-60' : ''}`}
                     style={{
                       transition: 'background-color 80ms ease',
-                      background: isSelected ? 'rgba(16,185,129,0.06)' : 'transparent',
+                      background: isSelected ? 'var(--accent-dim)' : 'transparent',
                     }}
                     onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'var(--hover-2)' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = isSelected ? 'rgba(16,185,129,0.06)' : 'transparent' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = isSelected ? 'var(--accent-dim)' : 'transparent' }}
                   >
                     <button
                       onClick={e => toggleSelect(ep.id, e)}

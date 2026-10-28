@@ -62,9 +62,9 @@ export default function Layout() {
       <div className="grain-overlay" aria-hidden />
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
       <FloatingPanels />
-      <div className="flex h-[100dvh] overflow-hidden" style={{ background: 'var(--surface-0)' }}>
+      <div className="app-shell flex h-[100dvh] overflow-hidden">
         <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} onOpenCmd={() => setCmdOpen(true)} />
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <div className="relative z-0 flex min-w-0 flex-1 flex-col overflow-hidden">
           <Header onOpenCmd={() => setCmdOpen(true)} />
           <main id="main-content" className="app-main flex-1 overflow-hidden relative" tabIndex={-1}>
             <div key={location.pathname} className="route-stage h-full">

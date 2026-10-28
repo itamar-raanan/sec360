@@ -45,19 +45,20 @@ export default function AuthLeftPanel() {
     <aside
       className="relative hidden flex-col overflow-hidden lg:flex lg:w-[54%]"
       style={{
-        background: 'var(--surface-1)',
+        background: 'linear-gradient(145deg, color-mix(in srgb, var(--accent) 5%, transparent), transparent 46%), var(--glass-panel-strong)',
         borderRight: '1px solid var(--border)',
+        backdropFilter: 'blur(24px)',
       }}
     >
       <div
         className="pointer-events-none absolute inset-x-0"
-        style={{ height: 2, background: 'rgba(16,185,129,0.32)', animation: 'scan-beam 5s linear infinite' }}
+        style={{ height: 1, background: 'var(--accent-ring)', animation: 'scan-beam 5s linear infinite' }}
       />
 
       <div className="relative z-10 flex h-full flex-col px-10 py-9">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg" style={{ background: 'var(--accent)' }}>
-            <ShieldCheck size={16} className="text-white" strokeWidth={2.5} />
+          <div className="brand-mark h-8 w-8">
+            <ShieldCheck size={16} strokeWidth={2.5} />
           </div>
           <span className="text-[17px] font-bold tracking-[-0.02em] text-white">SEC360</span>
         </div>
@@ -65,7 +66,7 @@ export default function AuthLeftPanel() {
         <div className="mt-12">
           <div
             className="mb-5 inline-flex items-center gap-2 rounded px-2.5 py-1"
-            style={{ background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.18)' }}
+            style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-ring)' }}
           >
             <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400" style={{ animation: 'pulse-dot 2s ease-in-out infinite' }} />
             <span className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: 'var(--accent)' }}>Live Threat Monitor</span>
@@ -83,7 +84,7 @@ export default function AuthLeftPanel() {
 
         <div
           className="mt-8 flex max-h-[300px] flex-1 flex-col overflow-hidden rounded-xl"
-          style={{ background: '#07070d', border: '1px solid rgba(255,255,255,0.08)', boxShadow: '0 20px 60px rgba(0,0,0,0.28)' }}
+          style={{ background: 'var(--surface-inset-strong)', border: '1px solid var(--border-mid)', boxShadow: 'var(--shadow-card)' }}
         >
           <div className="flex flex-shrink-0 items-center gap-2 px-3.5 py-2" style={{ borderBottom: '1px solid rgba(255,255,255,0.07)', background: 'rgba(255,255,255,0.025)' }}>
             <div className="flex gap-1.5">

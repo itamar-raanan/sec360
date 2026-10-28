@@ -325,14 +325,14 @@ export default function Users() {
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
             <div className="flex items-center justify-center h-40">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-500" />
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'var(--border)', borderBottomColor: 'var(--accent)' }} />
             </div>
           ) : users.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40" style={{ color: 'var(--text-4)' }}>
               <User className="w-8 h-8 mb-2 opacity-50" />
               <p className="text-sm">No users match your filters.</p>
               {activeFilterCount > 0 && (
-                <button onClick={() => setFilters(EMPTY)} className="mt-2 text-xs text-emerald-400 hover:text-emerald-300">
+                <button onClick={() => setFilters(EMPTY)} className="mt-2 text-xs" style={{ color: 'var(--accent)' }}>
                   Clear filters
                 </button>
               )}

@@ -24,11 +24,12 @@ function PanelWindow({ panel }: { panel: FloatingPanel }) {
         flexShrink: 0,
         display: 'flex',
         flexDirection: 'column',
-        background: 'var(--surface-1)',
+        background: 'var(--glass-panel-strong)',
         border: '1px solid var(--border-lit)',
         borderBottom: 'none',
         borderRadius: panel.minimized ? '8px 8px 0 0' : '14px 14px 0 0',
-        boxShadow: '0 -8px 40px rgba(0,0,0,0.55), 0 0 0 1px var(--hover-1)',
+        boxShadow: 'var(--shadow-float)',
+        backdropFilter: 'blur(26px) saturate(1.18)',
         overflow: 'hidden',
         transition: 'width 200ms cubic-bezier(0.4,0,0.2,1), height 200ms cubic-bezier(0.4,0,0.2,1), border-radius 200ms cubic-bezier(0.4,0,0.2,1)',
         pointerEvents: 'auto',
@@ -40,7 +41,7 @@ function PanelWindow({ panel }: { panel: FloatingPanel }) {
         style={{
           height: panel.minimized ? HEADER_H_MIN : HEADER_H_OPEN,
           borderBottom: panel.minimized ? 'none' : '1px solid var(--border)',
-          background: panel.minimized ? 'var(--surface-2)' : 'var(--surface-1)',
+          background: panel.minimized ? 'var(--surface-2)' : 'var(--glass-panel-strong)',
           transition: 'background-color 150ms ease',
         }}
         onClick={() => toggleMinimize(panel.id)}
@@ -51,7 +52,7 @@ function PanelWindow({ panel }: { panel: FloatingPanel }) {
           style={{ background: 'var(--accent-dim)' }}>
           <Icon size={10} style={{ color: 'var(--accent)' }} />
         </div>
-        <span className="text-white flex-1 truncate" style={{ fontSize: panel.minimized ? 11 : 12, fontWeight: 500 }}>{panel.title}</span>
+        <span className="flex-1 truncate" style={{ color: 'var(--text-1)', fontSize: panel.minimized ? 11 : 12, fontWeight: 500 }}>{panel.title}</span>
 
         {/* action buttons */}
         <button

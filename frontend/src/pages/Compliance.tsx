@@ -558,7 +558,7 @@ export default function Compliance() {
     <div className="compliance-layout absolute inset-0 flex overflow-hidden">
 
       {/* ── Left panel (sticky) ───────────────────────────────────────── */}
-      <div className="compliance-overview w-[340px] flex-shrink-0 flex flex-col overflow-hidden border-r border-white/[0.06] bg-gray-950">
+      <div className="compliance-overview glass-sidebar w-[360px] flex-shrink-0 flex flex-col overflow-hidden border-r border-white/[0.06]">
         {/* Header */}
         <div className="flex-shrink-0 px-5 pt-5 pb-3 flex items-center justify-between">
           <div>

@@ -358,8 +358,7 @@ export default function Activity() {
   return (
     <div className="absolute inset-0 overflow-y-auto">
       {/* Filter bar */}
-      <div className="sticky top-0 z-20 px-6 py-3 flex flex-wrap gap-3 items-center"
-        style={{ background: 'color-mix(in srgb, var(--surface-0) 92%, transparent)', backdropFilter: 'blur(12px)', borderBottom: '1px solid var(--border)' }}>
+      <div className="glass-header sticky top-0 z-20 px-6 py-3 flex flex-wrap gap-3 items-center">
         <div className="flex items-center gap-2">
           <LogIn size={14} style={{ color: 'var(--accent)' }} />
           <h1 className="ui-section-title">
@@ -404,7 +403,7 @@ export default function Activity() {
       </div>
 
       {/* Feed */}
-      <div style={{ background: 'var(--surface-1)' }}>
+      <div style={{ background: 'var(--table-surface)' }}>
         {isLoading ? (
           <div className="p-6"><SkeletonEventRows count={10} /></div>
         ) : grouped.length === 0 ? (

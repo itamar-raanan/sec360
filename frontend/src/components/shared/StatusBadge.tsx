@@ -5,20 +5,20 @@ interface StatusBadgeProps {
   status: ComplianceStatusValue | AgentStatus | string
 }
 
-const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  compliant: { label: 'Compliant', className: 'bg-green-500/15 text-green-400 border-green-500/30' },
-  partial: { label: 'Partial', className: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30' },
-  non_compliant: { label: 'Non-Compliant', className: 'bg-red-500/15 text-red-400 border-red-500/30' },
-  active: { label: 'Active', className: 'bg-green-500/15 text-green-400 border-green-500/30' },
-  inactive: { label: 'Inactive', className: 'bg-red-500/15 text-red-400 border-red-500/30' },
-  unknown: { label: 'Unknown', className: 'bg-gray-500/15 text-gray-400 border-gray-500/30' },
-  on_leave: { label: 'On Leave', className: 'bg-zinc-500/10 text-zinc-300 border-zinc-500/30' },
+const STATUS_CONFIG: Record<string, { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {
+  compliant: { label: 'Compliant', tone: 'success' },
+  partial: { label: 'Partial', tone: 'warning' },
+  non_compliant: { label: 'Non-Compliant', tone: 'danger' },
+  active: { label: 'Active', tone: 'success' },
+  inactive: { label: 'Inactive', tone: 'danger' },
+  unknown: { label: 'Unknown', tone: 'neutral' },
+  on_leave: { label: 'On Leave', tone: 'neutral' },
 }
 
 export default function StatusBadge({ status }: StatusBadgeProps) {
-  const config = STATUS_CONFIG[status] || { label: status, className: 'bg-gray-500/15 text-gray-400 border-gray-500/30' }
+  const config = STATUS_CONFIG[status] || { label: status, tone: 'neutral' as const }
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] font-semibold ${config.className}`}>
+    <span className="status-badge" data-tone={config.tone}>
       {config.label}
     </span>
   )

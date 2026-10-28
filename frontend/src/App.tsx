@@ -3,6 +3,7 @@ import { Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import Layout from './components/Layout/Layout'
 import { useAuthStore } from './store/auth'
 import { useConnectedIntegrations } from './hooks/useConnectedIntegrations'
+import { useThemeStore } from './store/theme'
 import Login from './pages/Login'
 
 const AcceptInvite = lazy(() => import('./pages/AcceptInvite'))
@@ -73,6 +74,11 @@ function AnyIntegrationOnly({ integrations, children }: { integrations: string[]
 export default function App() {
   const navigate = useNavigate()
   const { restoreSession } = useAuthStore()
+  const { theme } = useThemeStore()
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+  }, [theme])
 
   useEffect(() => {
     restoreSession()

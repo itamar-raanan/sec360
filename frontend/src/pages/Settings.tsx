@@ -1854,7 +1854,7 @@ export default function Settings() {
   return (
     <div className="settings-page absolute inset-0 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="settings-page-header flex-shrink-0 px-6 pt-6 pb-0">
+      <div className="settings-page-header mx-auto w-full max-w-[1480px] flex-shrink-0 px-6 pt-6 pb-0">
         <h1 className="ui-page-title mb-4">Settings</h1>
         {passwordChangeRequired && (
           <div className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
@@ -1886,7 +1886,7 @@ export default function Settings() {
       </div>
 
       {/* Tab content */}
-      <div className="settings-page-content flex-1 overflow-y-auto px-6 py-5">
+      <div className="settings-page-content mx-auto w-full max-w-[1480px] flex-1 overflow-y-auto px-6 py-5">
         {tab === 'users' && isAdmin && <UsersTab />}
         {tab === 'account' && <AccountTab />}
         {tab === 'platform' && isAdmin && <PlatformTab />}

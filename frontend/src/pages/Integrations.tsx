@@ -955,9 +955,10 @@ function IntegrationPanel({
 
       {/* Panel */}
       <div
-        className={`fixed top-0 right-0 h-full w-full sm:w-[520px] z-50 flex flex-col bg-[var(--surface-1)] border-l border-[var(--border)] shadow-2xl transition-transform duration-300 ease-out ${
+        className={`fixed top-0 right-0 h-full w-full sm:w-[520px] z-50 flex flex-col border-l border-[var(--border-lit)] shadow-2xl transition-transform duration-300 ease-out ${
           visible ? 'translate-x-0' : 'translate-x-full'
         }`}
+        style={{ background: 'var(--glass-elevated)', backdropFilter: 'blur(28px) saturate(1.18)', boxShadow: 'var(--shadow-float)' }}
       >
         {!config ? null : (
           <>
@@ -1616,11 +1617,11 @@ export default function Integrations() {
   return (
     <div className="settings-split-layout absolute inset-0 flex overflow-hidden">
       {/* ── Left sidebar ── */}
-      <aside className="settings-split-nav w-[220px] flex-shrink-0 border-r border-[var(--border)] bg-[var(--surface-1)] flex flex-col overflow-y-auto">
+      <aside className="settings-split-nav glass-sidebar w-[236px] flex-shrink-0 border-r border-[var(--border)] flex flex-col overflow-y-auto">
         <div className="p-4 border-b border-[var(--border)]">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-emerald-600/20 rounded-lg flex items-center justify-center">
-              <Plug size={14} className="text-emerald-400" />
+            <div className="brand-mark">
+              <Plug size={14} />
             </div>
             <div>
               <span className="block text-white font-bold text-sm">Integration Store</span>
@@ -1642,7 +1643,7 @@ export default function Integrations() {
                 onClick={() => setCategory(cat.id)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
                   category === cat.id
-                    ? 'bg-[var(--accent)]/10 text-emerald-400 border border-[var(--accent)]/20'
+                    ? 'border border-[var(--accent-ring)] bg-[var(--accent-dim)] text-[var(--accent)]'
                     : 'text-zinc-400 hover:text-white hover:bg-white/[0.04]'
                 }`}
               >
@@ -1650,7 +1651,7 @@ export default function Integrations() {
                 <span className="flex-1 text-left">{cat.label}</span>
                 {count > 0 && (
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                    category === cat.id ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-800 text-zinc-500'
+                    category === cat.id ? 'bg-[var(--accent-dim)] text-[var(--accent)]' : 'bg-zinc-800 text-zinc-500'
                   }`}>
                     {count}
                   </span>
@@ -1664,7 +1665,8 @@ export default function Integrations() {
         <div className="p-3 border-t border-[var(--border)]">
           <button
             onClick={() => setShowAddCustom(true)}
-            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[var(--accent)]/10 border border-[var(--accent)]/20 hover:bg-[var(--accent)]/20 text-xs font-medium text-emerald-400 transition-colors"
+            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-medium transition-colors"
+            style={{ background: 'var(--accent-dim)', borderColor: 'var(--accent-ring)', color: 'var(--accent)' }}
           >
             <Plus size={13} />
             Add Custom
@@ -1676,7 +1678,7 @@ export default function Integrations() {
       <main className="flex-1 overflow-y-auto">
         <div className="ui-page-container !mx-0 !max-w-3xl">
           {/* Header */}
-          <div className="mb-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-1)] p-5">
+          <div className="ui-command-surface mb-5 p-5">
             <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="ui-page-title">

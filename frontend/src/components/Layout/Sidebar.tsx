@@ -72,7 +72,7 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
       end={to === '/dashboard'}
       title={collapsed ? label : undefined}
       className={({ isActive }) =>
-        `group nav-item relative flex items-center rounded-lg text-[13px] font-medium transition-[background-color,color] duration-150 ${
+        `group nav-item relative flex items-center rounded-xl text-[13px] font-medium transition-[background-color,color,box-shadow] duration-150 ${
           collapsed ? 'justify-center px-0 py-2.5' : 'gap-2.5 px-3 py-2'
         } ${
           isActive
@@ -83,7 +83,7 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
     >
       {({ isActive }) => (
         <>
-          {isActive && !collapsed && <span className="absolute bottom-0 left-3 h-px w-5" style={{ background: 'var(--accent)' }} />}
+          {isActive && !collapsed && <span className="absolute inset-y-2 left-0 w-0.5 rounded-full" style={{ background: 'var(--accent)', boxShadow: '0 0 12px var(--accent)' }} />}
           <span
             className={`rounded-md p-1 transition-[background-color] duration-150 flex-shrink-0 ${
               isActive ? '' : 'text-zinc-600 group-hover:text-zinc-300'
@@ -105,12 +105,10 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
 
   return (
     <aside
-      className="hidden md:flex flex-shrink-0 flex-col h-[100dvh] sticky top-0 overflow-hidden"
+      className="glass-sidebar hidden md:flex flex-shrink-0 flex-col h-[100dvh] sticky top-0 overflow-hidden"
       style={{
-        width: collapsed ? 60 : 220,
+        width: collapsed ? 68 : 236,
         transition: 'width 220ms cubic-bezier(0.23,1,0.32,1)',
-        background: 'var(--surface-1)',
-        borderRight: '1px solid var(--border)',
       }}
     >
       {/* Brand */}
@@ -123,10 +121,9 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
         }}
       >
         <div
-          className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ background: 'var(--accent)' }}
+          className="brand-mark"
         >
-          <ShieldCheck size={15} className="text-white" strokeWidth={2.5} />
+          <ShieldCheck size={15} strokeWidth={2.5} />
         </div>
         <div
           className="overflow-hidden flex items-center gap-2 flex-1"
@@ -154,24 +151,20 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
           <button
             onClick={onOpenCmd}
             title="Search (⌘K)"
-            className="w-full flex items-center justify-center h-8 rounded-lg transition-[background-color] duration-150"
-            style={{ background: 'var(--surface-3)', border: '1px solid var(--border)', color: 'var(--text-4)' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-mid)'; e.currentTarget.style.color = 'var(--text-3)' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-4)' }}
+            className="ui-control w-full flex items-center justify-center h-9 transition-[background-color] duration-150"
+            style={{ color: 'var(--text-4)' }}
           >
             <Search size={13} />
           </button>
         ) : (
           <button
             onClick={onOpenCmd}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[12px] transition-[background-color] duration-150"
-            style={{ background: 'var(--surface-3)', border: '1px solid var(--border)', color: 'var(--text-4)' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--border-mid)'; e.currentTarget.style.color = 'var(--text-3)' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-4)' }}
+            className="ui-control w-full flex items-center gap-2.5 px-3 py-2 text-[12px] transition-[background-color] duration-150"
+            style={{ color: 'var(--text-4)' }}
           >
             <Search size={12} className="flex-shrink-0" />
             <span className="flex-1 text-left overflow-hidden" style={{ whiteSpace: 'nowrap' }}>Search…</span>
-            <kbd className="px-1 py-0.5 rounded text-[11px] flex-shrink-0"
+            <kbd className="px-1.5 py-0.5 rounded-md text-[10px] flex-shrink-0"
               style={{ background: 'var(--surface-1)', border: '1px solid var(--border)', color: 'var(--text-4)' }}>⌘K</kbd>
           </button>
         )}
@@ -238,7 +231,7 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
         <button
           onClick={toggleTheme}
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          className={`w-full flex items-center rounded-lg py-2 transition-[background-color,color] duration-150 ${
+            className={`w-full flex items-center rounded-xl py-2 transition-[background-color,color] duration-150 ${
             collapsed ? 'justify-center px-0' : 'gap-2 px-3'
           }`}
           style={{ color: 'var(--text-4)' }}
@@ -263,7 +256,7 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
         <button
           onClick={onToggle}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className={`w-full flex items-center rounded-lg py-2 transition-[background-color,color] duration-150 text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.04] ${
+          className={`w-full flex items-center rounded-xl py-2 transition-[background-color,color] duration-150 text-zinc-600 hover:text-zinc-300 hover:bg-white/[0.04] ${
             collapsed ? 'justify-center px-0' : 'gap-2 px-3'
           }`}
         >
@@ -285,14 +278,14 @@ export default function Sidebar({ collapsed = false, onToggle, onOpenCmd }: Side
       {/* User profile */}
       <div className="px-2.5 py-3 flex-shrink-0" style={{ borderTop: '1px solid var(--border)' }}>
         <div
-          className={`flex items-center rounded-lg hover:bg-white/[0.04] transition-[background-color] duration-150 group ${
+          className={`flex items-center rounded-xl border border-transparent hover:border-white/[0.06] hover:bg-white/[0.04] transition-[background-color,border-color] duration-150 group ${
             collapsed ? 'justify-center px-0 py-2' : 'gap-2.5 px-3 py-2.5'
           }`}
           title={collapsed ? `${user?.email?.split('@')[0]} · ${user?.role}` : undefined}
         >
           <div
-            className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0"
-            style={{ background: 'var(--accent)' }}
+            className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0"
+            style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-ring)' }}
           >
             {user?.email?.[0]?.toUpperCase() ?? 'A'}
           </div>

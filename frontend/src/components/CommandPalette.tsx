@@ -221,16 +221,16 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
       return (
         <button
           className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-[background-color] duration-75"
-          style={{ background: isActive ? 'rgba(16,185,129,0.08)' : 'transparent' }}
+          style={{ background: isActive ? 'var(--accent-dim)' : 'transparent' }}
           onMouseEnter={() => setSelected(index)}
           onClick={() => execute(result)}
         >
           <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: isActive ? 'rgba(16,185,129,0.12)' : 'var(--surface-3)' }}>
-            <Icon size={14} style={{ color: isActive ? 'var(--accent)' : '#71717a' }} />
+            style={{ background: isActive ? 'var(--accent-dim)' : 'var(--surface-3)' }}>
+            <Icon size={14} style={{ color: isActive ? 'var(--accent)' : 'var(--text-4)' }} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-medium" style={{ color: isActive ? '#f1f5f9' : '#a1a1aa' }}>{result.label}</div>
+            <div className="text-[13px] font-medium" style={{ color: isActive ? 'var(--text-1)' : 'var(--text-2)' }}>{result.label}</div>
             <div className="text-[11px] text-zinc-600">{result.description}</div>
           </div>
           {isActive && <ArrowRight size={13} style={{ color: 'var(--accent)', flexShrink: 0 }} />}
@@ -242,7 +242,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
       return (
         <button
           className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-[background-color] duration-75"
-          style={{ background: isActive ? 'rgba(16,185,129,0.08)' : 'transparent' }}
+          style={{ background: isActive ? 'var(--accent-dim)' : 'transparent' }}
           onMouseEnter={() => setSelected(index)}
           onClick={() => execute(result)}
         >
@@ -251,7 +251,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
             <Monitor size={13} style={{ color: isActive ? '#93c5fd' : '#4a7eb5' }} />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[13px] font-medium font-mono" style={{ color: isActive ? '#f1f5f9' : '#a1a1aa' }}>{result.label}</div>
+            <div className="text-[13px] font-medium font-mono" style={{ color: isActive ? 'var(--text-1)' : 'var(--text-2)' }}>{result.label}</div>
             <div className="text-[11px] text-zinc-600 truncate">{result.description}</div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -266,16 +266,16 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
     return (
       <button
         className="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-[background-color] duration-75"
-        style={{ background: isActive ? 'rgba(16,185,129,0.08)' : 'transparent' }}
+        style={{ background: isActive ? 'var(--accent-dim)' : 'transparent' }}
         onMouseEnter={() => setSelected(index)}
         onClick={() => execute(result)}
       >
         <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 text-[11px] font-bold"
-          style={{ background: 'rgba(16,185,129,0.12)', color: '#34d399' }}>
+          style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: '1px solid var(--accent-ring)' }}>
           {result.label[0]?.toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[13px] font-medium" style={{ color: isActive ? '#f1f5f9' : '#a1a1aa' }}>{result.label}</div>
+          <div className="text-[13px] font-medium" style={{ color: isActive ? 'var(--text-1)' : 'var(--text-2)' }}>{result.label}</div>
           <div className="text-[11px] text-zinc-600 truncate">{result.description}</div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -302,12 +302,7 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[540px] mx-4 rounded-2xl overflow-hidden fade-in"
-        style={{
-          background: 'var(--surface-2)',
-          border: '1px solid var(--border-lit)',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.6)',
-        }}
+        className="ui-float-surface w-full max-w-[540px] mx-4 overflow-hidden fade-in"
         onClick={e => e.stopPropagation()}
       >
         {/* Search input */}
@@ -318,7 +313,8 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Search entities or run a command…"
-            className="flex-1 bg-transparent text-white text-[14px] placeholder-zinc-600 focus:outline-none"
+            className="flex-1 bg-transparent text-[14px] placeholder-zinc-600 focus:outline-none"
+            style={{ color: 'var(--text-1)' }}
           />
           {isSearching && (
             <div className="w-3.5 h-3.5 rounded-full border-2 border-zinc-600 border-t-emerald-400 animate-spin flex-shrink-0" />

@@ -522,9 +522,9 @@ function AuditTab() {
             <button key={cat.id} onClick={() => { setCategoryFilter(cat.id); setPage(0) }}
               className="px-2.5 py-1 rounded-full text-xs font-medium"
               style={{
-                background: categoryFilter === cat.id ? 'rgba(16,185,129,0.15)' : 'var(--hover-1)',
-                color: categoryFilter === cat.id ? '#34d399' : '#71717a',
-                border: `1px solid ${categoryFilter === cat.id ? 'rgba(16,185,129,0.3)' : 'var(--border)'}`,
+                background: categoryFilter === cat.id ? 'var(--accent-dim)' : 'var(--hover-1)',
+                color: categoryFilter === cat.id ? 'var(--accent)' : 'var(--text-3)',
+                border: `1px solid ${categoryFilter === cat.id ? 'var(--accent-ring)' : 'var(--border)'}`,
                 transition: 'all 150ms ease',
               }}>
               {cat.label}
@@ -799,9 +799,9 @@ function ChangeLogTab() {
             <button key={value} onClick={() => { setCategory(value); setPage(0) }}
               className="rounded-full border px-2.5 py-1 text-xs capitalize"
               style={{
-                borderColor: category === value ? 'rgba(16,185,129,.35)' : 'var(--border)',
-                color: category === value ? '#34d399' : 'var(--text-3)',
-                background: category === value ? 'rgba(16,185,129,.12)' : 'var(--hover-1)',
+                borderColor: category === value ? 'var(--accent-ring)' : 'var(--border)',
+                color: category === value ? 'var(--accent)' : 'var(--text-3)',
+                background: category === value ? 'var(--accent-dim)' : 'var(--hover-1)',
               }}>{value === 'dlp' ? 'DLP policies' : value}</button>
           ))}
           <button onClick={() => setPage(value => Math.max(0, value - 1))} disabled={page === 0} className="p-1.5 text-zinc-400 disabled:opacity-30"><ChevronLeft size={15} /></button>

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { Navigate, useSearchParams, useLocation } from 'react-router-dom'
-import { Eye, EyeOff, AlertCircle, Smartphone, ShieldCheck, ArrowRight } from 'lucide-react'
+import { Eye, EyeOff, AlertCircle, Smartphone, ShieldCheck, ArrowRight, Moon, Sun } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
+import { useThemeStore } from '../store/theme'
 import AuthLeftPanel from '../components/AuthLeftPanel'
 
 type Step = 'credentials' | 'totp'
@@ -14,6 +15,7 @@ const SSO_ERRORS: Record<string, string> = {
 
 export default function Login() {
   const { isAuthenticated, login } = useAuth()
+  const { theme, toggle: toggleTheme } = useThemeStore()
   const [searchParams] = useSearchParams()
   const location = useLocation()
   const from = (location.state as { from?: Location })?.from?.pathname || '/dashboard'
@@ -84,15 +86,24 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-[100dvh] flex" style={{ background: 'var(--surface-1)' }}>
+    <div className="auth-shell min-h-[100dvh] flex">
       <AuthLeftPanel />
 
       {/* Right — form */}
       <main className="relative flex flex-1 flex-col items-center justify-center overflow-hidden p-8">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="ui-icon-button absolute right-5 top-5 z-20 !h-11 !w-11 sm:right-7 sm:top-7"
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+        </button>
         {/* Mobile logo */}
         <div className="relative z-10 mb-10 flex items-center gap-2.5 lg:hidden">
           <div className="brand-mark">
-            <ShieldCheck size={16} className="text-white" strokeWidth={2.5} />
+            <ShieldCheck size={16} strokeWidth={2.5} />
           </div>
           <span className="font-bold text-lg tracking-tight" style={{ color: 'var(--text-1)' }}>SEC360</span>
         </div>
@@ -100,16 +111,13 @@ export default function Login() {
         {/* Form card */}
         <div
           className="auth-card ui-command-surface relative z-10 w-full max-w-[440px] p-8 sm:p-10"
-          style={{
-            background: 'var(--surface-2)',
-            boxShadow: 'var(--shadow-float)',
-          }}
+          style={{ background: 'var(--glass-panel-strong)' }}
         >
           {step === 'credentials' ? (
             <div className="fade-up" style={{ animationDuration: '300ms' }}>
               {/* Header */}
               <div className="mb-8">
-                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.18)' }}>
+                <div className="auth-icon mb-5">
                   <ShieldCheck size={22} style={{ color: 'var(--accent)' }} strokeWidth={2.5} />
                 </div>
                 <h1 className="ui-page-title mb-1.5">Welcome back</h1>
@@ -163,7 +171,7 @@ export default function Login() {
                     <button
                       type="button"
                       onClick={() => setShowPw(!showPw)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2"
+                      className="ui-icon-button absolute right-2 top-1/2 !h-9 !w-9 -translate-y-1/2 !border-0 !bg-transparent"
                       style={{ color: 'var(--text-4)', transition: 'color 120ms ease' }}
                       onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-2)')}
                       onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-4)')}
@@ -226,7 +234,7 @@ export default function Login() {
           ) : (
             <div className="fade-up" style={{ animationDuration: '300ms' }}>
               <div className="mb-8">
-                <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.18)' }}>
+                <div className="auth-icon mb-5">
                   <Smartphone size={22} style={{ color: 'var(--accent)' }} />
                 </div>
                 <h1 className="ui-page-title mb-1.5">Two-factor auth</h1>

@@ -42,7 +42,7 @@ export default function SsoMfa() {
   }
 
   return (
-    <div className="min-h-[100dvh] flex" style={{ background: 'var(--surface-1)' }}>
+    <div className="auth-shell min-h-[100dvh] flex">
       <AuthLeftPanel />
 
       {/* Right — form */}
@@ -50,7 +50,7 @@ export default function SsoMfa() {
         {/* Mobile logo */}
         <div className="lg:hidden flex items-center gap-2.5 mb-10 relative z-10">
           <div className="brand-mark">
-            <ShieldCheck size={16} className="text-white" strokeWidth={2.5} />
+            <ShieldCheck size={16} strokeWidth={2.5} />
           </div>
           <span className="font-bold text-lg tracking-tight" style={{ color: 'var(--text-1)' }}>SEC360</span>
         </div>
@@ -58,16 +58,11 @@ export default function SsoMfa() {
         {/* Form card */}
         <div
           className="auth-card ui-command-surface w-full max-w-[360px] relative z-10 p-8 fade-up"
-          style={{
-            background: 'var(--surface-2)',
-            boxShadow: 'var(--shadow-float)',
-            animationDuration: '300ms',
-          }}
+          style={{ background: 'var(--glass-panel-strong)', animationDuration: '300ms' }}
         >
           {/* Header */}
           <div className="mb-7">
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-4"
-              style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.18)' }}>
+            <div className="auth-icon mb-4 !h-10 !w-10">
               <Smartphone size={17} style={{ color: 'var(--accent)' }} />
             </div>
             <h1 className="ui-page-title mb-1">Two-factor auth</h1>

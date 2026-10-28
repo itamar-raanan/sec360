@@ -63,7 +63,7 @@ export default function DataTable<T>({
       <div className="data-table-shell overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr style={{ borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.015)' }}>
+            <tr style={{ borderBottom: '1px solid var(--border)' }}>
               {columns.map((col) => (
                 <th
                   key={col.key}
@@ -122,13 +122,12 @@ export default function DataTable<T>({
                 </td>
               </tr>
             ) : (
-              sortedData.map((row, i) => (
+              sortedData.map((row) => (
                 <tr
                   key={keyExtractor(row)}
-                  className={`data-table-row fade-up ${onRowClick ? 'cursor-pointer' : ''}`}
+                  className={`data-table-row ${onRowClick ? 'cursor-pointer' : ''}`}
                   style={{
                     borderBottom: '1px solid var(--border)',
-                    animationDelay: `${i * 20}ms`,
                   }}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                 >

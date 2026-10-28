@@ -15,6 +15,9 @@ const PAGE_TITLES: Record<string, { title: string; desc: string }> = {
   '/application-vulnerabilities': { title: 'Vulnerabilities', desc: 'SentinelOne software exposure and CVEs' },
   '/puppet-facts': { title: 'Puppet Facts', desc: 'Searchable PuppetDB node facts' },
   '/dlp-user-policy-search': { title: 'DLP Search', desc: 'User exclusions across Symantec DLP policies' },
+  '/network-map': { title: 'Network Map', desc: 'Endpoint relationships and communication paths' },
+  '/linux-audit': { title: 'Linux Audit', desc: 'CIS audit results and server posture' },
+  '/proxy-audit': { title: 'Proxy Audit', desc: 'Symantec Management Center policy changes' },
   '/reports':      { title: 'Reports',       desc: 'Generated reports and exports' },
   '/integrations': { title: 'Integrations',  desc: 'Connected platforms and APIs' },
   '/settings':     { title: 'Settings',      desc: 'Platform configuration' },
@@ -70,11 +73,7 @@ export default function Header({ onOpenCmd }: HeaderProps) {
 
   return (
     <header
-      className="app-header h-14 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-10"
-      style={{
-        background: 'var(--surface-1)',
-        borderBottom: '1px solid var(--border)',
-      }}
+      className="app-header glass-header h-14 px-4 sm:px-6 flex items-center justify-between sticky top-0 z-10"
     >
       <div className="flex min-w-0 items-center gap-3">
         <span className="brand-mark md:hidden"><ShieldCheck size={14} strokeWidth={2.4} /></span>
@@ -90,7 +89,7 @@ export default function Header({ onOpenCmd }: HeaderProps) {
       <div className="flex items-center gap-1.5">
         <button
           onClick={onOpenCmd}
-          className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-[6px] text-[12px] pressable hover:bg-white/[0.025]"
+          className="ui-control hidden sm:flex items-center gap-2 px-3 py-1.5 text-[12px] pressable hover:bg-white/[0.025]"
           style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)', color: 'var(--text-4)' }}
           title="Open command palette"
         >
@@ -102,7 +101,7 @@ export default function Header({ onOpenCmd }: HeaderProps) {
         <div className="relative" ref={statusRef}>
           <button
             onClick={() => setStatusOpen(open => !open)}
-            className="relative flex items-center gap-2 rounded-[6px] px-2.5 py-1.5 text-[12px] hover:bg-white/[0.04]"
+            className="relative flex min-h-9 items-center gap-2 rounded-xl px-2.5 py-1.5 text-[12px] hover:bg-white/[0.04]"
             style={{ color: 'var(--text-3)', background: statusOpen ? 'var(--hover-1)' : 'transparent' }}
             title="Open operational status"
             aria-expanded={statusOpen}

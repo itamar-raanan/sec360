@@ -40,7 +40,7 @@ function Dropdown({ group, onClose }: { group: FilterGroup; onClose: () => void 
             key={opt.value}
             onClick={() => group.onToggle(opt.value)}
             className="ui-data-row w-full flex items-center gap-2.5 px-3 py-2 text-left"
-            style={{ background: active ? 'rgba(16,185,129,0.08)' : 'transparent' }}
+            style={{ background: active ? 'var(--accent-dim)' : 'transparent' }}
             onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--hover-1)' }}
             onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
           >
@@ -141,8 +141,8 @@ export default function FilterBar({
                 onClick={() => setOpenGroup(isOpen ? null : group.id)}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-[background-color,border-color] duration-120"
                 style={{
-                  background: hasActive ? 'rgba(16,185,129,0.10)' : 'var(--surface-3)',
-                  border: `1px solid ${hasActive ? 'rgba(16,185,129,0.35)' : 'var(--border)'}`,
+                  background: hasActive ? 'var(--accent-dim)' : 'var(--surface-inset)',
+                  border: `1px solid ${hasActive ? 'var(--accent-ring)' : 'var(--border)'}`,
                   color: hasActive ? 'var(--accent)' : 'var(--text-3)',
                 }}
                 aria-expanded={isOpen}
@@ -151,7 +151,7 @@ export default function FilterBar({
                 {hasActive && (
                   <span
                     className="flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold"
-                    style={{ background: 'rgba(16,185,129,0.25)', color: '#34d399' }}
+                    style={{ background: 'var(--accent-ring)', color: 'var(--accent)' }}
                   >
                     {group.selected.length}
                   </span>
@@ -188,8 +188,8 @@ export default function FilterBar({
               onClick={chip.onRemove}
               className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium transition-[background-color] duration-100 group"
               style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent-ring)', color: 'var(--accent)' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(16,185,129,0.18)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(16,185,129,0.10)')}
+              onMouseEnter={e => (e.currentTarget.style.background = 'color-mix(in srgb, var(--accent) 16%, transparent)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'var(--accent-dim)')}
             >
               <span className="opacity-60">{chip.groupLabel}:</span> {chip.label}
               <X size={9} className="ml-0.5 opacity-60 group-hover:opacity-100" />

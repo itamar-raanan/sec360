@@ -39,7 +39,7 @@ export default function FacetFilterPanel({
       className="facet-panel flex flex-col flex-shrink-0 h-full overflow-hidden"
       style={{
         width: 220,
-        background: 'var(--surface-2)',
+        background: 'var(--glass-panel-strong)',
         borderRight: '1px solid var(--border)',
       }}
     >
@@ -74,12 +74,12 @@ export default function FacetFilterPanel({
             className="w-full rounded-md pl-7 pr-2.5 py-1.5 focus:outline-none"
             style={{
               fontSize: 11.5,
-              background: 'var(--surface-3)',
+              background: 'var(--input-bg)',
               border: '1px solid var(--border)',
               color: 'var(--text-1)',
               transition: 'border-color 120ms ease',
             }}
-            onFocus={e => (e.target.style.borderColor = 'rgba(16,185,129,0.5)')}
+            onFocus={e => (e.target.style.borderColor = 'var(--accent-ring)')}
             onBlur={e => (e.target.style.borderColor = 'var(--border)')}
           />
         </div>
@@ -110,10 +110,10 @@ export default function FacetFilterPanel({
                   className="w-full flex items-center justify-between px-3 py-1.5 text-left"
                   style={{
                     fontSize: 12,
-                    background: active ? 'rgba(16,185,129,0.08)' : 'transparent',
-                    color: active ? '#6ee7b7' : '#71717a',
+                    background: active ? 'var(--accent-dim)' : 'transparent',
+                    color: active ? 'var(--accent)' : 'var(--text-3)',
                     transition: 'background-color 100ms ease, color 100ms ease',
-                    borderLeft: active ? '2px solid rgba(16,185,129,0.6)' : '2px solid transparent',
+                    borderLeft: active ? '2px solid var(--accent)' : '2px solid transparent',
                   }}
                   onMouseEnter={e => {
                     if (!active) {
@@ -135,8 +135,8 @@ export default function FacetFilterPanel({
                       fontSize: 10,
                       fontWeight: 600,
                       padding: '1px 6px',
-                      background: active ? 'rgba(16,185,129,0.15)' : 'var(--shimmer-a)',
-                      color: active ? '#34d399' : '#52525e',
+                      background: active ? 'var(--accent-dim)' : 'var(--shimmer-a)',
+                      color: active ? 'var(--accent)' : 'var(--text-4)',
                     }}
                   >
                     {fv.count}
@@ -151,13 +151,13 @@ export default function FacetFilterPanel({
               className="w-full flex items-center px-3 py-1.5 text-left mb-1"
               style={{
                 fontSize: 11,
-                color: group.selected === '' ? '#a1a1aa' : '#3f3f46',
+                color: group.selected === '' ? 'var(--text-3)' : 'var(--text-4)',
                 background: 'transparent',
                 transition: 'color 100ms ease',
                 borderLeft: '2px solid transparent',
               }}
               onMouseEnter={e => (e.currentTarget.style.color = 'var(--text-3)')}
-              onMouseLeave={e => (e.currentTarget.style.color = group.selected === '' ? '#a1a1aa' : '#3f3f46')}
+              onMouseLeave={e => (e.currentTarget.style.color = group.selected === '' ? 'var(--text-3)' : 'var(--text-4)')}
             >
               Show all
             </button>

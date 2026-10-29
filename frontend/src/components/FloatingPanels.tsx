@@ -12,12 +12,27 @@ const HEADER_H_MIN    = 28
 
 function PanelWindow({ panel }: { panel: FloatingPanel }) {
   const { closePanel, toggleMinimize } = usePanelStore()
+  const [closing, setClosing] = React.useState(false)
+  const closeTimer = React.useRef<number | null>(null)
   const Icon = panel.type === 'endpoint' ? Monitor : User
   const w = panel.minimized ? PANEL_WIDTH_MIN : PANEL_WIDTH
   const h = panel.minimized ? HEADER_H_MIN    : PANEL_HEIGHT
 
+  React.useEffect(() => () => {
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current)
+  }, [])
+
+  const dismiss = () => {
+    if (closing) return
+    setClosing(true)
+    closeTimer.current = window.setTimeout(() => closePanel(panel.id), 160)
+  }
+
   return (
     <div
+      className="floating-panel-window"
+      data-closing={closing || undefined}
+      data-minimized={panel.minimized || undefined}
       style={{
         width: w,
         height: h,
@@ -31,7 +46,8 @@ function PanelWindow({ panel }: { panel: FloatingPanel }) {
         boxShadow: 'var(--shadow-float)',
         backdropFilter: 'blur(26px) saturate(1.18)',
         overflow: 'hidden',
-        transition: 'width 200ms cubic-bezier(0.4,0,0.2,1), height 200ms cubic-bezier(0.4,0,0.2,1), border-radius 200ms cubic-bezier(0.4,0,0.2,1)',
+        transition: 'width 220ms var(--ease-out), height 220ms var(--ease-out), border-radius 180ms var(--ease-out), transform 160ms var(--ease-out), opacity 140ms var(--ease-out)',
+        transformOrigin: 'bottom right',
         pointerEvents: 'auto',
       }}
     >
@@ -66,7 +82,7 @@ function PanelWindow({ panel }: { panel: FloatingPanel }) {
           <Minus size={10} />
         </button>
         <button
-          onClick={e => { e.stopPropagation(); closePanel(panel.id) }}
+          onClick={e => { e.stopPropagation(); dismiss() }}
           className="flex items-center justify-center rounded flex-shrink-0"
           style={{ width: 18, height: 18, color: 'var(--text-4)', transition: 'color 120ms ease, background-color 120ms ease' }}
           onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.background = 'rgba(239,68,68,0.08)' }}
@@ -79,7 +95,7 @@ function PanelWindow({ panel }: { panel: FloatingPanel }) {
 
       {/* Panel content */}
       {!panel.minimized && (
-        <div className="flex-1 overflow-hidden">
+        <div className="floating-panel-content flex-1 overflow-hidden">
           {panel.type === 'endpoint'
             ? <EndpointDetailPanel endpointId={panel.objectId} />
             : <UserDetailPanel     userId={panel.objectId} />

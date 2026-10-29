@@ -211,10 +211,13 @@
 
   @media (prefers-reduced-motion: reduce) {
     .pressable:active { transform: none; }
-    .fade-up, .fade-in, .slide-in-right, .route-stage { animation: none; }
+    .fade-up, .fade-in, .slide-in-right, .route-stage,
+    .floating-panel-window, .floating-panel-content, .detail-tab-stage, .settings-tab-stage, .authentication-subpage { animation: none; }
     .shimmer { animation: none; background: var(--shimmer-a); }
     .card, .card-interactive, .ui-primary-button, .ui-secondary-button, .ui-icon-button { transition-duration: 0.01ms; }
     .card-interactive:hover, .ui-primary-button:hover, .ui-secondary-button:hover, .ui-icon-button:hover { transform: none; }
+    .floating-panel-window[data-closing="true"] { opacity: 0; transform: none; }
+    .authentication-subnav-item:active { transform: none; }
   }
 
   .focus-accent:focus-visible {
@@ -282,6 +285,104 @@
   }
   .route-stage { animation: route-enter 220ms var(--ease-out) both; }
   .app-main { background: transparent; }
+
+  .floating-panel-window {
+    animation: panel-materialize 240ms var(--ease-out) backwards;
+    will-change: transform, opacity;
+  }
+  .floating-panel-window[data-closing="true"] {
+    animation: none;
+    opacity: 0;
+    transform: translate3d(16px, 18px, 0) scale(0.985);
+    pointer-events: none !important;
+  }
+  .floating-panel-content { animation: content-resolve 180ms var(--ease-out) both; }
+  .detail-tab-stage, .settings-tab-stage { animation: content-resolve 180ms var(--ease-out) both; }
+
+  .authentication-workspace {
+    display: grid;
+    grid-template-columns: 230px minmax(0, 1fr);
+    min-height: 540px;
+    overflow: hidden;
+    border: 1px solid var(--border-mid);
+    border-radius: var(--radius-panel);
+    background: var(--glass-panel);
+    box-shadow: var(--shadow-card);
+  }
+  .authentication-subnav {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px;
+    border-right: 1px solid var(--border);
+    background: var(--surface-inset);
+  }
+  .authentication-subnav-item {
+    display: flex;
+    min-height: 68px;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    color: var(--text-3);
+    transition: color 150ms var(--ease-out), background-color 150ms var(--ease-out), border-color 150ms var(--ease-out), transform 120ms var(--ease-out);
+  }
+  .authentication-subnav-item:hover { border-color: var(--border); background: var(--hover-2); color: var(--text-2); }
+  .authentication-subnav-item:active { transform: scale(0.985); }
+  .authentication-subnav-item.is-active {
+    border-color: var(--accent-ring);
+    background: linear-gradient(120deg, var(--accent-dim), color-mix(in srgb, var(--accent-violet) 5%, transparent));
+    color: var(--text-1);
+    box-shadow: inset 0 1px 0 var(--glass-highlight);
+  }
+  .authentication-subnav-icon {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-inset-strong);
+    color: var(--text-4);
+  }
+  .authentication-subnav-item.is-active .authentication-subnav-icon { border-color: var(--accent-ring); background: var(--accent-dim); color: var(--accent); }
+  .authentication-state {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    padding: 3px 6px;
+    background: var(--surface-3);
+    color: var(--text-4);
+    font-size: 9px;
+    font-weight: 650;
+  }
+  .authentication-state[data-enabled="true"] { background: color-mix(in srgb, var(--success) 10%, transparent); color: var(--success); }
+  .authentication-subnav-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: auto;
+    padding: 12px 8px 4px;
+    color: var(--text-4);
+    font-size: 10px;
+    line-height: 1.5;
+  }
+  .authentication-subnav-note svg { margin-top: 1px; flex: 0 0 auto; color: var(--accent); }
+  .authentication-subpage {
+    min-width: 0;
+    padding: clamp(18px, 2.4vw, 28px);
+    animation: auth-subpage-enter 190ms var(--ease-out) both;
+  }
+  .authentication-subpage > * + * { margin-top: 20px; }
+  .authentication-subpage-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border);
+  }
 
   .skip-link {
     position: fixed;
@@ -746,6 +847,24 @@
   .filter-bar-main > .ml-auto { margin-left: 4px; }
   .absolute.inset-0.overflow-y-auto,
   .absolute.inset-0.flex.overflow-hidden { bottom: var(--mobile-nav-height); }
+  .authentication-workspace { display: block; min-height: 0; }
+  .authentication-subnav {
+    position: sticky;
+    z-index: 3;
+    top: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--glass-panel-strong);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+  }
+  .authentication-subnav-item { min-height: 58px; padding: 8px; }
+  .authentication-subnav-item .authentication-state { display: none; }
+  .authentication-subnav-icon { width: 30px; height: 30px; }
+  .authentication-subnav-note { display: none; }
+  .authentication-subpage { padding: 16px 14px 20px; }
 }
 
 @media (max-width: 479px) {
@@ -800,8 +919,20 @@
   50% { opacity: 1; }
 }
 @keyframes route-enter {
-  from { opacity: 0.72; transform: translateY(3px); }
+  from { opacity: 0.72; transform: translate3d(0, 4px, 0) scale(0.997); }
   to { opacity: 1; transform: translateY(0); }
+}
+@keyframes panel-materialize {
+  from { opacity: 0; transform: translate3d(18px, 22px, 0) scale(0.975); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes content-resolve {
+  from { opacity: 0; transform: translate3d(0, 3px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes auth-subpage-enter {
+  from { opacity: 0; transform: translate3d(6px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
 }
 
 /* Legacy utility harmonization. Page-local implementations still inherit the

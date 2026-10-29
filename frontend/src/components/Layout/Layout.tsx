@@ -4,7 +4,7 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import MobileNavigation from './MobileNavigation'
 import CommandPalette from '../CommandPalette'
-import FloatingPanels from '../FloatingPanels'
+import EntityDrawer from '../EntityDrawer'
 import { useAuthStore } from '../../store/auth'
 import { useThemeStore } from '../../store/theme'
 
@@ -61,7 +61,7 @@ export default function Layout() {
       <a href="#main-content" className="skip-link">Skip to content</a>
       <div className="grain-overlay" aria-hidden />
       <CommandPalette open={cmdOpen} onClose={() => setCmdOpen(false)} />
-      <FloatingPanels />
+      <EntityDrawer />
       <div className="app-shell flex h-[100dvh] overflow-hidden">
         <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} onOpenCmd={() => setCmdOpen(true)} />
         <div className="relative z-0 flex min-w-0 flex-1 flex-col overflow-hidden">

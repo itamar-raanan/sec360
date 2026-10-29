@@ -1228,6 +1228,7 @@ function SsoTab() {
   const [radiusTestPassword, setRadiusTestPassword] = useState('')
   const [radiusTesting, setRadiusTesting] = useState(false)
   const [radiusTestMsg, setRadiusTestMsg] = useState<{ type: 'error' | 'success'; msg: string } | null>(null)
+  const [authSection, setAuthSection] = useState<'sso' | 'radius'>('sso')
   const metaInputRef = useRef<HTMLInputElement>(null)
 
   const handleMetadataUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1348,14 +1349,60 @@ function SsoTab() {
   }
 
   return (
-    <div className="space-y-5 max-w-2xl">
-      <div className="flex items-center justify-between">
+    <div className="max-w-5xl space-y-5">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
         <div>
-          <h2 className="text-base font-semibold text-white">SSO &amp; RADIUS Authentication</h2>
-          <p className="text-xs text-zinc-500 mt-0.5">{provider.description}</p>
+          <h2 className="text-base font-semibold text-white">Authentication</h2>
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-zinc-500">Configure enterprise sign-in methods independently. Choose a section to manage its connection, security requirements, and verification tools.</p>
         </div>
         {msg && <Alert type={msg.type} msg={msg.msg} />}
       </div>
+
+      <div className="authentication-workspace">
+        <nav className="authentication-subnav" aria-label="Authentication methods">
+          <button
+            type="button"
+            onClick={() => { setAuthSection('sso'); setMsg(null) }}
+            className={`authentication-subnav-item ${authSection === 'sso' ? 'is-active' : ''}`}
+            aria-current={authSection === 'sso' ? 'page' : undefined}
+          >
+            <span className="authentication-subnav-icon"><KeyRound size={16} /></span>
+            <span className="min-w-0 flex-1 text-left">
+              <span className="block text-[13px] font-semibold">Single Sign-On</span>
+              <span className="mt-0.5 block text-[10px] leading-4">SAML 2.0 identity providers</span>
+            </span>
+            <span className="authentication-state" data-enabled={form.saml_enabled}>{form.saml_enabled ? 'Enabled' : 'Off'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAuthSection('radius'); setMsg(null) }}
+            className={`authentication-subnav-item ${authSection === 'radius' ? 'is-active' : ''}`}
+            aria-current={authSection === 'radius' ? 'page' : undefined}
+          >
+            <span className="authentication-subnav-icon"><Network size={16} /></span>
+            <span className="min-w-0 flex-1 text-left">
+              <span className="block text-[13px] font-semibold">RADIUS</span>
+              <span className="mt-0.5 block text-[10px] leading-4">Network authentication server</span>
+            </span>
+            <span className="authentication-state" data-enabled={form.radius_enabled}>{form.radius_enabled ? 'Enabled' : 'Off'}</span>
+          </button>
+          <div className="authentication-subnav-note">
+            <ShieldCheck size={14} />
+            <span>Changes apply after you save the selected method.</span>
+          </div>
+        </nav>
+
+        <div key={authSection} className="authentication-subpage">
+        {authSection === 'sso' ? (
+          <>
+          <header className="authentication-subpage-header">
+            <div>
+              <p className="ui-context">SAML 2.0</p>
+              <h3 className="mt-1 text-[15px] font-semibold" style={{ color: 'var(--text-1)' }}>Single Sign-On</h3>
+              <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--text-3)' }}>{provider.description}</p>
+            </div>
+            <span className="status-badge" data-tone={form.saml_enabled ? 'success' : 'neutral'}>{form.saml_enabled ? 'Enabled' : 'Disabled'}</span>
+          </header>
 
       {/* Enable toggle */}
       <Section title="SSO Status">
@@ -1541,6 +1588,25 @@ function SsoTab() {
         {provider.setupSteps.map((step, index) => <p key={step}>{index + 1}. {step}</p>)}
       </div>
 
+      <button
+        onClick={save}
+        disabled={saving}
+        className="ui-primary-button pressable"
+      >
+        <Save size={14} /> {saving ? 'Saving…' : 'Save SSO settings'}
+      </button>
+          </>
+        ) : (
+          <>
+          <header className="authentication-subpage-header">
+            <div>
+              <p className="ui-context">UDP authentication</p>
+              <h3 className="mt-1 text-[15px] font-semibold" style={{ color: 'var(--text-1)' }}>RADIUS</h3>
+              <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--text-3)' }}>Authenticate existing SEC360 accounts through your network RADIUS service.</p>
+            </div>
+            <span className="status-badge" data-tone={form.radius_enabled ? 'success' : 'neutral'}>{form.radius_enabled ? 'Enabled' : 'Disabled'}</span>
+          </header>
+
       <Section title="RADIUS Authentication" hint="Authenticate existing SEC360 accounts through a RADIUS server. The server must register this SEC360 host as a RADIUS client using the same shared secret.">
         <Field label="Enable RADIUS login" hint="RADIUS users authenticate through the regular Sign in form">
           <Toggle checked={form.radius_enabled} onChange={value => set('radius_enabled', value)} />
@@ -1615,8 +1681,12 @@ function SsoTab() {
         disabled={saving}
         className="ui-primary-button pressable"
       >
-        <Save size={14} /> {saving ? 'Saving…' : 'Save authentication settings'}
+        <Save size={14} /> {saving ? 'Saving…' : 'Save RADIUS settings'}
       </button>
+          </>
+        )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -1887,12 +1957,14 @@ export default function Settings() {
 
       {/* Tab content */}
       <div className="settings-page-content mx-auto w-full max-w-[1480px] flex-1 overflow-y-auto px-6 py-5">
-        {tab === 'users' && isAdmin && <UsersTab />}
-        {tab === 'account' && <AccountTab />}
-        {tab === 'platform' && isAdmin && <PlatformTab />}
-        {tab === 'features' && isAdmin && <FeaturesTab />}
-        {tab === 'sso' && isAdmin && <SsoTab />}
-        {tab === 'certificate' && isAdmin && <CertificateTab />}
+        <div key={tab} className="settings-tab-stage">
+          {tab === 'users' && isAdmin && <UsersTab />}
+          {tab === 'account' && <AccountTab />}
+          {tab === 'platform' && isAdmin && <PlatformTab />}
+          {tab === 'features' && isAdmin && <FeaturesTab />}
+          {tab === 'sso' && isAdmin && <SsoTab />}
+          {tab === 'certificate' && isAdmin && <CertificateTab />}
+        </div>
       </div>
     </div>
   )

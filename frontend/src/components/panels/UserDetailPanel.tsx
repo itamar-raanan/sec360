@@ -111,7 +111,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-5 space-y-5">
+      <div className="detail-tab-stage flex-1 overflow-y-auto p-5 space-y-5">
         <div className="grid grid-cols-2 gap-2">
           <div className="bg-zinc-900 rounded-lg p-3">
             <div className="text-xs text-zinc-400 mb-1.5">Risk Score</div>

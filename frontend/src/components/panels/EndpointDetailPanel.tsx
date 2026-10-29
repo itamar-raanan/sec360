@@ -17,6 +17,7 @@ import type { Endpoint } from '../../types'
 import { useEndpointProductTags } from '../../hooks/useEndpointProductTags'
 import { useConnectedIntegrations } from '../../hooks/useConnectedIntegrations'
 import { primaryEndpointActivity } from '../../utils/endpointActivity'
+import { usePanelStore } from '../../store/panels'
 
 interface AgentDetail {
   installed: boolean
@@ -441,8 +442,9 @@ function AgentBlock({ label, detail, simple = false, showStateGroup = false }: {
   )
 }
 
-export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
+export function EndpointDetailPanel({ endpointId, onTitleChange }: { endpointId: string; onTitleChange?: (title: string) => void }) {
   const { user } = useAuthStore()
+  const { openPanel } = usePanelStore()
   const { enabled: productEnabled, tags: activeProductTags } = useEndpointProductTags()
   const { connected } = useConnectedIntegrations()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
@@ -451,6 +453,10 @@ export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
     queryKey: ['endpoint-detail', endpointId],
     queryFn: async () => (await apiClient.get(`/endpoints/${endpointId}`)).data,
   })
+
+  React.useEffect(() => {
+    if (ep?.hostname) onTitleChange?.(ep.hostname)
+  }, [ep?.hostname, onTitleChange])
 
   if (isLoading) return <SkeletonDetailPanel />
 
@@ -551,7 +557,19 @@ export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
                 {ep.username && <InfoRow icon={User} label="Username" value={ep.username} />}
                 {ep.owner ? (
                   <>
-                    <InfoRow icon={User}     label="Owner"     value={ep.owner.full_name} />
+                    <InfoRow
+                      icon={User}
+                      label="Owner"
+                      value={
+                        <button
+                          type="button"
+                          onClick={() => openPanel('user', ep.owner!.id, ep.owner!.full_name)}
+                          className="ui-text-action text-left"
+                        >
+                          {ep.owner.full_name}
+                        </button>
+                      }
+                    />
                     <InfoRow icon={Mail}     label="Email"    value={ep.owner.email} colorClass="text-emerald-300" />
                     {ep.owner.department && <InfoRow icon={Building2} label="Department" value={ep.owner.department} />}
                   </>

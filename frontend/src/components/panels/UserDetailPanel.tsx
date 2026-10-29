@@ -13,6 +13,7 @@ import NoteBox from '../shared/NoteBox'
 import { useAuthStore } from '../../store/auth'
 import type { UserIdentity } from '../../types'
 import { useEndpointProductTags } from '../../hooks/useEndpointProductTags'
+import { usePanelStore } from '../../store/panels'
 
 const PRODUCT_LABELS: Record<string, string> = {
   sentinelone: 'SentinelOne', symantec: 'Symantec DLP',
@@ -83,13 +84,18 @@ function ComplianceCheck({ label, ok }: { label: string; ok: boolean }) {
   )
 }
 
-export function UserDetailPanel({ userId }: { userId: string }) {
+export function UserDetailPanel({ userId, onTitleChange }: { userId: string; onTitleChange?: (title: string) => void }) {
   const { user: authUser } = useAuthStore()
+  const { openPanel } = usePanelStore()
   const { enabled: productEnabled } = useEndpointProductTags()
   const { data: identity, isLoading, error } = useQuery<UserIdentity>({
     queryKey: ['user-identity', userId],
     queryFn: async () => (await apiClient.get(`/users/${userId}/identity`)).data,
   })
+
+  React.useEffect(() => {
+    if (identity?.full_name) onTitleChange?.(identity.full_name)
+  }, [identity?.full_name, onTitleChange])
 
   if (isLoading) return <SkeletonDetailPanel />
 
@@ -249,7 +255,17 @@ export function UserDetailPanel({ userId }: { userId: string }) {
           ) : (
             <div className="space-y-2">
               {identity.endpoints.map(ep => (
-                <div key={ep.id} className="bg-zinc-900 rounded-lg p-4 space-y-3">
+                <button
+                  key={ep.id}
+                  type="button"
+                  onClick={() => openPanel(
+                    'endpoint',
+                    ep.id,
+                    ep.hostname,
+                    identity.endpoints.map(endpoint => ({ id: endpoint.id, title: endpoint.hostname })),
+                  )}
+                  className="w-full rounded-lg bg-zinc-900 p-4 text-left space-y-3 transition-colors hover:bg-zinc-800/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/70"
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <Monitor className="w-4 h-4 text-zinc-400 flex-shrink-0" />
@@ -297,7 +313,7 @@ export function UserDetailPanel({ userId }: { userId: string }) {
                       )}
                     </div>
                   )}
-                </div>
+                </button>
               ))}
             </div>
           )}

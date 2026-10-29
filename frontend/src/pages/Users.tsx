@@ -220,6 +220,7 @@ export default function Users() {
   const PAGE_SIZE = 50
   const totalPages = Math.ceil(users.length / PAGE_SIZE)
   const pagedUsers = users.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const userSequence = pagedUsers.map(user => ({ id: user.id, title: user.full_name }))
 
   const deptOptions = Object.entries(facetCounts.dept)
     .sort((a, b) => b[1] - a[1])
@@ -342,7 +343,7 @@ export default function Users() {
               {pagedUsers.map(user => (
                 <div
                   key={user.id}
-                  onClick={() => openPanel('user', user.id, user.full_name)}
+                  onClick={() => openPanel('user', user.id, user.full_name, userSequence)}
                   className="flex items-center gap-3 px-5 py-3.5 cursor-pointer transition-colors"
                   style={{ transition: 'background-color 80ms ease' }}
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--hover-2)')}

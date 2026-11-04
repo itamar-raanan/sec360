@@ -13,6 +13,7 @@ This document describes the current implementation: its components, features, in
 - [Data collection and processing](#data-collection-and-processing)
 - [Authentication and authorization](#authentication-and-authorization)
 - [Personal read-only API keys](docs/PERSONAL_API_KEYS.md)
+- [MCP server](mcp-server/README.md)
 - [Change logging, auditing, and SIEM](#change-logging-auditing-and-siem)
 - [Deployment](#deployment)
 - [Initial configuration](#initial-configuration)
@@ -837,8 +838,13 @@ All application APIs are mounted under `/api` except the backend health endpoint
 | `/api/search` | Global application search |
 | `/api/notes` | Analyst notes |
 | `/health` | Direct backend database/scheduler health check |
+| `/api/health` | Reverse-proxy-accessible alias used by API clients and the MCP server |
 
 Use the OpenAPI schema as the authoritative request/response contract for API integrations.
+
+### MCP server
+
+The repository includes a standalone, read-only [SEC360 MCP server](mcp-server/README.md). It lets MCP-compatible AI clients investigate endpoints, users, compliance, risk, activity, application vulnerabilities, DLP exclusions, Puppet facts, Linux audits, proxy policy revisions, integration status, and the Network Map through a personal API key. It supports local stdio and Streamable HTTP transports while preserving SEC360 role, feature, and connected-integration checks.
 
 ## Repository structure
 
@@ -865,6 +871,11 @@ sec360/
 │   ├── nginx.conf           # Production TLS and reverse-proxy configuration
 │   ├── Dockerfile
 │   └── package.json
+├── mcp-server/              # Read-only MCP adapter for AI clients
+│   ├── sec360_mcp/          # MCP tools, configuration, and API client
+│   ├── tests/
+│   ├── Dockerfile
+│   └── pyproject.toml
 ├── collector/                # Outbound Network Map collector and deployment guide
 ├── docker-compose.yml       # Development-oriented Compose stack
 ├── docker-compose.prod.yml  # Hardened production Compose stack

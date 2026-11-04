@@ -300,3 +300,7 @@ Example creation body used by the browser:
 - The raw secret cannot be recovered after creation.
 - There is no automatic rotation handshake; create a replacement, update the client, verify it, then revoke the old key.
 - Request rate limiting is endpoint- and deployment-dependent; clients should use pagination, timeouts, bounded retries, and exponential backoff.
+
+## Use the API with an AI client
+
+SEC360 includes a standalone [read-only MCP server](../mcp-server/README.md) that maps the API to purpose-built tools for MCP-compatible AI clients. It uses the same personal key, role checks, feature flags, and connected-integration requirements described in this guide. The MCP adapter never connects directly to the SEC360 database and implements no REST mutation method.

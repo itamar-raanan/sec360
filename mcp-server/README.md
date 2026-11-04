@@ -78,6 +78,33 @@ Use an absolute executable path and pass the secret through the process environm
 
 Restart the MCP host after changing its configuration. The exact configuration filename and location depend on the host product.
 
+### OpenCode
+
+Install the package with `pipx`, then run `command -v sec360-mcp` to find the absolute executable path. Add the following to your OpenCode configuration, replacing the three placeholder values:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "sec360": {
+      "type": "local",
+      "command": [
+        "/home/YOUR_USER/.local/bin/sec360-mcp"
+      ],
+      "enabled": true,
+      "timeout": 120000,
+      "environment": {
+        "SEC360_URL": "https://YOUR-SEC360-SERVER",
+        "SEC360_API_KEY": "sec360_YOUR_API_KEY",
+        "SEC360_TIMEOUT_SECONDS": "120"
+      }
+    }
+  }
+}
+```
+
+Restart OpenCode after saving the configuration.
+
 ## Private certificate authorities
 
 TLS verification is enabled by default. For an internal CA:

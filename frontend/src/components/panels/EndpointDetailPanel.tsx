@@ -17,7 +17,6 @@ import type { Endpoint } from '../../types'
 import { useEndpointProductTags } from '../../hooks/useEndpointProductTags'
 import { useConnectedIntegrations } from '../../hooks/useConnectedIntegrations'
 import { primaryEndpointActivity } from '../../utils/endpointActivity'
-import { usePanelStore } from '../../store/panels'
 
 interface AgentDetail {
   installed: boolean
@@ -55,17 +54,17 @@ function InfoRow({ icon: Icon, label, value, mono = false, colorClass }: {
   icon: React.ElementType; label: string; value: React.ReactNode; mono?: boolean; colorClass?: string
 }) {
   return (
-    <div className="entity-info-row">
-      <Icon className="entity-info-icon" />
-      <span className="entity-info-label">{label}</span>
-      <span className={`entity-info-value break-all ${mono ? 'font-mono' : ''} ${colorClass ?? ''}`}>{value}</span>
+    <div className="flex items-start gap-3 px-4 py-2.5">
+      <Icon className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0 mt-0.5" />
+      <span className="text-xs text-zinc-500 w-24 flex-shrink-0 pt-px">{label}</span>
+      <span className={`text-sm break-all ${mono ? 'font-mono' : ''} ${colorClass ?? 'text-zinc-200'}`}>{value}</span>
     </div>
   )
 }
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <div className="entity-section-heading">
+    <div className="text-[12px] font-medium text-zinc-500 px-1">
       {children}
     </div>
   )
@@ -442,9 +441,8 @@ function AgentBlock({ label, detail, simple = false, showStateGroup = false }: {
   )
 }
 
-export function EndpointDetailPanel({ endpointId, onTitleChange }: { endpointId: string; onTitleChange?: (title: string) => void }) {
+export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
   const { user } = useAuthStore()
-  const { openPanel } = usePanelStore()
   const { enabled: productEnabled, tags: activeProductTags } = useEndpointProductTags()
   const { connected } = useConnectedIntegrations()
   const [activeTab, setActiveTab] = useState<Tab>('overview')
@@ -453,10 +451,6 @@ export function EndpointDetailPanel({ endpointId, onTitleChange }: { endpointId:
     queryKey: ['endpoint-detail', endpointId],
     queryFn: async () => (await apiClient.get(`/endpoints/${endpointId}`)).data,
   })
-
-  React.useEffect(() => {
-    if (ep?.hostname) onTitleChange?.(ep.hostname)
-  }, [ep?.hostname, onTitleChange])
 
   if (isLoading) return <SkeletonDetailPanel />
 
@@ -493,38 +487,33 @@ export function EndpointDetailPanel({ endpointId, onTitleChange }: { endpointId:
   ]
 
   return (
-    <div className="entity-detail-shell h-full flex flex-col overflow-hidden">
-      <div className="entity-summary-strip">
-        <div className="entity-summary-item">
-          <span>Lifecycle</span>
-          <strong className="capitalize">{ep.lifecycle_state || 'active'}</strong>
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Header */}
+      <div className="flex-shrink-0 border-b border-white/[0.06] px-5 py-3.5 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Monitor className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          <span className="text-white font-semibold text-sm truncate">{ep.hostname}</span>
+          {ep.source && ep.source !== 'jumpcloud' && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded border border-gray-600/40 text-zinc-500 flex-shrink-0">
+              {ep.source}
+            </span>
+          )}
+          {connected.has('puppet') && ep.puppet_managed && ep.source !== 'puppet' && (
+            <span className="flex-shrink-0 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-300">
+              Puppet
+            </span>
+          )}
         </div>
-        <div className="entity-summary-item">
-          <span>Risk</span>
-          <div className="flex items-center gap-2">
-            <RiskBadge score={ep.risk_score_override ?? ep.risk_score} />
-            {ep.risk_score_override != null && <small title="Risk score is overridden">Override</small>}
-          </div>
-        </div>
-        <div className="entity-summary-item">
-          <span>Compliance</span>
-          {cs ? <StatusBadge status={cs.status} /> : <strong>Not evaluated</strong>}
-        </div>
-        <div className="entity-summary-item">
-          <span>Last activity</span>
-          <strong>{primaryActivity?.lastSeen ? relTime(primaryActivity.lastSeen) : relTime(ep.last_seen)}</strong>
-        </div>
-        <div className="entity-summary-item">
-          <span>Sources</span>
-          <strong>{[
-            ep.source,
-            connected.has('puppet') && ep.puppet_managed && ep.source !== 'puppet' ? 'Puppet' : null,
-          ].filter(Boolean).join(' · ') || 'Unknown'}</strong>
+        <div className="flex items-center gap-2.5 flex-shrink-0">
+          <RiskBadge score={ep.risk_score_override ?? ep.risk_score} />
+          {ep.risk_score_override != null && (
+            <span className="text-[11px] text-amber-400" title="Risk score is overridden">Override</span>
+          )}
         </div>
       </div>
 
       {/* Tab bar */}
-      <div className="entity-detail-tabs" role="tablist" aria-label="Endpoint details">
+      <div className="flex-shrink-0 flex border-b border-white/[0.06] px-4 gap-0.5 bg-black/20">
         {TABS.map(tab => {
           const Icon = tab.icon
           const isActive = activeTab === tab.id
@@ -532,9 +521,11 @@ export function EndpointDetailPanel({ endpointId, onTitleChange }: { endpointId:
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              role="tab"
-              aria-selected={isActive}
-              className={isActive ? 'is-active' : ''}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium transition-colors duration-150 border-b-2 -mb-px ${
+                isActive
+                  ? 'text-emerald-400 border-emerald-500'
+                  : 'text-zinc-500 border-transparent hover:text-zinc-300'
+              }`}
             >
               <Icon size={12} />
               {tab.label}
@@ -544,7 +535,7 @@ export function EndpointDetailPanel({ endpointId, onTitleChange }: { endpointId:
       </div>
 
       {/* Tab content */}
-      <div key={activeTab} className="entity-detail-scroll detail-tab-stage flex-1 overflow-y-auto space-y-4">
+      <div key={activeTab} className="detail-tab-stage flex-1 overflow-y-auto p-4 space-y-4">
 
         {(user?.role === 'admin' || user?.role === 'analyst') && (
           <ComplianceScopeControl endpoint={ep} />
@@ -555,24 +546,12 @@ export function EndpointDetailPanel({ endpointId, onTitleChange }: { endpointId:
           <>
             <div className="space-y-1.5">
               <SectionHeader>Identity</SectionHeader>
-              <div className="entity-glass-card entity-divide-y">
+              <div className="bg-zinc-900/70 rounded-xl border border-white/[0.08]/50 divide-y divide-gray-700/40">
                 <InfoRow icon={Monitor} label="Hostname" value={ep.hostname} mono />
                 {ep.username && <InfoRow icon={User} label="Username" value={ep.username} />}
                 {ep.owner ? (
                   <>
-                    <InfoRow
-                      icon={User}
-                      label="Owner"
-                      value={
-                        <button
-                          type="button"
-                          onClick={() => openPanel('user', ep.owner!.id, ep.owner!.full_name)}
-                          className="ui-text-action text-left"
-                        >
-                          {ep.owner.full_name}
-                        </button>
-                      }
-                    />
+                    <InfoRow icon={User}     label="Owner"     value={ep.owner.full_name} />
                     <InfoRow icon={Mail}     label="Email"    value={ep.owner.email} colorClass="text-emerald-300" />
                     {ep.owner.department && <InfoRow icon={Building2} label="Department" value={ep.owner.department} />}
                   </>
@@ -587,7 +566,7 @@ export function EndpointDetailPanel({ endpointId, onTitleChange }: { endpointId:
 
             <div className="space-y-1.5">
               <SectionHeader>System</SectionHeader>
-              <div className="entity-glass-card entity-divide-y">
+              <div className="bg-zinc-900/70 rounded-xl border border-white/[0.08]/50 divide-y divide-gray-700/40">
                 <InfoRow icon={Cpu} label="OS Version" value={ep.os_version || '—'} />
                 {ep.serial_number && <InfoRow icon={Hash} label="Serial" value={ep.serial_number} mono />}
                 {ipList.length > 0 ? (
@@ -608,7 +587,7 @@ export function EndpointDetailPanel({ endpointId, onTitleChange }: { endpointId:
 
             <div className="space-y-1.5">
               <SectionHeader>Last Activity</SectionHeader>
-              <div className="entity-glass-card entity-divide-y">
+              <div className="bg-zinc-900/70 rounded-xl border border-white/[0.08]/50 divide-y divide-gray-700/40">
                 {lastActivitySources.map(({ label, color, val, fallback }) => (
                   <div key={label} className="flex items-center gap-3 px-4 py-2.5">
                     <Clock className={`w-3.5 h-3.5 ${color} flex-shrink-0`} />
@@ -664,7 +643,7 @@ export function EndpointDetailPanel({ endpointId, onTitleChange }: { endpointId:
             {cs ? (
               <div className="space-y-1.5">
                 <SectionHeader>Compliance</SectionHeader>
-                <div className="entity-glass-card p-3.5 space-y-3">
+                <div className="bg-zinc-900/70 rounded-xl border border-white/[0.08]/50 p-3.5 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-zinc-400">Overall Status</span>
                     <StatusBadge status={cs.status} />
@@ -697,7 +676,7 @@ export function EndpointDetailPanel({ endpointId, onTitleChange }: { endpointId:
                 </div>
               </div>
             ) : (
-              <div className="entity-glass-card p-4 text-center text-xs" style={{ color: 'var(--text-4)' }}>
+              <div className="rounded-xl border border-white/[0.08] p-4 text-center text-xs text-zinc-500">
                 No compliance data evaluated yet
               </div>
             )}

@@ -449,7 +449,6 @@ export default function Endpoints() {
   const PAGE_SIZE = 50
   const totalPages = Math.ceil(endpoints.length / PAGE_SIZE)
   const pagedEndpoints = endpoints.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
-  const endpointSequence = pagedEndpoints.map(endpoint => ({ id: endpoint.id, title: endpoint.hostname }))
 
   const filterGroups: FilterGroup[] = [
     {
@@ -628,9 +627,9 @@ export default function Endpoints() {
                 return (
                   <div
                     key={ep.id}
-                    onClick={() => openPanel('endpoint', ep.id, ep.hostname, endpointSequence)}
+                    onClick={() => openPanel('endpoint', ep.id, ep.hostname)}
                     onKeyDown={event => {
-                      if (event.key === 'Enter') openPanel('endpoint', ep.id, ep.hostname, endpointSequence)
+                      if (event.key === 'Enter') openPanel('endpoint', ep.id, ep.hostname)
                     }}
                     role="button"
                     tabIndex={0}

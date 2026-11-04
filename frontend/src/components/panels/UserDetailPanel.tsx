@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import {
   Monitor, CheckCircle, XCircle,
-  AlertTriangle, Clock, Wifi, Building2, UserCheck, Briefcase, Phone, LayoutList, Server,
+  AlertTriangle, Clock, Wifi, Building2, UserCheck, Briefcase, Phone,
 } from 'lucide-react'
 import apiClient from '../../api/client'
 import RiskBadge from '../shared/RiskBadge'
@@ -13,7 +13,6 @@ import NoteBox from '../shared/NoteBox'
 import { useAuthStore } from '../../store/auth'
 import type { UserIdentity } from '../../types'
 import { useEndpointProductTags } from '../../hooks/useEndpointProductTags'
-import { usePanelStore } from '../../store/panels'
 
 const PRODUCT_LABELS: Record<string, string> = {
   sentinelone: 'SentinelOne', symantec: 'Symantec DLP',
@@ -48,7 +47,7 @@ function SourceBadge({
         </div>
         <span className="text-[11px] font-medium" style={{ color: dotColor }}>{statusLabel}</span>
       </div>
-      <div className="flex items-center gap-3 flex-wrap" style={{ color: 'var(--text-3)' }}>
+      <div className="flex items-center gap-3 flex-wrap" style={{ color: '#a1a1aa' }}>
         <span className="text-[11px]">
           MFA: <span style={{ color: mfa ? '#34d399' : '#f87171' }}>{mfa ? 'Enabled' : 'Disabled'}</span>
         </span>
@@ -84,36 +83,13 @@ function ComplianceCheck({ label, ok }: { label: string; ok: boolean }) {
   )
 }
 
-type UserTab = 'overview' | 'endpoints'
-
-function ProfileRow({ icon: Icon, label, value, mono = false }: {
-  icon: React.ElementType
-  label: string
-  value: React.ReactNode
-  mono?: boolean
-}) {
-  return (
-    <div className="entity-info-row">
-      <Icon className="entity-info-icon" />
-      <span className="entity-info-label">{label}</span>
-      <span className={`entity-info-value ${mono ? 'font-mono' : ''}`}>{value}</span>
-    </div>
-  )
-}
-
-export function UserDetailPanel({ userId, onTitleChange }: { userId: string; onTitleChange?: (title: string) => void }) {
+export function UserDetailPanel({ userId }: { userId: string }) {
   const { user: authUser } = useAuthStore()
-  const { openPanel } = usePanelStore()
   const { enabled: productEnabled } = useEndpointProductTags()
-  const [activeTab, setActiveTab] = React.useState<UserTab>('overview')
   const { data: identity, isLoading, error } = useQuery<UserIdentity>({
     queryKey: ['user-identity', userId],
     queryFn: async () => (await apiClient.get(`/users/${userId}/identity`)).data,
   })
-
-  React.useEffect(() => {
-    if (identity?.full_name) onTitleChange?.(identity.full_name)
-  }, [identity?.full_name, onTitleChange])
 
   if (isLoading) return <SkeletonDetailPanel />
 
@@ -121,140 +97,211 @@ export function UserDetailPanel({ userId, onTitleChange }: { userId: string; onT
     return <div className="p-6 text-red-400 text-sm">Failed to load identity profile</div>
   }
 
-  const endpointSequence = identity.endpoints.map(endpoint => ({ id: endpoint.id, title: endpoint.hostname }))
-
   return (
-    <div className="entity-detail-shell h-full flex flex-col overflow-hidden">
-      <section className="entity-profile-hero">
-        <div className="entity-avatar">
-          {identity.full_name.split(' ').map(name => name[0]).join('').slice(0, 2).toUpperCase()}
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3>{identity.full_name}</h3>
-          <p>{identity.email}</p>
-          <div className="entity-profile-meta">
-            {identity.job_title && <span>{identity.job_title}</span>}
-            {identity.department && <span>{identity.department}</span>}
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="flex-shrink-0 border-b border-white/[0.06] px-5 py-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+            {identity.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <div className="text-white font-semibold text-sm">{identity.full_name}</div>
+            <div className="text-xs text-zinc-400">{identity.email}</div>
           </div>
         </div>
-        <StatusBadge status={identity.employment_status} />
-      </section>
-
-      <div className="entity-summary-strip entity-summary-strip--user">
-        <div className="entity-summary-item"><span>Risk</span><RiskBadge score={identity.risk_score} /></div>
-        <div className="entity-summary-item"><span>Endpoints</span><strong>{identity.total_endpoints}</strong></div>
-        <div className="entity-summary-item">
-          <span>MFA</span>
-          <strong data-tone={identity.mfa_enabled ? 'success' : 'danger'}>{identity.mfa_enabled ? 'Enabled' : 'Disabled'}</strong>
-        </div>
-        <div className="entity-summary-item">
-          <span>Last login</span>
-          <strong>{identity.last_login ? formatDistanceToNow(new Date(identity.last_login), { addSuffix: true }) : 'Never'}</strong>
-        </div>
       </div>
 
-      <div className="entity-detail-tabs" role="tablist" aria-label="User details">
-        <button type="button" role="tab" aria-selected={activeTab === 'overview'} className={activeTab === 'overview' ? 'is-active' : ''} onClick={() => setActiveTab('overview')}>
-          <LayoutList size={13} /> Overview
-        </button>
-        <button type="button" role="tab" aria-selected={activeTab === 'endpoints'} className={activeTab === 'endpoints' ? 'is-active' : ''} onClick={() => setActiveTab('endpoints')}>
-          <Server size={13} /> Endpoints <span className="entity-tab-count">{identity.total_endpoints}</span>
-        </button>
-      </div>
+      <div className="detail-tab-stage flex-1 overflow-y-auto p-5 space-y-5">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-zinc-900 rounded-lg p-3">
+            <div className="text-xs text-zinc-400 mb-1.5">Risk Score</div>
+            <RiskBadge score={identity.risk_score} />
+          </div>
+          <div className="bg-zinc-900 rounded-lg p-3">
+            <div className="text-xs text-zinc-400 mb-1.5">Status</div>
+            <StatusBadge status={identity.employment_status} />
+          </div>
+          <div className="bg-zinc-900 rounded-lg p-3">
+            <div className="text-xs text-zinc-400 mb-0.5">Endpoints</div>
+            <div className="text-white font-bold text-lg">{identity.total_endpoints}</div>
+          </div>
+          <div className="bg-zinc-900 rounded-lg p-3">
+            <div className="text-xs text-zinc-400 mb-1.5">MFA</div>
+            <div className={`flex items-center gap-1 text-sm font-medium ${identity.mfa_enabled ? 'text-emerald-300' : 'text-red-400'}`}>
+              {identity.mfa_enabled ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+              {identity.mfa_enabled ? 'Enabled' : 'Disabled'}
+            </div>
+          </div>
+        </div>
 
-      <div key={activeTab} className="entity-detail-scroll detail-tab-stage flex-1 overflow-y-auto space-y-5">
-        {activeTab === 'overview' && (
-          <>
-            <section className="space-y-1.5">
-              <div className="entity-section-heading">Profile and identity</div>
-              <div className="entity-glass-card entity-divide-y">
-                {identity.job_title && <ProfileRow icon={Briefcase} label="Title" value={identity.job_title} />}
-                {identity.department && <ProfileRow icon={Building2} label="Department" value={identity.department} />}
-                {identity.phone && <ProfileRow icon={Phone} label="Phone" value={identity.phone} mono />}
-                {identity.manager && <ProfileRow icon={UserCheck} label="Manager" value={identity.manager} />}
-                {identity.last_login && <ProfileRow icon={Clock} label="Last login" value={formatDistanceToNow(new Date(identity.last_login), { addSuffix: true })} />}
-                {identity.sources && Object.keys(identity.sources).length > 0 && (
-                  <div className="entity-info-row entity-info-row--top">
-                    <Wifi className="entity-info-icon" />
-                    <span className="entity-info-label">Sources</span>
-                    <div className="flex min-w-0 flex-1 flex-col gap-2">
-                      {identity.sources.jumpcloud && (
-                        <SourceBadge name="JumpCloud" color="#60a5fa" bg="rgba(59,130,246,0.10)" border="rgba(59,130,246,0.22)" active={identity.sources.jumpcloud.active && !identity.sources.jumpcloud.suspended} suspended={identity.sources.jumpcloud.suspended} mfa={identity.sources.jumpcloud.mfa} lastSeen={identity.sources.jumpcloud.last_seen} />
+        <div className="space-y-1.5">
+          <div className="text-xs font-medium text-zinc-500">Profile</div>
+          <div className="bg-zinc-900 rounded-lg divide-y divide-gray-700/60">
+            {identity.job_title && (
+              <div className="flex items-center gap-3 px-4 py-2.5">
+                <Briefcase className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                <span className="text-xs text-zinc-400 w-20 flex-shrink-0">Title</span>
+                <span className="text-sm text-white">{identity.job_title}</span>
+              </div>
+            )}
+            {identity.department && (
+              <div className="flex items-center gap-3 px-4 py-2.5">
+                <Building2 className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                <span className="text-xs text-zinc-400 w-20 flex-shrink-0">Department</span>
+                <span className="text-sm text-white">{identity.department}</span>
+              </div>
+            )}
+            {identity.phone && (
+              <div className="flex items-center gap-3 px-4 py-2.5">
+                <Phone className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                <span className="text-xs text-zinc-400 w-20 flex-shrink-0">Phone</span>
+                <span className="text-sm text-white font-mono">{identity.phone}</span>
+              </div>
+            )}
+            {identity.manager && (
+              <div className="flex items-center gap-3 px-4 py-2.5">
+                <UserCheck className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                <span className="text-xs text-zinc-400 w-20 flex-shrink-0">Manager</span>
+                <span className="text-sm text-white">{identity.manager}</span>
+              </div>
+            )}
+            {identity.last_login && (
+              <div className="flex items-center gap-3 px-4 py-2.5">
+                <Clock className="w-4 h-4 text-zinc-500 flex-shrink-0" />
+                <span className="text-xs text-zinc-400 w-20 flex-shrink-0">Last login</span>
+                <span className="text-sm text-white">
+                  {formatDistanceToNow(new Date(identity.last_login), { addSuffix: true })}
+                </span>
+              </div>
+            )}
+            {identity.sources && Object.keys(identity.sources).length > 0 && (
+              <div className="flex items-start gap-3 px-4 py-2.5">
+                <Wifi className="w-4 h-4 text-zinc-500 flex-shrink-0 mt-0.5" />
+                <span className="text-xs text-zinc-400 w-20 flex-shrink-0 mt-0.5">Sources</span>
+                <div className="flex flex-col gap-2 flex-1">
+                  {identity.sources.jumpcloud && (
+                    <SourceBadge
+                      name="JumpCloud"
+                      color="#60a5fa"
+                      bg="rgba(59,130,246,0.12)"
+                      border="rgba(59,130,246,0.25)"
+                      active={identity.sources.jumpcloud.active && !identity.sources.jumpcloud.suspended}
+                      suspended={identity.sources.jumpcloud.suspended}
+                      mfa={identity.sources.jumpcloud.mfa}
+                      lastSeen={identity.sources.jumpcloud.last_seen}
+                    />
+                  )}
+                  {identity.sources.google && (
+                    <SourceBadge
+                      name="Google Workspace"
+                      color="#fbbf24"
+                      bg="rgba(234,179,8,0.12)"
+                      border="rgba(234,179,8,0.25)"
+                      active={identity.sources.google.active && !identity.sources.google.suspended}
+                      suspended={identity.sources.google.suspended}
+                      mfa={identity.sources.google.mfa}
+                      lastSeen={identity.sources.google.last_login}
+                      orgUnit={identity.sources.google.org_unit}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="text-xs font-medium text-zinc-500">Agent coverage</div>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              ...(productEnabled('S1') ? [{ label: 'SentinelOne', count: identity.endpoints_with_sentinelone }] : []),
+              ...(productEnabled('DLP') ? [{ label: 'Symantec DLP', count: identity.endpoints_with_symantec }] : []),
+              ...(productEnabled('WSS') ? [{ label: 'Symantec WSS', count: identity.endpoints_with_wss }] : []),
+            ].map(({ label, count }) => {
+              const ok = identity.total_endpoints > 0 && count === identity.total_endpoints
+              return (
+                <div key={label} className={`rounded-lg p-3 border ${ok ? 'bg-emerald-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                  <div className="text-xs text-zinc-400 mb-0.5">{label}</div>
+                  <div className={`text-lg font-bold ${ok ? 'text-emerald-300' : 'text-red-400'}`}>
+                    {count}/{identity.total_endpoints}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        <NoteBox
+          entityType="user"
+          entityId={userId}
+          currentUserEmail={authUser?.email ?? ''}
+          currentUserRole={authUser?.role ?? 'viewer'}
+        />
+
+        <div className="space-y-1.5">
+          <div className="text-xs font-medium text-zinc-500">
+            Endpoints ({identity.total_endpoints})
+          </div>
+          {identity.endpoints.length === 0 ? (
+            <div className="text-sm text-zinc-500 text-center py-6 bg-zinc-900 rounded-lg">
+              No endpoints linked — run correlation to link devices
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {identity.endpoints.map(ep => (
+                <div key={ep.id} className="bg-zinc-900 rounded-lg p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Monitor className="w-4 h-4 text-zinc-400 flex-shrink-0" />
+                      <span className="text-sm font-medium text-white truncate">{ep.hostname}</span>
+                    </div>
+                    <RiskBadge score={ep.risk_score} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    {ep.ip_address && <div className="text-zinc-400">IP: <span className="text-zinc-200 font-mono">{ep.ip_address}</span></div>}
+                    {ep.os_version && <div className="text-zinc-400 truncate">OS: <span className="text-zinc-200">{ep.os_version}</span></div>}
+                    {ep.username && <div className="text-zinc-400">User: <span className="text-zinc-200">{ep.username}</span></div>}
+                    {ep.last_seen && <div className="text-zinc-400">Seen: <span className="text-zinc-200">{formatDistanceToNow(new Date(ep.last_seen), { addSuffix: true })}</span></div>}
+                  </div>
+                  {ep.agents.filter(a => (
+                    (a.product_name !== 'sentinelone' || productEnabled('S1'))
+                    && (a.product_name !== 'symantec' || productEnabled('DLP'))
+                    && (a.product_name !== 'symantec_wss' || productEnabled('WSS'))
+                  )).length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {ep.agents.filter(a => (
+                        (a.product_name !== 'sentinelone' || productEnabled('S1'))
+                        && (a.product_name !== 'symantec' || productEnabled('DLP'))
+                        && (a.product_name !== 'symantec_wss' || productEnabled('WSS'))
+                      )).map(a => <AgentPill key={a.id} product={a.product_name} status={a.status} />)}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-xs text-red-400">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      No security agents installed
+                    </div>
+                  )}
+                  {ep.compliance && (
+                    <div className="border-t border-white/[0.08] pt-2.5 grid grid-cols-2 gap-y-1 gap-x-4 text-xs">
+                      {productEnabled('S1') && <ComplianceCheck label="EDR installed" ok={ep.compliance.edr_installed} />}
+                      {productEnabled('S1') && <ComplianceCheck label="EDR up to date" ok={ep.compliance.edr_version_ok} />}
+                      {productEnabled('DLP') && <ComplianceCheck label="DLP installed" ok={ep.compliance.dlp_installed} />}
+                      {productEnabled('DLP') && <ComplianceCheck label="DLP up to date" ok={ep.compliance.dlp_version_ok} />}
+                      {productEnabled('WSS') && <ComplianceCheck label="WSS installed" ok={ep.compliance.wss_installed} />}
+                      {productEnabled('WSS') && <ComplianceCheck label="WSS up to date" ok={ep.compliance.wss_version_ok} />}
+                      {productEnabled('S1') && ep.compliance.disk_encrypted !== null && ep.compliance.disk_encrypted !== undefined && (
+                        <ComplianceCheck label="Disk encrypted" ok={ep.compliance.disk_encrypted} />
                       )}
-                      {identity.sources.google && (
-                        <SourceBadge name="Google Workspace" color="#f1bd65" bg="rgba(241,189,101,0.09)" border="rgba(241,189,101,0.22)" active={identity.sources.google.active && !identity.sources.google.suspended} suspended={identity.sources.google.suspended} mfa={identity.sources.google.mfa} lastSeen={identity.sources.google.last_login} orgUnit={identity.sources.google.org_unit} />
+                      {productEnabled('S1') && ep.compliance.device_control_enabled !== null && ep.compliance.device_control_enabled !== undefined && (
+                        <ComplianceCheck label="Device control" ok={ep.compliance.device_control_enabled} />
                       )}
                     </div>
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <section className="space-y-1.5">
-              <div className="entity-section-heading">Agent coverage</div>
-              <div className="entity-coverage-grid">
-                {[
-                  ...(productEnabled('S1') ? [{ label: 'SentinelOne', count: identity.endpoints_with_sentinelone }] : []),
-                  ...(productEnabled('DLP') ? [{ label: 'Symantec DLP', count: identity.endpoints_with_symantec }] : []),
-                  ...(productEnabled('WSS') ? [{ label: 'Symantec WSS', count: identity.endpoints_with_wss }] : []),
-                ].map(({ label, count }) => {
-                  const ok = identity.total_endpoints > 0 && count === identity.total_endpoints
-                  const percentage = identity.total_endpoints > 0 ? Math.round((count / identity.total_endpoints) * 100) : 0
-                  return (
-                    <article key={label} className="entity-coverage-card" data-complete={ok}>
-                      <div><span>{label}</span><strong>{count}/{identity.total_endpoints}</strong></div>
-                      <div className="entity-coverage-track"><span style={{ width: `${percentage}%` }} /></div>
-                      <small>{percentage}% covered</small>
-                    </article>
-                  )
-                })}
-              </div>
-            </section>
-
-            <NoteBox entityType="user" entityId={userId} currentUserEmail={authUser?.email ?? ''} currentUserRole={authUser?.role ?? 'viewer'} />
-          </>
-        )}
-
-        {activeTab === 'endpoints' && (
-          <section className="space-y-2">
-            <div className="entity-section-heading">Linked endpoints ({identity.total_endpoints})</div>
-            {identity.endpoints.length === 0 ? (
-              <div className="entity-glass-card entity-empty-detail">No endpoints linked — run correlation to link devices.</div>
-            ) : identity.endpoints.map(ep => (
-              <button key={ep.id} type="button" onClick={() => openPanel('endpoint', ep.id, ep.hostname, endpointSequence)} className="entity-endpoint-card">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <span className="entity-endpoint-icon"><Monitor size={15} /></span>
-                    <div className="min-w-0"><strong className="truncate">{ep.hostname}</strong><span>{ep.os_version || 'Unknown operating system'}</span></div>
-                  </div>
-                  <RiskBadge score={ep.risk_score} />
+                  )}
                 </div>
-                <div className="entity-endpoint-facts">
-                  {ep.ip_address && <span>IP <code>{ep.ip_address}</code></span>}
-                  {ep.username && <span>User <strong>{ep.username}</strong></span>}
-                  {ep.last_seen && <span>Seen <strong>{formatDistanceToNow(new Date(ep.last_seen), { addSuffix: true })}</strong></span>}
-                </div>
-                {ep.agents.filter(agent => ((agent.product_name !== 'sentinelone' || productEnabled('S1')) && (agent.product_name !== 'symantec' || productEnabled('DLP')) && (agent.product_name !== 'symantec_wss' || productEnabled('WSS')))).length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">{ep.agents.filter(agent => ((agent.product_name !== 'sentinelone' || productEnabled('S1')) && (agent.product_name !== 'symantec' || productEnabled('DLP')) && (agent.product_name !== 'symantec_wss' || productEnabled('WSS')))).map(agent => <AgentPill key={agent.id} product={agent.product_name} status={agent.status} />)}</div>
-                ) : (
-                  <div className="flex items-center gap-1.5 text-xs text-red-400"><AlertTriangle className="h-3.5 w-3.5" />No security agents installed</div>
-                )}
-                {ep.compliance && (
-                  <div className="entity-endpoint-checks">
-                    {productEnabled('S1') && <ComplianceCheck label="EDR installed" ok={ep.compliance.edr_installed} />}
-                    {productEnabled('S1') && <ComplianceCheck label="EDR up to date" ok={ep.compliance.edr_version_ok} />}
-                    {productEnabled('DLP') && <ComplianceCheck label="DLP installed" ok={ep.compliance.dlp_installed} />}
-                    {productEnabled('DLP') && <ComplianceCheck label="DLP up to date" ok={ep.compliance.dlp_version_ok} />}
-                    {productEnabled('WSS') && <ComplianceCheck label="WSS installed" ok={ep.compliance.wss_installed} />}
-                    {productEnabled('WSS') && <ComplianceCheck label="WSS up to date" ok={ep.compliance.wss_version_ok} />}
-                    {productEnabled('S1') && ep.compliance.disk_encrypted != null && <ComplianceCheck label="Disk encrypted" ok={ep.compliance.disk_encrypted} />}
-                    {productEnabled('S1') && ep.compliance.device_control_enabled != null && <ComplianceCheck label="Device control" ok={ep.compliance.device_control_enabled} />}
-                  </div>
-                )}
-              </button>
-            ))}
-          </section>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

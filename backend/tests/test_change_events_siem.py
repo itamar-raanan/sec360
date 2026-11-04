@@ -62,6 +62,23 @@ def test_audit_log_maps_actor_and_source_ip_to_ecs():
     assert document["source"]["ip"] == "192.0.2.10"
 
 
+def test_audit_log_maps_non_email_source_actor_to_ecs_name():
+    audit = SimpleNamespace(
+        id=uuid.uuid4(),
+        action="proxy_audit_revision_detected",
+        resource_type="proxy_audit_event",
+        resource_id="revision-1",
+        timestamp=datetime(2026, 10, 25, 9, 30, tzinfo=timezone.utc),
+        ip_address=None,
+        details={"actor_name": "security-ops", "policy_name": "Forwarding policy"},
+    )
+
+    document = audit_log_to_ecs(audit)
+
+    assert document["user"] == {"id": None, "name": "security-ops"}
+    assert document["sec360"]["audit"]["details"]["policy_name"] == "Forwarding policy"
+
+
 def test_syslog_loopback_is_routed_to_docker_host_gateway():
     assert _syslog_destination("127.0.0.1") == "host.docker.internal"
     assert _syslog_destination("localhost") == "host.docker.internal"

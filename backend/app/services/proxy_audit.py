@@ -4,6 +4,7 @@ import difflib
 import hashlib
 import json
 import logging
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
@@ -14,8 +15,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
 from app.core.outbound import validate_outbound_url
+from app.models.audit import AuditLog
 from app.models.proxy_audit import ProxyAuditConnection, ProxyAuditEvent
 from app.models.system_settings import SystemSettings
+from app.services.siem import queue_audit_logs
 
 
 logger = logging.getLogger(__name__)
@@ -23,6 +26,7 @@ MAX_POLICIES = 5_000
 MAX_VERSIONS_PER_POLICY = 5_000
 MAX_CONTENT_BYTES = 20 * 1024 * 1024
 MAX_DIFF_CHARS = 2_000_000
+PROXY_AUDIT_LOG_NAMESPACE = uuid.UUID("729d8752-3f94-41a8-9673-eb277b78fabe")
 
 
 def _items(payload: Any, *keys: str) -> list[dict[str, Any]]:
@@ -118,6 +122,54 @@ def build_policy_diff(previous: str | None, current: str) -> tuple[str, str, int
     if len(diff_text) > MAX_DIFF_CHARS:
         diff_text = diff_text[:MAX_DIFF_CHARS] + "\n… diff truncated by SEC360 …"
     return " · ".join(parts), diff_text, additions, deletions
+
+
+def _proxy_audit_log_id(event_id: uuid.UUID) -> uuid.UUID:
+    return uuid.uuid5(PROXY_AUDIT_LOG_NAMESPACE, str(event_id))
+
+
+async def record_proxy_audit_events(
+    db: AsyncSession,
+    events: list[ProxyAuditEvent],
+) -> list[AuditLog]:
+    """Add policy revisions to the Security log and SIEM outbox exactly once."""
+    if not events:
+        return []
+    candidates = {_proxy_audit_log_id(event.id): event for event in events}
+    existing_ids = set((await db.execute(
+        select(AuditLog.id).where(AuditLog.id.in_(tuple(candidates)))
+    )).scalars().all())
+    logs = [
+        AuditLog(
+            id=log_id,
+            user_id=None,
+            action="proxy_audit_revision_detected",
+            resource_type="proxy_audit_event",
+            resource_id=str(event.id),
+            timestamp=event.revision_date,
+            ip_address=None,
+            details={
+                "actor_name": event.author,
+                "source": "symantec_management_center",
+                "policy_uuid": event.policy_uuid,
+                "policy_name": event.policy_name,
+                "object_type": event.object_type,
+                "revision_number": event.revision_number,
+                "revision_date": event.revision_date.isoformat(),
+                "comment": event.comment,
+                "change_summary": event.change_summary,
+                "additions": event.additions,
+                "deletions": event.deletions,
+            },
+        )
+        for log_id, event in candidates.items()
+        if log_id not in existing_ids
+    ]
+    if not logs:
+        return []
+    db.add_all(logs)
+    await queue_audit_logs(db, logs)
+    return logs
 
 
 class ManagementCenterClient:
@@ -235,21 +287,24 @@ async def collect_proxy_audit(db: AsyncSession, config: dict[str, Any]) -> dict[
             object_type = "shared_object" if _bool(_first(policy, "shared", "isShared")) else "policy"
             versions = await client.versions(policy_uuid)
             scanned += len(versions)
-            existing_revisions = set((await db.execute(
-                select(ProxyAuditEvent.revision_number).where(
+            existing_events = (await db.execute(
+                select(ProxyAuditEvent).where(
                     ProxyAuditEvent.policy_uuid == policy_uuid
                 )
-            )).scalars().all())
+            )).scalars().all()
+            existing_revisions = {event.revision_number for event in existing_events}
             missing_indexes = [
                 index for index, item in enumerate(versions)
                 if str(_first(item, "revisionNumber", "version", "revision", default="")).strip()
                 not in existing_revisions
             ]
             if not missing_indexes:
+                await record_proxy_audit_events(db, existing_events)
                 continue
             first_missing = missing_indexes[0]
             start_index = max(0, first_missing - 1)
             previous_content: str | None = None
+            new_events: list[ProxyAuditEvent] = []
             for index, revision in enumerate(versions[start_index:], start=start_index):
                 revision_number = str(_first(
                     revision, "revisionNumber", "version", "revision", default=""
@@ -260,7 +315,7 @@ async def collect_proxy_audit(db: AsyncSession, config: dict[str, Any]) -> dict[
                 content = await client.content(policy_uuid, revision_number)
                 if index >= first_missing and revision_number not in existing_revisions:
                     summary, diff_text, additions, deletions = build_policy_diff(previous_content, content)
-                    db.add(ProxyAuditEvent(
+                    event = ProxyAuditEvent(
                         policy_uuid=policy_uuid,
                         policy_name=policy_name,
                         object_type=object_type,
@@ -275,10 +330,13 @@ async def collect_proxy_audit(db: AsyncSession, config: dict[str, Any]) -> dict[
                         additions=additions,
                         deletions=deletions,
                         content_hash=hashlib.sha256(content.encode("utf-8")).hexdigest(),
-                    ))
+                    )
+                    db.add(event)
+                    new_events.append(event)
                     imported += 1
                 previous_content = content
             await db.flush()
+            await record_proxy_audit_events(db, [*existing_events, *new_events])
         return {"imported": imported, "scanned": scanned, "objects": len(policies)}
     finally:
         await client.close()

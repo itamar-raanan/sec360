@@ -116,6 +116,7 @@ function Alert({ type, msg }: { type: 'error' | 'success'; msg: string }) {
 
 function getActionMeta(action: string): { icon: React.ElementType; color: string; label: string; category: string } {
   const a = action?.toLowerCase() ?? ''
+  if (a.includes('proxy_audit')) return { icon: Activity, color: '#a78bfa', label: 'Proxy policy revision', category: 'proxy' }
   if (a.includes('login'))        return { icon: LogIn,       color: '#34d399', label: action, category: 'auth' }
   if (a.includes('logout'))       return { icon: LogOut,      color: 'var(--text-3)', label: action, category: 'auth' }
   if (a.includes('create') || a.includes('invite'))
@@ -135,6 +136,7 @@ const ACTION_CATEGORIES = [
   { id: 'create', label: 'Created' },
   { id: 'update', label: 'Updated' },
   { id: 'delete', label: 'Deleted' },
+  { id: 'proxy',  label: 'Proxy Audit' },
 ]
 
 // ── Users tab ──────────────────────────────────────────────────────────────────
@@ -474,7 +476,7 @@ function AuditTab() {
 
   // Client-side filter (within loaded page)
   const items = allItems.filter(entry => {
-    const actor = String(entry.details?.actor_email ?? '').toLowerCase()
+    const actor = String(entry.details?.actor_email ?? entry.details?.actor_name ?? '').toLowerCase()
     const matchesActor = !actorSearch || actor.includes(actorSearch.toLowerCase())
     const category = getActionMeta(entry.action).category
     const matchesCat = categoryFilter === 'all' || category === categoryFilter
@@ -592,11 +594,11 @@ function AuditTab() {
               {items.map(entry => {
                 const meta = getActionMeta(entry.action)
                 const ActionIcon = meta.icon
-                const actorEmail = String(entry.details?.actor_email ?? '—')
+                const actorEmail = String(entry.details?.actor_email ?? entry.details?.actor_name ?? 'SEC360')
                 // Separate known detail keys from actor metadata
                 const extraDetails = entry.details
                   ? Object.fromEntries(
-                      Object.entries(entry.details).filter(([k]) => !['actor_id', 'actor_email'].includes(k))
+                      Object.entries(entry.details).filter(([k]) => !['actor_id', 'actor_email', 'actor_name'].includes(k))
                     )
                   : {}
                 const hasDetails = Object.keys(extraDetails).length > 0

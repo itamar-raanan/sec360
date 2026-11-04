@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 import httpx
+from fastapi import Response
 from httpx import AsyncClient
 from sqlalchemy import func, select
 
@@ -10,6 +11,7 @@ from app.collectors.sentinelone import SentinelOneCollector
 from app.models.application import ApplicationVulnerability
 from app.models.endpoint import Endpoint
 from app.models.integration import IntegrationConfig
+from app.api.routes.application_vulnerabilities import list_vulnerabilities
 
 
 pytestmark = pytest.mark.asyncio
@@ -228,3 +230,46 @@ async def test_vulnerability_api_summary_filters_detail_and_csv(
     assert export.status_code == 200
     assert "CVE-2025-11001" in export.text
     assert "CVE-2026-20002" not in export.text
+
+
+async def test_vulnerability_query_filters_by_exact_sec360_endpoint(
+    db_session, admin_user
+):
+    finance = Endpoint(hostname="finance-laptop", source="sentinelone")
+    build = Endpoint(hostname="linux-build-02", source="sentinelone")
+    db_session.add_all([finance, build])
+    await db_session.flush()
+
+    collector = SentinelOneCollector(credentials={"api_key": "test"}, db=db_session)
+    try:
+        await collector._upsert_application_vulnerabilities(
+            [
+                _risk("risk-finance", endpoint_id="s1-finance"),
+                {**_risk("risk-build", endpoint_id="s1-build"), "endpointName": "linux-build-02"},
+            ],
+            {"s1-finance": str(finance.id), "s1-build": str(build.id)},
+        )
+        await db_session.commit()
+    finally:
+        await collector.client.aclose()
+
+    response = Response()
+    payload = await list_vulnerabilities(
+        response=response,
+        search=None,
+        severity=None,
+        status=None,
+        mitigation=None,
+        exploit=None,
+        os_type=None,
+        endpoint_id=finance.id,
+        sort="severity",
+        order="desc",
+        limit=100,
+        offset=0,
+        db=db_session,
+        _=admin_user,
+    )
+
+    assert response.headers["x-total-count"] == "1"
+    assert payload[0]["sentinelone_id"] == "risk-finance"

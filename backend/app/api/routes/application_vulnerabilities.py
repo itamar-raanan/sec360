@@ -39,7 +39,17 @@ def _base_query():
     )
 
 
-def _apply_filters(query, *, search=None, severity=None, status=None, mitigation=None, exploit=None, os_type=None):
+def _apply_filters(
+    query,
+    *,
+    search=None,
+    severity=None,
+    status=None,
+    mitigation=None,
+    exploit=None,
+    os_type=None,
+    endpoint_id=None,
+):
     if search:
         pattern = f"%{search.strip()}%"
         query = query.where(or_(
@@ -58,6 +68,8 @@ def _apply_filters(query, *, search=None, severity=None, status=None, mitigation
         query = query.where(ApplicationVulnerability.mitigation_status.ilike(mitigation))
     if os_type:
         query = query.where(ApplicationVulnerability.os_type.ilike(os_type))
+    if endpoint_id:
+        query = query.where(ApplicationVulnerability.endpoint_id == endpoint_id)
     if exploit is True:
         query = query.where(
             ApplicationVulnerability.exploit_code_maturity.isnot(None),
@@ -209,6 +221,7 @@ async def list_vulnerabilities(
     mitigation: str | None = Query(None),
     exploit: bool | None = Query(None),
     os_type: str | None = Query(None),
+    endpoint_id: uuid.UUID | None = Query(None),
     sort: Literal["severity", "cvss", "risk", "detected", "application", "endpoint"] = Query("severity"),
     order: Literal["asc", "desc"] = Query("desc"),
     limit: int = Query(100, ge=1, le=500),
@@ -216,7 +229,11 @@ async def list_vulnerabilities(
     db: AsyncSession = Depends(get_db),
     _: AuthUser = Depends(require_role("viewer")),
 ):
-    query = _apply_filters(_base_query(), search=search, severity=severity, status=status, mitigation=mitigation, exploit=exploit, os_type=os_type)
+    query = _apply_filters(
+        _base_query(), search=search, severity=severity, status=status,
+        mitigation=mitigation, exploit=exploit, os_type=os_type,
+        endpoint_id=endpoint_id,
+    )
     total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
     response.headers["X-Total-Count"] = str(total)
     severity_order = case(

@@ -64,6 +64,18 @@ The API request timeout can also be changed. The supported range is 5–120 seco
 "SEC360_TIMEOUT_SECONDS": "120"
 ```
 
+If the MCP host uses an HTTP or HTTPS proxy but SEC360 is reached directly on the
+local network, exclude the SEC360 server from the proxy. Use a comma-separated list
+without URL schemes or ports:
+
+```json
+"no_proxy": "YOUR-SEC360-SERVER-IP,YOUR-SEC360-HOSTNAME,localhost,127.0.0.1"
+```
+
+For example, when `SEC360_URL` is `https://10.20.30.40`, include `10.20.30.40` in
+`no_proxy`. Some environments use the uppercase spelling `NO_PROXY`; if required,
+set it to the same value.
+
 Add optional values inside the existing `environment` object. OpenCode's local MCP
 configuration uses the default `stdio` transport, so `SEC360_MCP_TRANSPORT`,
 `SEC360_MCP_HOST`, and `SEC360_MCP_PORT` are not required.

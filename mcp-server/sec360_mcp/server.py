@@ -16,15 +16,26 @@ mcp = MCPServer(
     "SEC360",
     instructions=(
         "Read security posture data from SEC360. All tools are read-only. "
-        "Use summary tools before detailed lists, keep result limits small, and preserve "
-        "exact identifiers when requesting details. The API key owner's live role, enabled "
-        "features, and connected integrations control access."
+        "Use get_sec360_data_catalog to discover available data. Use summary tools before "
+        "detailed lists, keep result limits small, and preserve exact identifiers when "
+        "requesting details. The API key owner's live role, enabled features, and connected "
+        "integrations control access. Integration credentials and other secrets are never "
+        "exposed."
     ),
 )
 
 
 def _bounded(value: int, maximum: int = 200) -> int:
     return max(1, min(value, maximum))
+
+
+def _items(payload: Any) -> list[dict[str, Any]]:
+    """Normalize list and paginated REST responses for local aggregation."""
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if isinstance(payload, dict) and isinstance(payload.get("items"), list):
+        return [item for item in payload["items"] if isinstance(item, dict)]
+    return []
 
 
 async def _get(path: str, **params: Any) -> Any:
@@ -49,10 +60,63 @@ def capabilities() -> str:
             "compliance and risk", "activity and suspicious events",
             "SentinelOne application vulnerabilities", "Symantec DLP exclusions",
             "Puppet facts", "Linux CIS audits", "proxy policy audits",
-            "network map", "integration status",
+            "network map", "integration status and product catalog",
+            "feature availability and configuration state",
         ],
         "authorization": "Every request inherits the API key owner's live SEC360 role.",
     }, indent=2)
+
+
+@mcp.tool()
+async def get_sec360_data_catalog() -> dict[str, Any]:
+    """Describe every SEC360 data domain and the tools used to query it."""
+    return {
+        "read_only": True,
+        "domains": {
+            "endpoints": {
+                "list": "list_endpoints",
+                "detail": "get_endpoint",
+                "related": [
+                    "get_endpoint_puppet_facts",
+                    "list_application_vulnerabilities with endpoint_id",
+                    "list_entity_notes",
+                ],
+            },
+            "users": {
+                "list": "list_users",
+                "detail": "get_user",
+                "related": ["get_user_anomalies", "list_activity", "list_entity_notes"],
+            },
+            "integrations": {
+                "list": "get_integration_status",
+                "detail": "get_integration_details",
+                "catalog": "get_integration_catalog",
+            },
+            "features": {
+                "inventory": "get_feature_inventory",
+                "data_tools": {
+                    "activity": "list_activity",
+                    "application_vulnerabilities": "list_application_vulnerabilities",
+                    "dlp_policy_search": "search_dlp_policy_exclusions",
+                    "puppet_facts": "query_puppet_facts",
+                    "network_map": "get_network_map",
+                    "linux_audit": "list_linux_audits",
+                    "proxy_audit": "list_proxy_audit_events",
+                },
+            },
+            "posture": {
+                "compliance": ["get_compliance_overview", "list_compliance_endpoints"],
+                "risk": "get_risk_overview",
+            },
+            "operations": {
+                "security_events": ["list_security_audit_events", "list_security_change_events"],
+                "reports": ["generate_report", "list_scheduled_reports"],
+            },
+        },
+        "pagination": "Use limit and offset repeatedly until offset reaches total_count.",
+        "authorization": "Results inherit the API key owner's current SEC360 role.",
+        "secret_policy": "Passwords, tokens, private keys, and integration credentials are excluded.",
+    }
 
 
 @mcp.tool()
@@ -71,6 +135,115 @@ async def get_current_user() -> dict[str, Any]:
 async def get_integration_status() -> list[dict[str, Any]]:
     """List SEC360 products, connection state, last sync, and available features."""
     return await _get("/api/integrations")
+
+
+@mcp.tool()
+async def get_integration_catalog() -> list[dict[str, Any]]:
+    """List every supported integration with its capabilities and feature ownership."""
+    return await _get("/api/integrations/catalog")
+
+
+@mcp.tool()
+async def get_integration_details(integration_type: str) -> dict[str, Any]:
+    """Return one integration's safe configuration state, sync health, and capabilities."""
+    configurations, catalog = await _get_many([
+        ("/api/integrations", {}),
+        ("/api/integrations/catalog", {}),
+    ])
+    config = next(
+        (item for item in _items(configurations) if item.get("integration_type") == integration_type),
+        None,
+    )
+    product = next(
+        (item for item in _items(catalog) if item.get("integration_type") == integration_type),
+        None,
+    )
+    if config is None and product is None:
+        return {"found": False, "integration_type": integration_type}
+    return {
+        "found": True,
+        "integration_type": integration_type,
+        "configuration": config,
+        "catalog": product,
+        "connected": bool(
+            config and config.get("is_enabled") and config.get("status") == "connected"
+        ),
+        "credentials": "configured" if config and config.get("credentials_configured") else "not_configured",
+        "secret_values_exposed": False,
+    }
+
+
+@mcp.tool()
+async def get_feature_inventory() -> dict[str, Any]:
+    """List all integration-owned and optional features with their current availability."""
+    integrations, catalog, network_map, linux_audit, proxy_audit, product_tags = await _get_many([
+        ("/api/integrations", {}),
+        ("/api/integrations/catalog", {}),
+        ("/api/network-map/status", {}),
+        ("/api/linux-audits/status", {}),
+        ("/api/proxy-audit/status", {}),
+        ("/api/settings/endpoint-product-tags", {}),
+    ])
+    configs = _items(integrations)
+    products = _items(catalog)
+    connected = {
+        item.get("integration_type")
+        for item in configs
+        if item.get("is_enabled") and item.get("status") == "connected"
+    }
+    feature_owners: dict[str, list[str]] = {}
+    feature_tools = {
+        "activity": "list_activity",
+        "application_vulnerabilities": "list_application_vulnerabilities",
+        "dlp_policy_search": "search_dlp_policy_exclusions",
+        "puppet_facts": "query_puppet_facts",
+        "network_map": "get_network_map",
+        "linux_audit": "list_linux_audits",
+        "proxy_audit": "list_proxy_audit_events",
+    }
+    for product in products:
+        owner = product.get("integration_type")
+        for feature in product.get("features") or []:
+            feature_owners.setdefault(feature, []).append(owner)
+
+    features = []
+    for name, owners in sorted(feature_owners.items()):
+        providing = []
+        for config in configs:
+            if config.get("integration_type") not in owners:
+                continue
+            if not (config.get("is_enabled") and config.get("status") == "connected"):
+                continue
+            if name in (config.get("available_features") or []):
+                providing.append(config.get("integration_type"))
+        features.append({
+            "name": name,
+            "kind": "integration",
+            "enabled": bool(providing),
+            "integration_owners": owners,
+            "provided_by": providing,
+            "data_tool": feature_tools.get(name),
+        })
+
+    for name, status_payload in (
+        ("network_map", network_map),
+        ("linux_audit", linux_audit),
+        ("proxy_audit", proxy_audit),
+    ):
+        features.append({
+            "name": name,
+            "kind": "optional",
+            "enabled": bool(status_payload.get("enabled")) if isinstance(status_payload, dict) else False,
+            "integration_owners": [],
+            "provided_by": [],
+            "data_tool": feature_tools[name],
+        })
+
+    return {
+        "features": features,
+        "connected_integrations": sorted(item for item in connected if isinstance(item, str)),
+        "endpoint_product_tags": product_tags.get("tags", []) if isinstance(product_tags, dict) else [],
+    }
 
 
 @mcp.tool()
@@ -102,12 +275,32 @@ async def list_endpoints(
 
 @mcp.tool()
 async def get_endpoint(endpoint_id: str) -> dict[str, Any]:
-    """Return full endpoint detail and linked security-agent records."""
-    detail, agents = await _get_many([
+    """Return full endpoint detail, agents, compliance, exclusions, owner, and notes."""
+    detail, agents, notes = await _get_many([
         (f"/api/endpoints/{endpoint_id}", {}),
         (f"/api/endpoints/{endpoint_id}/agents", {}),
+        ("/api/notes", {"entity_type": "endpoint", "entity_id": endpoint_id}),
     ])
-    return {"endpoint": detail, "agents": agents}
+    return {"endpoint": detail, "agents": agents, "notes": notes}
+
+
+@mcp.tool()
+async def get_endpoint_puppet_facts(
+    endpoint_id: str,
+    fact_names: list[str] | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """Return Puppet facts for an endpoint, resolving its exact hostname first."""
+    endpoint = await _get(f"/api/endpoints/{endpoint_id}")
+    hostname = endpoint.get("hostname") if isinstance(endpoint, dict) else None
+    if not hostname:
+        return {"endpoint_id": endpoint_id, "hostname": None, "items": [], "total_count": 0}
+    facts = await _get(
+        "/api/puppet-facts", certname=hostname, names=fact_names,
+        limit=_bounded(limit, 500), offset=max(0, offset),
+    )
+    return {"endpoint_id": endpoint_id, "hostname": hostname, "facts": facts}
 
 
 @mcp.tool()
@@ -128,15 +321,29 @@ async def list_users(
 
 
 @mcp.tool()
-async def get_user(user_id: str, timeline_limit: int = 50) -> dict[str, Any]:
-    """Return a user with correlated identity, devices, and recent activity."""
-    detail, identity, devices, timeline = await _get_many([
+async def get_user(
+    user_id: str,
+    timeline_days: int = 30,
+    timeline_limit: int = 200,
+) -> dict[str, Any]:
+    """Return all exposed user profile, source, identity, device, activity, and note data."""
+    detail, identity, devices, timeline, notes = await _get_many([
         (f"/api/users/{user_id}", {}),
         (f"/api/users/{user_id}/identity", {}),
         (f"/api/users/{user_id}/devices", {}),
-        (f"/api/users/{user_id}/timeline", {"limit": _bounded(timeline_limit, 200)}),
+        (f"/api/users/{user_id}/timeline", {
+            "days": max(1, min(timeline_days, 90)),
+            "limit": _bounded(timeline_limit, 1000),
+        }),
+        ("/api/notes", {"entity_type": "user", "entity_id": user_id}),
     ])
-    return {"user": detail, "identity": identity, "devices": devices, "timeline": timeline}
+    return {
+        "user": detail,
+        "identity": identity,
+        "devices": devices,
+        "timeline": timeline,
+        "notes": notes,
+    }
 
 
 @mcp.tool()
@@ -224,6 +431,7 @@ async def list_application_vulnerabilities(
     mitigation: str | None = None,
     exploit_available: bool | None = None,
     operating_system: str | None = None,
+    endpoint_id: str | None = None,
     sort: Literal["severity", "cvss", "risk", "detected", "application", "endpoint"] = "severity",
     order: Literal["asc", "desc"] = "desc",
     limit: int = 100,
@@ -233,7 +441,7 @@ async def list_application_vulnerabilities(
     return await _get(
         "/api/application-vulnerabilities", search=search, severity=severity,
         status=status, mitigation=mitigation, exploit=exploit_available,
-        os_type=operating_system, sort=sort, order=order,
+        os_type=operating_system, endpoint_id=endpoint_id, sort=sort, order=order,
         limit=_bounded(limit, 500), offset=max(0, offset),
     )
 

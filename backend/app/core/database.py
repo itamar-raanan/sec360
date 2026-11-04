@@ -39,7 +39,7 @@ async def get_db() -> AsyncSession:
 async def init_db():
     """Create all tables and apply incremental schema patches."""
     async with engine.begin() as conn:
-        from app.models import user, endpoint, agent, activity, compliance, application, audit, system_settings, report, note, puppet, change_event, network_map, linux_audit, proxy_audit  # noqa
+        from app.models import user, endpoint, agent, activity, compliance, application, audit, system_settings, report, note, puppet, change_event, network_map, linux_audit, proxy_audit, api_key  # noqa
         await conn.run_sync(Base.metadata.create_all)
         # Incremental patches — safe to run repeatedly
         from sqlalchemy import text
@@ -190,6 +190,23 @@ async def init_db():
             """,
             "CREATE INDEX IF NOT EXISTS ix_siem_deliveries_status ON siem_deliveries (status)",
             "CREATE INDEX IF NOT EXISTS ix_siem_deliveries_next_attempt_at ON siem_deliveries (next_attempt_at)",
+            """
+            CREATE TABLE IF NOT EXISTS personal_api_keys (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+                name VARCHAR(100) NOT NULL,
+                key_prefix VARCHAR(32) NOT NULL UNIQUE,
+                key_hash VARCHAR(64) NOT NULL UNIQUE,
+                created_at TIMESTAMPTZ NOT NULL,
+                last_used_at TIMESTAMPTZ,
+                expires_at TIMESTAMPTZ,
+                revoked_at TIMESTAMPTZ
+            )
+            """,
+            "CREATE INDEX IF NOT EXISTS ix_personal_api_keys_user_id ON personal_api_keys (user_id)",
+            "CREATE INDEX IF NOT EXISTS ix_personal_api_keys_last_used_at ON personal_api_keys (last_used_at)",
+            "CREATE INDEX IF NOT EXISTS ix_personal_api_keys_expires_at ON personal_api_keys (expires_at)",
+            "CREATE INDEX IF NOT EXISTS ix_personal_api_keys_revoked_at ON personal_api_keys (revoked_at)",
             # Symantec WSS compliance fields (safe for upgraded installations)
             "ALTER TABLE compliance_statuses ADD COLUMN IF NOT EXISTS wss_installed  BOOLEAN DEFAULT FALSE",
             "ALTER TABLE compliance_statuses ADD COLUMN IF NOT EXISTS wss_version_ok BOOLEAN DEFAULT FALSE",

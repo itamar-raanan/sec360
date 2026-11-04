@@ -101,7 +101,7 @@ Interactive OpenAPI documentation is available at `/docs` on the backend service
 
 PostgreSQL stores the canonical inventory and operational state, including:
 
-- Users, authentication users, sessions, and invitations.
+- Users, authentication users, sessions, invitations, and personal read-only API keys.
 - Endpoints, agents, source identifiers, and correlated ownership.
 - Compliance results, compliance exclusions, and risk scores.
 - Activity events and retained raw activity data.
@@ -517,6 +517,19 @@ Backend authorization is enforced independently of whether a page is visible in 
 - Bearer authentication is supported for API clients; when both are supplied, the application cookie takes precedence.
 - Production cookies must be secure and are intended for HTTPS.
 
+### Personal read-only API keys
+
+Every active user can create personal API keys under **Settings → My Account**. A key inherits the owner's current role, so a viewer key cannot call administrator-only endpoints. Keys support only `GET`, `HEAD`, and `OPTIONS`; authenticated `POST`, `PUT`, `PATCH`, and `DELETE` requests are rejected regardless of the owner's role.
+
+The raw key is displayed once. SEC360 stores an HMAC-SHA256 digest, the public prefix, optional expiration, revocation state, and last-used time. Key creation and revocation are written to the audit log and SIEM outbox. If the owner is disabled or the key expires or is revoked, access stops immediately.
+
+```bash
+curl -H "Authorization: Bearer sec360_PUBLICID_SECRET" \
+  "https://sec360.example.com/api/endpoints?limit=100"
+```
+
+Use an interactive browser session to create, list, or revoke keys; an API key cannot manage API keys or initiate MFA setup.
+
 ### Security controls
 
 - Password hashing and forced bootstrap-password replacement.
@@ -810,7 +823,7 @@ All application APIs are mounted under `/api` except the backend health endpoint
 | `/api/risk` | User, endpoint, and overall risk data |
 | `/api/activity` | Activity events and suspicious activity |
 | `/api/integrations` | Catalog, credentials, enable/test/sync, AD CSV import, and custom definitions |
-| `/api/settings` | Users, account security, product/risk settings, SAML, RADIUS, TLS, audit, change events, and SIEM |
+| `/api/settings` | Users, account security, personal API keys, product/risk settings, SAML, RADIUS, TLS, audit, change events, and SIEM |
 | `/api/reports` | Report preview, CSV export, schedules, toggles, and send-now actions |
 | `/api/dlp-policy-search` | Live Symantec DLP policy search |
 | `/api/application-vulnerabilities` | SentinelOne vulnerability summaries, facets, records, detail, and CSV |

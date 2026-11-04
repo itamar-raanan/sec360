@@ -1,13 +1,21 @@
 import uuid
+import secrets
 from typing import AsyncGenerator
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.core.database import AsyncSessionLocal
-from app.core.security import decode_token, has_role
+from app.core.security import (
+    API_KEY_PREFIX,
+    decode_token,
+    hash_personal_api_key,
+    has_role,
+    personal_api_key_prefix,
+)
+from app.models.api_key import PersonalApiKey
 from app.models.user import AuthSession, AuthUser
 from app.models.system_settings import SystemSettings
 from app.models.audit import AuditLog
@@ -40,7 +48,7 @@ def _extract_token(request: Request, credentials: HTTPAuthorizationCredentials |
 
 async def get_current_user(
     request: Request,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> AuthUser:
     token = _extract_token(request, credentials)
@@ -51,52 +59,92 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    try:
-        payload = decode_token(token)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
-            headers={"WWW-Authenticate": "Bearer"},
+    if token.startswith(API_KEY_PREFIX):
+        key_prefix = personal_api_key_prefix(token)
+        api_key = None
+        if key_prefix:
+            api_key = (await db.execute(
+                select(PersonalApiKey).where(PersonalApiKey.key_prefix == key_prefix)
+            )).scalar_one_or_none()
+        now = datetime.now(timezone.utc)
+        expires_at = api_key.expires_at if api_key else None
+        if expires_at and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        valid_key = bool(
+            api_key
+            and api_key.revoked_at is None
+            and (expires_at is None or expires_at > now)
+            and secrets.compare_digest(api_key.key_hash, hash_personal_api_key(token))
         )
+        if not valid_key:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired API key",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        user = (await db.execute(
+            select(AuthUser).where(AuthUser.id == api_key.user_id)
+        )).scalar_one_or_none()
+        if not user or not user.is_active:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+        if request.method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Personal API keys are read-only",
+            )
+        last_used_at = api_key.last_used_at
+        if last_used_at and last_used_at.tzinfo is None:
+            last_used_at = last_used_at.replace(tzinfo=timezone.utc)
+        if last_used_at is None or last_used_at < now - timedelta(minutes=5):
+            api_key.last_used_at = now
+        request.state.authentication_type = "api_key"
+        request.state.api_key_id = str(api_key.id)
+    else:
+        try:
+            payload = decode_token(token)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
-    if payload.get("type") != "access":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Refresh token cannot be used as access token",
-        )
+        if payload.get("type") != "access":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token cannot be used as access token",
+            )
 
-    user_id_raw = payload.get("sub")
-    if not user_id_raw:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
-    try:
-        user_id = uuid.UUID(user_id_raw)
-    except (ValueError, AttributeError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+        user_id_raw = payload.get("sub")
+        if not user_id_raw:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+        try:
+            user_id = uuid.UUID(user_id_raw)
+        except (ValueError, AttributeError):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
 
-    result = await db.execute(select(AuthUser).where(AuthUser.id == user_id))
-    user = result.scalar_one_or_none()
+        user = (await db.execute(select(AuthUser).where(AuthUser.id == user_id))).scalar_one_or_none()
+        if not user or not user.is_active:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
-    if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
-
-    session_id_raw = payload.get("sid")
-    if not session_id_raw:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session is no longer valid")
-    try:
-        session_id = uuid.UUID(session_id_raw)
-    except (ValueError, AttributeError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
-    active_session = (await db.execute(
-        select(AuthSession).where(
-            AuthSession.id == session_id,
-            AuthSession.user_id == user.id,
-            AuthSession.revoked_at.is_(None),
-            AuthSession.expires_at > datetime.now(timezone.utc),
-        )
-    )).scalar_one_or_none()
-    if active_session is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or revoked")
+        session_id_raw = payload.get("sid")
+        if not session_id_raw:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session is no longer valid")
+        try:
+            session_id = uuid.UUID(session_id_raw)
+        except (ValueError, AttributeError):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")
+        active_session = (await db.execute(
+            select(AuthSession).where(
+                AuthSession.id == session_id,
+                AuthSession.user_id == user.id,
+                AuthSession.revoked_at.is_(None),
+                AuthSession.expires_at > datetime.now(timezone.utc),
+            )
+        )).scalar_one_or_none()
+        if active_session is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or revoked")
+        request.state.authentication_type = "session"
 
     password_change_paths = {
         "/api/auth/me",
@@ -128,6 +176,18 @@ async def get_current_user(
         )
 
     return user
+
+
+async def require_interactive_user(
+    request: Request,
+    current_user: AuthUser = Depends(get_current_user),
+) -> AuthUser:
+    if getattr(request.state, "authentication_type", None) == "api_key":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Use an interactive session to manage API keys",
+        )
+    return current_user
 
 
 def require_role(required_role: str):

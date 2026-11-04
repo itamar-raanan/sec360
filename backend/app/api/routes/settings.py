@@ -7,6 +7,7 @@ import io
 import base64
 import logging
 import secrets
+import uuid
 from typing import Literal, Optional
 from datetime import datetime, timezone, timedelta
 
@@ -19,13 +20,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import and_, func, not_, or_, select
 from pydantic import BaseModel, Field
 
-from app.api.deps import get_db, get_current_user, require_role, audit_action
-from app.core.security import hash_password, verify_password
+from app.api.deps import (
+    audit_action,
+    get_current_user,
+    get_db,
+    require_interactive_user,
+    require_role,
+)
+from app.core.security import create_personal_api_key, hash_password, verify_password
 from app.services.auth_sessions import revoke_user_sessions
 from app.models.user import AuthUser
 from app.models.system_settings import SystemSettings
 from app.models.audit import AuditLog
 from app.models.change_event import ChangeEvent, SiemDelivery
+from app.models.api_key import PersonalApiKey
 from app.services.product_scope import normalize_product_tags
 
 logger = logging.getLogger(__name__)
@@ -90,6 +98,11 @@ class ChangePasswordRequest(BaseModel):
 
 class MfaVerifyRequest(BaseModel):
     code: str
+
+
+class PersonalApiKeyCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    expires_in_days: Optional[int] = Field(default=90, ge=1, le=365)
 
 
 class SystemSettingsIn(BaseModel):
@@ -450,6 +463,112 @@ async def get_my_settings(current: AuthUser = Depends(get_current_user)):
     return AuthUserOut.from_orm(current)
 
 
+def _personal_api_key_payload(item: PersonalApiKey) -> dict:
+    now = datetime.now(timezone.utc)
+    expires_at = item.expires_at
+    if expires_at and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return {
+        "id": str(item.id),
+        "name": item.name,
+        "prefix": item.key_prefix,
+        "created_at": item.created_at.isoformat(),
+        "last_used_at": item.last_used_at.isoformat() if item.last_used_at else None,
+        "expires_at": item.expires_at.isoformat() if item.expires_at else None,
+        "status": (
+            "revoked" if item.revoked_at
+            else "expired" if expires_at and expires_at <= now
+            else "active"
+        ),
+    }
+
+
+@router.get("/me/api-keys")
+async def list_personal_api_keys(
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_interactive_user),
+):
+    keys = (await db.execute(
+        select(PersonalApiKey)
+        .where(PersonalApiKey.user_id == current.id)
+        .order_by(PersonalApiKey.created_at.desc())
+    )).scalars().all()
+    return [_personal_api_key_payload(item) for item in keys]
+
+
+@router.post("/me/api-keys", status_code=status.HTTP_201_CREATED)
+async def create_api_key(
+    data: PersonalApiKeyCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_interactive_user),
+):
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(400, "API key name is required")
+    now = datetime.now(timezone.utc)
+    active_count = await db.scalar(
+        select(func.count()).select_from(PersonalApiKey).where(
+            PersonalApiKey.user_id == current.id,
+            PersonalApiKey.revoked_at.is_(None),
+            or_(PersonalApiKey.expires_at.is_(None), PersonalApiKey.expires_at > now),
+        )
+    )
+    if (active_count or 0) >= 10:
+        raise HTTPException(409, "Revoke an existing API key before creating another")
+
+    raw_key, key_prefix, key_hash = create_personal_api_key()
+    expires_at = now + timedelta(days=data.expires_in_days) if data.expires_in_days else None
+    item = PersonalApiKey(
+        user_id=current.id,
+        name=name,
+        key_prefix=key_prefix,
+        key_hash=key_hash,
+        expires_at=expires_at,
+    )
+    db.add(item)
+    await db.flush()
+    await audit_action(
+        "create_personal_api_key",
+        "personal_api_key",
+        str(item.id),
+        request,
+        db,
+        current,
+        {"name": item.name, "prefix": item.key_prefix, "expires_at": expires_at.isoformat() if expires_at else None},
+    )
+    return {**_personal_api_key_payload(item), "key": raw_key}
+
+
+@router.delete("/me/api-keys/{key_id}")
+async def revoke_api_key(
+    key_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current: AuthUser = Depends(require_interactive_user),
+):
+    item = (await db.execute(
+        select(PersonalApiKey).where(
+            PersonalApiKey.id == key_id,
+            PersonalApiKey.user_id == current.id,
+        )
+    )).scalar_one_or_none()
+    if not item:
+        raise HTTPException(404, "API key not found")
+    if item.revoked_at is None:
+        item.revoked_at = datetime.now(timezone.utc)
+        await audit_action(
+            "revoke_personal_api_key",
+            "personal_api_key",
+            str(item.id),
+            request,
+            db,
+            current,
+            {"name": item.name, "prefix": item.key_prefix},
+        )
+    return {"message": "API key revoked"}
+
+
 @router.post("/me/password")
 async def change_password(
     data: ChangePasswordRequest,
@@ -480,7 +599,7 @@ async def change_password(
 @router.get("/me/mfa/setup")
 async def mfa_setup(
     db: AsyncSession = Depends(get_db),
-    current: AuthUser = Depends(get_current_user),
+    current: AuthUser = Depends(require_interactive_user),
 ):
     """Generate a new TOTP secret and return the provisioning URI + QR code."""
     if current.mfa_enabled:

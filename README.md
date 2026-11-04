@@ -12,6 +12,7 @@ This document describes the current implementation: its components, features, in
 - [Integrations](#integrations)
 - [Data collection and processing](#data-collection-and-processing)
 - [Authentication and authorization](#authentication-and-authorization)
+- [Personal read-only API keys](docs/PERSONAL_API_KEYS.md)
 - [Change logging, auditing, and SIEM](#change-logging-auditing-and-siem)
 - [Deployment](#deployment)
 - [Initial configuration](#initial-configuration)
@@ -529,6 +530,8 @@ curl -H "Authorization: Bearer sec360_PUBLICID_SECRET" \
 ```
 
 Use an interactive browser session to create, list, or revoke keys; an API key cannot manage API keys or initiate MFA setup.
+
+See the [personal API key guide](docs/PERSONAL_API_KEYS.md) for the complete capability matrix, authentication examples, pagination and export patterns, authorization behavior, security guidance, error reference, and troubleshooting steps.
 
 ### Security controls
 

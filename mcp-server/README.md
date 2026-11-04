@@ -38,3 +38,32 @@ Add the following to your OpenCode configuration. Replace the executable path, S
 ```
 
 Restart OpenCode after saving the configuration.
+
+### Optional environment variables
+
+For an on-premises SEC360 server that uses a private or self-signed certificate,
+the preferred option is to provide the absolute path to the trusted CA certificate:
+
+```json
+"SEC360_CA_BUNDLE": "/absolute/path/to/company-ca.pem"
+```
+
+If a trusted CA certificate is not available, TLS certificate verification can be
+disabled temporarily:
+
+```json
+"SEC360_VERIFY_SSL": "false"
+```
+
+Disabling certificate verification reduces connection security. Use
+`SEC360_CA_BUNDLE` whenever possible.
+
+The API request timeout can also be changed. The supported range is 5–120 seconds:
+
+```json
+"SEC360_TIMEOUT_SECONDS": "120"
+```
+
+Add optional values inside the existing `environment` object. OpenCode's local MCP
+configuration uses the default `stdio` transport, so `SEC360_MCP_TRANSPORT`,
+`SEC360_MCP_HOST`, and `SEC360_MCP_PORT` are not required.

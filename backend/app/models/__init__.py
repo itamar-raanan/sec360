@@ -19,6 +19,7 @@ from app.models.network_map import (
 )
 from app.models.linux_audit import LinuxAuditIngestToken, LinuxAuditReport
 from app.models.proxy_audit import ProxyAuditConnection, ProxyAuditEvent
+from app.models.api_key import PersonalApiKey
 
 __all__ = [
     "User",
@@ -51,4 +52,5 @@ __all__ = [
     "LinuxAuditIngestToken",
     "ProxyAuditConnection",
     "ProxyAuditEvent",
+    "PersonalApiKey",
 ]

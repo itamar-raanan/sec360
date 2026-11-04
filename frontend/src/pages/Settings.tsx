@@ -48,6 +48,20 @@ interface AuthUserDetail {
   created_at: string
 }
 
+interface PersonalApiKey {
+  id: string
+  name: string
+  prefix: string
+  created_at: string
+  last_used_at: string | null
+  expires_at: string | null
+  status: 'active' | 'expired' | 'revoked'
+}
+
+interface CreatedPersonalApiKey extends PersonalApiKey {
+  key: string
+}
+
 interface SystemSettings {
   offline_threshold_hours: number
   risk_weight_no_edr: number
@@ -455,6 +469,8 @@ function UsersTab() {
 
 function AccountTab() {
   const { user, logout } = useAuthStore()
+  const queryClient = useQueryClient()
+  const confirmAction = useConfirm()
   const [pwCurrent, setPwCurrent] = useState('')
   const [pwNew, setPwNew] = useState('')
   const [pwConfirm, setPwConfirm] = useState('')
@@ -469,11 +485,67 @@ function AccountTab() {
   const [mfaMsg, setMfaMsg] = useState<{ type: 'error' | 'success'; msg: string } | null>(null)
   const [mfaLoading, setMfaLoading] = useState(false)
 
+  // Personal read-only API keys
+  const [apiKeyName, setApiKeyName] = useState('')
+  const [apiKeyExpiry, setApiKeyExpiry] = useState('90')
+  const [createdApiKey, setCreatedApiKey] = useState<CreatedPersonalApiKey | null>(null)
+  const [apiKeyMsg, setApiKeyMsg] = useState<{ type: 'error' | 'success'; msg: string } | null>(null)
+  const [copiedApiKey, setCopiedApiKey] = useState(false)
+
   // We re-fetch "me" to get current mfa_enabled state
   const { data: me } = useQuery({
     queryKey: ['settings-me'],
     queryFn: () => apiClient.get('/settings/me').then(r => r.data as AuthUserDetail),
   })
+
+  const { data: apiKeys = [], isLoading: apiKeysLoading } = useQuery<PersonalApiKey[]>({
+    queryKey: ['personal-api-keys'],
+    queryFn: () => apiClient.get('/settings/me/api-keys').then(r => r.data),
+    enabled: !user?.must_change_password && !user?.mfa_setup_required,
+  })
+
+  const createApiKey = useMutation({
+    mutationFn: () => apiClient.post<CreatedPersonalApiKey>('/settings/me/api-keys', {
+      name: apiKeyName.trim(),
+      expires_in_days: apiKeyExpiry === 'never' ? null : Number(apiKeyExpiry),
+    }).then(r => r.data),
+    onSuccess: data => {
+      setCreatedApiKey(data)
+      setApiKeyName('')
+      setApiKeyMsg({ type: 'success', msg: 'API key created. Copy it now; it will not be shown again.' })
+      setCopiedApiKey(false)
+      queryClient.invalidateQueries({ queryKey: ['personal-api-keys'] })
+    },
+    onError: (error: { response?: { data?: { detail?: string } } }) => {
+      setApiKeyMsg({ type: 'error', msg: error.response?.data?.detail ?? 'Unable to create API key' })
+    },
+  })
+
+  const revokeApiKey = async (item: PersonalApiKey) => {
+    const confirmed = await confirmAction({
+      title: 'Revoke API key',
+      message: `Revoke “${item.name}”? Applications using this key will immediately lose access.`,
+      confirmLabel: 'Revoke key',
+      tone: 'danger',
+    })
+    if (!confirmed) return
+    try {
+      await apiClient.delete(`/settings/me/api-keys/${item.id}`)
+      setApiKeyMsg({ type: 'success', msg: `API key “${item.name}” revoked.` })
+      if (createdApiKey?.id === item.id) setCreatedApiKey(null)
+      queryClient.invalidateQueries({ queryKey: ['personal-api-keys'] })
+    } catch (error: unknown) {
+      const msg = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? 'Unable to revoke API key'
+      setApiKeyMsg({ type: 'error', msg })
+    }
+  }
+
+  const copyApiKey = async () => {
+    if (!createdApiKey) return
+    await navigator.clipboard.writeText(createdApiKey.key)
+    setCopiedApiKey(true)
+    window.setTimeout(() => setCopiedApiKey(false), 2000)
+  }
 
   const changePw = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -537,7 +609,7 @@ function AccountTab() {
   const mfaEnabled = me?.mfa_enabled ?? false
 
   return (
-    <div className="space-y-6 max-w-lg">
+    <div className="space-y-6 max-w-3xl">
       {/* Profile info */}
       <div className="rounded-xl p-5" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
         <div className="flex items-center gap-3 mb-4">
@@ -550,6 +622,143 @@ function AccountTab() {
           </div>
         </div>
       </div>
+
+      {/* Personal API keys */}
+      {!user?.must_change_password && !user?.mfa_setup_required && <div className="rounded-xl overflow-hidden" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>
+        <div className="flex items-start justify-between gap-4 p-5" style={{ borderBottom: '1px solid var(--border)' }}>
+          <div className="flex items-start gap-3">
+            <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+              <KeyRound size={17} />
+            </span>
+            <div>
+              <h3 className="text-sm font-semibold text-white">Personal API keys</h3>
+              <p className="mt-1 max-w-xl text-xs leading-5 text-zinc-500">
+                Fetch SEC360 data from scripts and external tools. Keys are strictly read-only and inherit your current role permissions.
+              </p>
+            </div>
+          </div>
+          <span className="flex-shrink-0 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
+            GET only
+          </span>
+        </div>
+
+        <div className="space-y-4 p-5">
+          {apiKeyMsg && <Alert type={apiKeyMsg.type} msg={apiKeyMsg.msg} />}
+
+          {createdApiKey && (
+            <div className="rounded-lg border border-amber-500/25 bg-amber-500/[0.07] p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-xs font-semibold text-amber-200">Copy this key now</div>
+                  <p className="mt-1 text-[11px] text-amber-200/60">For security, SEC360 cannot display it again.</p>
+                </div>
+                <button onClick={() => { setCreatedApiKey(null); createApiKey.reset() }} className="ui-icon-button !h-7 !w-7" aria-label="Hide API key">
+                  <X size={13} />
+                </button>
+              </div>
+              <div className="mt-3 flex items-center gap-2 rounded-lg bg-black/25 p-2.5" style={{ border: '1px solid var(--border)' }}>
+                <code className="min-w-0 flex-1 break-all font-mono text-xs text-emerald-300">{createdApiKey.key}</code>
+                <button onClick={copyApiKey} className="ui-secondary-button !px-2.5 !py-1.5" type="button">
+                  <Copy size={12} /> {copiedApiKey ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+              <div className="mt-3">
+                <div className="mb-1.5 text-[11px] font-medium text-zinc-500">Example request</div>
+                <code className="block overflow-x-auto whitespace-pre rounded-lg bg-black/25 p-3 font-mono text-[11px] leading-5 text-zinc-300" style={{ border: '1px solid var(--border)' }}>
+                  {`curl -H "Authorization: Bearer ${createdApiKey.key}" \\\n  "${window.location.origin}/api/endpoints?limit=100"`}
+                </code>
+              </div>
+            </div>
+          )}
+
+          <form
+            className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_150px_auto]"
+            onSubmit={event => {
+              event.preventDefault()
+              setApiKeyMsg(null)
+              setCreatedApiKey(null)
+              createApiKey.mutate()
+            }}
+          >
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">Key name</label>
+              <input
+                value={apiKeyName}
+                onChange={event => setApiKeyName(event.target.value)}
+                maxLength={100}
+                placeholder="SIEM reporting script"
+                className="ui-input w-full"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-zinc-400">Expiration</label>
+              <select value={apiKeyExpiry} onChange={event => setApiKeyExpiry(event.target.value)} className="ui-input w-full">
+                <option value="30">30 days</option>
+                <option value="90">90 days</option>
+                <option value="365">1 year</option>
+                <option value="never">Never</option>
+              </select>
+            </div>
+            <button
+              type="submit"
+              disabled={!apiKeyName.trim() || createApiKey.isPending}
+              className="ui-primary-button self-end disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Plus size={14} /> {createApiKey.isPending ? 'Creating…' : 'Create key'}
+            </button>
+          </form>
+
+          <div className="overflow-hidden rounded-lg" style={{ border: '1px solid var(--border)' }}>
+            {apiKeysLoading ? (
+              <div className="space-y-2 p-4">
+                {[0, 1].map(item => <div key={item} className="shimmer h-10 rounded-lg" />)}
+              </div>
+            ) : apiKeys.length === 0 ? (
+              <div className="px-4 py-8 text-center">
+                <KeyRound size={20} className="mx-auto mb-2 text-zinc-600" />
+                <p className="text-xs text-zinc-500">No personal API keys created</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-white/[0.06]">
+                {apiKeys.map(item => {
+                  const statusColor = item.status === 'active' ? '#34d399' : item.status === 'expired' ? '#f59e0b' : 'var(--text-4)'
+                  return (
+                    <div key={item.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+                      <div className="min-w-[180px] flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-zinc-200">{item.name}</span>
+                          <span className="text-[10px] font-medium capitalize" style={{ color: statusColor }}>{item.status}</span>
+                        </div>
+                        <code className="mt-0.5 block font-mono text-[11px] text-zinc-500">{item.prefix}_••••••••</code>
+                      </div>
+                      <div className="grid w-full grid-cols-1 gap-2 text-[11px] sm:w-auto sm:grid-cols-3 sm:gap-5">
+                        <div><span className="block text-zinc-600">Created</span><span className="text-zinc-400">{fmtDate(item.created_at)}</span></div>
+                        <div><span className="block text-zinc-600">Last used</span><span className="text-zinc-400">{item.last_used_at ? fmtDate(item.last_used_at) : 'Never'}</span></div>
+                        <div><span className="block text-zinc-600">Expires</span><span className="text-zinc-400">{item.expires_at ? fmtDate(item.expires_at) : 'Never'}</span></div>
+                      </div>
+                      {item.status === 'active' && (
+                        <button
+                          type="button"
+                          onClick={() => revokeApiKey(item)}
+                          className="ui-icon-button text-zinc-500 hover:!text-red-400"
+                          title="Revoke API key"
+                          aria-label={`Revoke ${item.name}`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <p className="text-[11px] leading-5 text-zinc-600">
+            Use the key as a Bearer token with existing <span className="font-mono text-zinc-500">GET /api/…</span> endpoints. POST, PUT, PATCH, and DELETE requests are always rejected, even for administrator keys.
+          </p>
+        </div>
+      </div>}
 
       {/* Change password */}
       {user?.auth_method === 'local' && <div className="rounded-xl p-5" style={{ background: 'var(--surface-inset)', border: '1px solid var(--border)' }}>

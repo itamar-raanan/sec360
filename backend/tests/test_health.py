@@ -19,3 +19,9 @@ async def test_health_no_auth_required(client: AsyncClient):
     """Health endpoint must be publicly accessible."""
     res = await client.get("/health")
     assert res.status_code == 200
+
+
+async def test_api_health_alias_is_available_through_reverse_proxy_path(client: AsyncClient):
+    res = await client.get("/api/health")
+    assert res.status_code == 200
+    assert "checks" in res.json()

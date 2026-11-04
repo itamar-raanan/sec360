@@ -196,6 +196,7 @@ app.include_router(proxy_audit.router, prefix="/api")
 
 
 @app.get("/health")
+@app.get("/api/health", include_in_schema=False)
 async def health_check():
     from app.core.database import engine
     from app.collectors.scheduler import scheduler

@@ -2,8 +2,10 @@ from datetime import datetime, timezone
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
+from app.models.audit import AuditLog
+from app.models.change_event import SiemDelivery
 from app.models.proxy_audit import ProxyAuditConnection, ProxyAuditEvent
 from app.models.system_settings import SystemSettings
 from app.services.proxy_audit import ManagementCenterClient, build_policy_diff, collect_proxy_audit
@@ -133,6 +135,40 @@ async def test_proxy_audit_collects_policy_and_shared_object_revisions(
     assert rows[1].deletions == 0
     assert rows[2].object_type == "shared_object"
 
+    audit_rows = (await db_session.execute(
+        select(AuditLog).where(AuditLog.action == "proxy_audit_revision_detected")
+    )).scalars().all()
+    assert len(audit_rows) == 3
+    forwarding_log = next(
+        row for row in audit_rows if row.details["revision_number"] == "2"
+    )
+    assert forwarding_log.resource_type == "proxy_audit_event"
+    assert forwarding_log.resource_id == str(rows[1].id)
+    assert forwarding_log.details["actor_name"] == "security-ops"
+    assert forwarding_log.details["policy_name"] == "Forwarding policy"
+    assert forwarding_log.details["additions"] == 1
+    assert "diff_text" not in forwarding_log.details
+
+    deliveries = (await db_session.execute(
+        select(SiemDelivery).where(SiemDelivery.source_type == "audit_log")
+    )).scalars().all()
+    assert len(deliveries) == 3
+    forwarding_delivery = next(
+        delivery for delivery in deliveries
+        if delivery.payload["sec360"]["audit"]["details"]["revision_number"] == "2"
+    )
+    assert forwarding_delivery.payload["event"]["action"] == "proxy_audit_revision_detected"
+    assert forwarding_delivery.payload["user"]["name"] == "security-ops"
+    assert forwarding_delivery.payload["sec360"]["audit"]["details"]["change_summary"] == "1 line added"
+
+    # Simulate an upgrade with existing Proxy Audit history but no corresponding
+    # Security log or SIEM outbox rows. The next sync backfills them.
+    await db_session.execute(delete(SiemDelivery))
+    await db_session.execute(delete(AuditLog).where(
+        AuditLog.action == "proxy_audit_revision_detected"
+    ))
+    await db_session.commit()
+
     # A repeated scheduled collection reads version metadata but does not fetch
     # or re-import content that SEC360 already has.
     second = await collect_proxy_audit(db_session, {
@@ -141,6 +177,11 @@ async def test_proxy_audit_collects_policy_and_shared_object_revisions(
         "password": "secret",
     })
     assert second == {"imported": 0, "scanned": 3, "objects": 2}
+    backfilled_logs = (await db_session.execute(
+        select(AuditLog).where(AuditLog.action == "proxy_audit_revision_detected")
+    )).scalars().all()
+    assert len(backfilled_logs) == 3
+    assert len((await db_session.execute(select(SiemDelivery))).scalars().all()) == 3
 
     headers = await _headers(client, "admin@test.local", "Admin123!")
     listing = await client.get("/api/proxy-audit?object_type=shared_object", headers=headers)

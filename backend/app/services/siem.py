@@ -103,10 +103,12 @@ def audit_log_to_ecs(log) -> dict[str, Any]:
             }
         },
     }
-    if details.get("actor_email"):
+    actor = details.get("actor_email") or details.get("actor_name")
+    if actor:
+        actor_field = "email" if "@" in str(actor) else "name"
         document["user"] = {
             "id": details.get("actor_id"),
-            "email": details.get("actor_email"),
+            actor_field: actor,
         }
     if log.ip_address and log.ip_address != "unknown":
         document["source"] = {"ip": log.ip_address}
@@ -123,12 +125,19 @@ async def queue_change_event(db: AsyncSession, event: ChangeEvent) -> None:
 
 
 async def queue_audit_log(db: AsyncSession, log) -> None:
+    await queue_audit_logs(db, [log])
+
+
+async def queue_audit_logs(db: AsyncSession, logs: list) -> None:
     await db.flush()
-    db.add(SiemDelivery(
-        source_type="audit_log",
-        source_id=str(log.id),
-        payload=audit_log_to_ecs(log),
-    ))
+    db.add_all([
+        SiemDelivery(
+            source_type="audit_log",
+            source_id=str(log.id),
+            payload=audit_log_to_ecs(log),
+        )
+        for log in logs
+    ])
 
 
 def _headers(config: dict) -> dict[str, str]:

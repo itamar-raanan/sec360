@@ -212,6 +212,7 @@ class SymantecCollector(BaseCollector):
         return h.strip()
 
     async def _upsert_agents(self, records: list) -> int:
+        import uuid as _uuid
         from sqlalchemy import select
         from app.models.endpoint import Endpoint
         from app.models.agent import SecurityAgent
@@ -222,6 +223,7 @@ class SymantecCollector(BaseCollector):
         )
 
         count = 0
+        touched_endpoint_ids: set[_uuid.UUID] = set()
         for record in records:
             hostname_raw = record.get("agentname")
             if not hostname_raw:
@@ -278,6 +280,7 @@ class SymantecCollector(BaseCollector):
                         select(Endpoint).where(Endpoint.source == "jumpcloud")
                     )
                     jc_endpoints = result.scalars().all()
+                    candidates = []
                     for ep in jc_endpoints:
                         ep_norm_user = normalize_username(ep.username or "")
                         ep_norm_host = normalize_hostname(ep.hostname)
@@ -285,12 +288,19 @@ class SymantecCollector(BaseCollector):
                                 or ep_norm_host == norm_dlp_user
                                 or ep_norm_host.startswith(norm_dlp_user)
                                 or norm_dlp_user.startswith(ep_norm_host)):
-                            endpoint = ep
-                            logger.info(
-                                "Symantec: matched %r → %r via username %r",
-                                hostname, ep.hostname, norm_dlp_user,
-                            )
-                            break
+                            candidates.append(ep)
+                    if len(candidates) == 1:
+                        endpoint = candidates[0]
+                        logger.info(
+                            "Symantec: matched %r → %r via unique username %r",
+                            hostname, endpoint.hostname, norm_dlp_user,
+                        )
+                    elif len(candidates) > 1:
+                        logger.info(
+                            "Symantec: skipped ambiguous username match for %r; "
+                            "%d endpoints use %r",
+                            hostname, len(candidates), norm_dlp_user,
+                        )
 
             if not endpoint:
                 # Create new endpoint sourced from Symantec
@@ -309,6 +319,12 @@ class SymantecCollector(BaseCollector):
                         endpoint.username = username
                 else:
                     # DLP-owned: DLP is the live source — always refresh
+                    if endpoint.lifecycle_state == "stale":
+                        endpoint.is_active = True
+                        endpoint.lifecycle_state = "active"
+                        endpoint.lifecycle_reason = None
+                        endpoint.lifecycle_changed_at = None
+                        endpoint.lifecycle_changed_by = None
                     if username:
                         endpoint.username = username
                     if last_seen:
@@ -344,9 +360,38 @@ class SymantecCollector(BaseCollector):
                 agent.agent_state = agent_state
                 agent.agent_group = agent_group
 
+            touched_endpoint_ids.add(endpoint.id)
             count += 1
 
         await self.db.flush()
+
+        # A successful full DLP query is authoritative. Remove product rows
+        # that were not returned so endpoint coverage cannot retain deleted
+        # agents indefinitely.
+        existing_dlp = (
+            await self.db.execute(
+                select(SecurityAgent).where(SecurityAgent.product_name == "symantec")
+            )
+        ).scalars().all()
+        pruned = 0
+        pruned_endpoint_ids: set[_uuid.UUID] = set()
+        for agent in existing_dlp:
+            if agent.endpoint_id not in touched_endpoint_ids:
+                pruned_endpoint_ids.add(agent.endpoint_id)
+                await self.db.delete(agent)
+                pruned += 1
+        if pruned:
+            logger.info("Symantec: removed %d stale DLP agent records", pruned)
+            await self.db.flush()
+
+        from app.services.endpoint_inventory import retire_orphaned_source_endpoints
+
+        retired = await retire_orphaned_source_endpoints(
+            self.db, "symantec", pruned_endpoint_ids,
+        )
+        if retired:
+            logger.info("Symantec: retired %d orphaned source endpoints", retired)
+
         return count
 
     # Legacy support

@@ -326,6 +326,15 @@ async def deduplicate_endpoints(db: AsyncSession) -> int:
             )
             for ep in endpoints
         ]
+        hostname_source_counts: dict[tuple[str, str | None], int] = {}
+        username_source_counts: dict[tuple[str, str | None], int] = {}
+        for ep, norm_host, norm_user, _ in ep_info:
+            if norm_host:
+                key = (norm_host, ep.source)
+                hostname_source_counts[key] = hostname_source_counts.get(key, 0) + 1
+            if norm_user:
+                key = (norm_user, ep.source)
+                username_source_counts[key] = username_source_counts.get(key, 0) + 1
 
         for i, (ep_a, norm_host_a, norm_user_a, norm_serial_a) in enumerate(ep_info):
             if str(ep_a.id) in visited:
@@ -352,8 +361,19 @@ async def deduplicate_endpoints(db: AsyncSession) -> int:
                     match = True
                     match_reason = f"serial={norm_serial_a}"
 
+                # A source returning two records is authoritative evidence of
+                # two inventory objects. Never collapse them using lossy name
+                # or username heuristics. Matching serials above remain safe.
+                elif ep_a.source == ep_b.source:
+                    continue
+
                 # ── Strategy 1: identical normalised hostnames ──
-                elif norm_host_a and norm_host_a == norm_host_b:
+                elif (
+                    norm_host_a
+                    and norm_host_a == norm_host_b
+                    and hostname_source_counts.get((norm_host_a, ep_a.source), 0) == 1
+                    and hostname_source_counts.get((norm_host_b, ep_b.source), 0) == 1
+                ):
                     match = True
                     match_reason = f"hostname={norm_host_a}"
 
@@ -369,16 +389,30 @@ async def deduplicate_endpoints(db: AsyncSession) -> int:
                         norm_host_a == norm_host_b + "s"
                         or norm_host_b == norm_host_a + "s"
                     )
+                    and hostname_source_counts.get((norm_host_a, ep_a.source), 0) == 1
+                    and hostname_source_counts.get((norm_host_b, ep_b.source), 0) == 1
                 ):
                     match = True
                     shorter = norm_host_b if norm_host_a.endswith("s") else norm_host_a
                     match_reason = f"hostname_possessive_s={shorter}"
 
                 # ── Strategy 2: cross-match hostname ↔ username ──
-                elif norm_host_a and norm_user_b and norm_host_a == norm_user_b:
+                elif (
+                    norm_host_a
+                    and norm_user_b
+                    and norm_host_a == norm_user_b
+                    and hostname_source_counts.get((norm_host_a, ep_a.source), 0) == 1
+                    and username_source_counts.get((norm_user_b, ep_b.source), 0) == 1
+                ):
                     match = True
                     match_reason = f"host_a=user_b={norm_host_a}"
-                elif norm_host_b and norm_user_a and norm_host_b == norm_user_a:
+                elif (
+                    norm_host_b
+                    and norm_user_a
+                    and norm_host_b == norm_user_a
+                    and hostname_source_counts.get((norm_host_b, ep_b.source), 0) == 1
+                    and username_source_counts.get((norm_user_a, ep_a.source), 0) == 1
+                ):
                     match = True
                     match_reason = f"host_b=user_a={norm_host_b}"
 
@@ -388,6 +422,8 @@ async def deduplicate_endpoints(db: AsyncSession) -> int:
                     and norm_user_a == norm_user_b
                     and norm_user_a not in ("admin", "user", "guest", "root")
                     and len(norm_user_a) >= 4
+                    and username_source_counts.get((norm_user_a, ep_a.source), 0) == 1
+                    and username_source_counts.get((norm_user_b, ep_b.source), 0) == 1
                     and (norm_host_a.startswith(norm_user_a)
                          or norm_host_b.startswith(norm_user_a))
                 ):
@@ -411,6 +447,8 @@ async def deduplicate_endpoints(db: AsyncSession) -> int:
                     and (
                         (ep_a.source == "jumpcloud") != (ep_b.source == "jumpcloud")
                     )
+                    and username_source_counts.get((norm_user_a, ep_a.source), 0) == 1
+                    and username_source_counts.get((norm_user_b, ep_b.source), 0) == 1
                 ):
                     match = True
                     match_reason = f"username_xsource={norm_user_a}"

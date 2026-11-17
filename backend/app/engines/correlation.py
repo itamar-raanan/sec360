@@ -347,6 +347,14 @@ async def deduplicate_endpoints(db: AsyncSession) -> int:
                 match = False
                 match_reason = ""
 
+                # Two endpoints carrying separate authoritative records for
+                # the same product are distinct inventory objects. Merging
+                # them would delete one source agent and under-count coverage.
+                products_a = {agent.product_name for agent in ep_a.agents}
+                products_b = {agent.product_name for agent in ep_b.agents}
+                if products_a & products_b:
+                    continue
+
                 # ── Hard exclusion: two endpoints with DIFFERENT valid serials ──
                 # Serial numbers are hardware identifiers — if both endpoints have
                 # distinct serials they are provably different physical machines.

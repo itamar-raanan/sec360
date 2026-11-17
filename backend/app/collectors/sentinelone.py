@@ -404,6 +404,7 @@ class SentinelOneCollector(BaseCollector):
         from app.models.endpoint import Endpoint
         from app.models.agent import SecurityAgent
         from app.engines.correlation import find_endpoint, normalize_serial
+        from app.services.endpoint_inventory import restore_endpoint_from_inventory
 
         count = 0
         agent_id_map: dict[str, str] = {}  # s1_agent_id → endpoint_id (str)
@@ -536,6 +537,7 @@ class SentinelOneCollector(BaseCollector):
                 self.db.add(endpoint)
                 await self.db.flush()
             else:
+                restore_endpoint_from_inventory(endpoint, "sentinelone")
                 # Always update S1-authoritative fields (every sync)
                 if all_ips_str:
                     endpoint.all_ips = all_ips_str
@@ -559,12 +561,6 @@ class SentinelOneCollector(BaseCollector):
                         endpoint.ip_address = ip
                 else:
                     # S1-owned endpoints: S1 is the live source — always refresh
-                    if endpoint.lifecycle_state == "stale":
-                        endpoint.is_active = True
-                        endpoint.lifecycle_state = "active"
-                        endpoint.lifecycle_reason = None
-                        endpoint.lifecycle_changed_at = None
-                        endpoint.lifecycle_changed_by = None
                     if serial and not endpoint.serial_number:
                         endpoint.serial_number = serial
                     if os_version:

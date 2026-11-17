@@ -68,6 +68,32 @@ async def test_sentinelone_source_ids_preserve_normalized_hostname_collisions(db
     assert len({agent.endpoint_id for agent in agents}) == 2
 
 
+async def test_sentinelone_restores_stale_canonical_endpoint(db_session):
+    endpoint = Endpoint(
+        hostname="still-in-s1",
+        source="jumpcloud",
+        is_active=False,
+        lifecycle_state="stale",
+        lifecycle_reason="Removed from jumpcloud inventory",
+    )
+    db_session.add(endpoint)
+    await db_session.flush()
+
+    collector = SentinelOneCollector(credentials={"api_key": "test"}, db=db_session)
+    try:
+        await collector._upsert_agents([{
+            "id": "s1-still-present",
+            "computerName": "still-in-s1",
+            "isActive": False,
+        }])
+    finally:
+        await collector.client.aclose()
+
+    assert endpoint.is_active is True
+    assert endpoint.lifecycle_state == "active"
+    assert endpoint.lifecycle_reason is None
+
+
 async def test_wss_sync_removes_only_authoritatively_stale_rows(db_session, monkeypatch):
     installed = Endpoint(hostname="wss-installed", source="jumpcloud")
     removed_app = Endpoint(hostname="wss-removed-app", source="jumpcloud")
@@ -195,3 +221,34 @@ async def test_dlp_agent_ids_preserve_normalized_hostname_collisions(db_session)
     await deduplicate_endpoints(db_session)
     endpoints = list((await db_session.execute(select(Endpoint))).scalars())
     assert {endpoint.hostname for endpoint in endpoints} == {"alice-laptop", "alice-desktop"}
+
+
+async def test_dlp_restores_stale_canonical_endpoint_but_not_analyst_state(db_session):
+    stale = Endpoint(
+        hostname="still-in-dlp",
+        source="jumpcloud",
+        is_active=False,
+        lifecycle_state="stale",
+    )
+    decommissioned = Endpoint(
+        hostname="retired-by-analyst",
+        source="jumpcloud",
+        is_active=False,
+        lifecycle_state="decommissioned",
+    )
+    db_session.add_all([stale, decommissioned])
+    await db_session.flush()
+
+    collector = SymantecCollector(
+        credentials={"db_host": "test", "db_type": "oracle"},
+        db=db_session,
+    )
+    await collector._upsert_agents([
+        {"agentid": "dlp-current", "agentname": "still-in-dlp"},
+        {"agentid": "dlp-retired", "agentname": "retired-by-analyst"},
+    ])
+
+    assert stale.is_active is True
+    assert stale.lifecycle_state == "active"
+    assert decommissioned.is_active is False
+    assert decommissioned.lifecycle_state == "decommissioned"

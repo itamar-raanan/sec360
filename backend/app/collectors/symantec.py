@@ -222,6 +222,7 @@ class SymantecCollector(BaseCollector):
             normalize_username,
             normalize_hostname,
         )
+        from app.services.endpoint_inventory import restore_endpoint_from_inventory
 
         count = 0
         touched_agent_ids: set[_uuid.UUID] = set()
@@ -344,18 +345,13 @@ class SymantecCollector(BaseCollector):
                 self.db.add(endpoint)
                 await self.db.flush()
             else:
+                restore_endpoint_from_inventory(endpoint, "symantec_dlp")
                 if endpoint.source == "jumpcloud":
                     # JC-owned: only fill in missing fields
                     if username and not endpoint.username:
                         endpoint.username = username
                 else:
                     # DLP-owned: DLP is the live source — always refresh
-                    if endpoint.lifecycle_state == "stale":
-                        endpoint.is_active = True
-                        endpoint.lifecycle_state = "active"
-                        endpoint.lifecycle_reason = None
-                        endpoint.lifecycle_changed_at = None
-                        endpoint.lifecycle_changed_by = None
                     if username:
                         endpoint.username = username
                     if last_seen:

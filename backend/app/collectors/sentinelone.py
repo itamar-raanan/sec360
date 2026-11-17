@@ -128,8 +128,9 @@ class SentinelOneCollector(BaseCollector):
             await validate_outbound_url(self.base_url)
             agents = await self._fetch_agents()
             count, agent_id_map = await self._upsert_agents(agents)
-            if agent_id_map:
-                await self._collect_app_agents(agent_id_map)
+            # An empty completed inventory must also reconcile every stale WSS
+            # observation, so this always runs.
+            await self._collect_app_agents(agent_id_map)
             if self.application_vulnerabilities_enabled:
                 risks = await self._fetch_application_vulnerabilities()
                 vulnerability_count = await self._upsert_application_vulnerabilities(risks, agent_id_map)
@@ -500,6 +501,12 @@ class SentinelOneCollector(BaseCollector):
                         endpoint.ip_address = ip
                 else:
                     # S1-owned endpoints: S1 is the live source — always refresh
+                    if endpoint.lifecycle_state == "stale":
+                        endpoint.is_active = True
+                        endpoint.lifecycle_state = "active"
+                        endpoint.lifecycle_reason = None
+                        endpoint.lifecycle_changed_at = None
+                        endpoint.lifecycle_changed_by = None
                     if serial and not endpoint.serial_number:
                         endpoint.serial_number = serial
                     if os_version:
@@ -558,24 +565,35 @@ class SentinelOneCollector(BaseCollector):
 
         await self.db.flush()
 
-        # Prune: mark SentinelOne agent rows on endpoints not seen in this sync
-        # as inactive — those devices were removed from the S1 console.
+        # Reconcile the authoritative S1 inventory. A row not returned by a
+        # successful full sync no longer represents an installed S1 product.
+        # Keeping it as merely "inactive" made product coverage grow forever,
+        # because presence checks intentionally include disconnected agents.
         all_s1_agents = (
             await self.db.execute(
                 select(SecurityAgent).where(
                     SecurityAgent.product_name == "sentinelone",
-                    SecurityAgent.status == "active",
                 )
             )
         ).scalars().all()
         pruned = 0
+        pruned_endpoint_ids: set[_uuid.UUID] = set()
         for agent in all_s1_agents:
             if agent.endpoint_id not in touched_endpoint_ids:
-                agent.status = "inactive"
+                pruned_endpoint_ids.add(agent.endpoint_id)
+                await self.db.delete(agent)
                 pruned += 1
         if pruned:
-            logger.info("SentinelOne: marked %d removed agents as inactive", pruned)
+            logger.info("SentinelOne: removed %d stale agent records", pruned)
             await self.db.flush()
+
+        from app.services.endpoint_inventory import retire_orphaned_source_endpoints
+
+        retired = await retire_orphaned_source_endpoints(
+            self.db, "sentinelone", pruned_endpoint_ids,
+        )
+        if retired:
+            logger.info("SentinelOne: retired %d orphaned source endpoints", retired)
 
         return count, agent_id_map
 
@@ -586,8 +604,12 @@ class SentinelOneCollector(BaseCollector):
     # Must query one agent at a time; run up to CONCURRENCY requests in parallel.
     _APP_CONCURRENCY = 10
 
-    async def _fetch_apps_for_agent(self, client: httpx.AsyncClient, s1_agent_id: str) -> list[dict]:
-        """Return Symantec WSS app records for a single S1 agent."""
+    async def _fetch_apps_for_agent(
+        self,
+        client: httpx.AsyncClient,
+        s1_agent_id: str,
+    ) -> list[dict] | None:
+        """Return WSS apps, or None when this agent could not be inspected."""
         try:
             resp = await client.get(
                 f"{self.base_url}/web/api/v2.1/agents/applications",
@@ -604,7 +626,7 @@ class SentinelOneCollector(BaseCollector):
             return matched
         except Exception as e:
             logger.debug("S1: apps fetch failed for agent %s: %s", s1_agent_id, e)
-            return []
+            return None
 
     async def _collect_app_agents(self, id_to_endpoint: dict[str, str]) -> None:
         """Fetch WSS apps for all S1 agents concurrently and upsert SecurityAgent rows."""
@@ -628,26 +650,31 @@ class SentinelOneCollector(BaseCollector):
 
         # Build {(endpoint_id, product): version} — first version found wins
         found: dict[tuple[str, str], str | None] = {}
+        successfully_scanned_endpoint_ids: set[str] = set()
         for res in results:
             if isinstance(res, Exception):
                 continue
             ep_id, matches = res
+            if matches is None:
+                continue
+            successfully_scanned_endpoint_ids.add(ep_id)
             for m in matches:
                 key = (ep_id, m["product"])
                 if key not in found:
                     found[key] = m["version"]
 
         for (endpoint_id, product_name), version in found.items():
+            endpoint_uuid = uuid.UUID(endpoint_id)
             result = await self.db.execute(
                 select(SecurityAgent).where(
-                    SecurityAgent.endpoint_id == endpoint_id,
+                    SecurityAgent.endpoint_id == endpoint_uuid,
                     SecurityAgent.product_name == product_name,
                 )
             )
             agent = result.scalars().first()
             if not agent:
                 agent = SecurityAgent(
-                    endpoint_id=endpoint_id,
+                    endpoint_id=endpoint_uuid,
                     product_name=product_name,
                     status="active",
                     version=version,
@@ -660,8 +687,41 @@ class SentinelOneCollector(BaseCollector):
                 agent.status = "active"
                 agent.last_seen = now
 
+        # Remove WSS evidence only when it is authoritatively stale: either its
+        # endpoint disappeared from the completed S1 inventory, or that endpoint
+        # was successfully inspected and WSS was no longer installed. A failed
+        # per-agent applications request preserves the previous observation.
+        current_endpoint_ids = set(id_to_endpoint.values())
+        existing_wss = (
+            await self.db.execute(
+                select(SecurityAgent).where(
+                    SecurityAgent.product_name == "symantec_wss",
+                )
+            )
+        ).scalars().all()
+        removed = 0
+        removed_endpoint_ids: set[uuid.UUID] = set()
+        for agent in existing_wss:
+            endpoint_id = str(agent.endpoint_id)
+            is_current = endpoint_id in current_endpoint_ids
+            was_scanned = endpoint_id in successfully_scanned_endpoint_ids
+            remains_installed = (endpoint_id, "symantec_wss") in found
+            if not is_current or (was_scanned and not remains_installed):
+                removed_endpoint_ids.add(agent.endpoint_id)
+                await self.db.delete(agent)
+                removed += 1
+
         await self.db.flush()
-        logger.info("S1: upserted %d WSS app agent records", len(found))
+        from app.services.endpoint_inventory import retire_orphaned_source_endpoints
+
+        retired = await retire_orphaned_source_endpoints(
+            self.db, "sentinelone", removed_endpoint_ids,
+        )
+        logger.info(
+            "S1: upserted %d WSS app agent records; removed %d stale records; "
+            "retired %d orphaned source endpoints",
+            len(found), removed, retired,
+        )
 
     # Legacy support for old scheduler pattern
     async def fetch_data(self) -> list[dict[str, Any]]:

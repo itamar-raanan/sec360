@@ -82,6 +82,10 @@ class EndpointResponse(EndpointBase):
     lifecycle_changed_at: Optional[datetime] = None
     lifecycle_changed_by: Optional[str] = None
     owner_user_id: Optional[uuid.UUID] = None
+    owner_assignment_source: Optional[str] = None
+    owner_assignment_confidence: Optional[float] = None
+    owner_assignment_evidence: Optional[str] = None
+    owner_assigned_at: Optional[datetime] = None
     owner: Optional[OwnerSummary] = None
     agents: list[AgentSummary] = []
     compliance_status: Optional[ComplianceSummary] = None

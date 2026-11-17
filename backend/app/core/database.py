@@ -52,6 +52,11 @@ async def init_db():
             "ALTER TABLE auth_users         ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS source           VARCHAR(50)  DEFAULT 'jumpcloud'",
             "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS serial_number    VARCHAR(100)",
+            "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS owner_assignment_source VARCHAR(50)",
+            "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS owner_assignment_confidence FLOAT",
+            "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS owner_assignment_evidence VARCHAR(500)",
+            "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS owner_assigned_at TIMESTAMPTZ",
+            "UPDATE endpoints SET owner_assignment_source = 'legacy_unverified', owner_assignment_confidence = 0.0, owner_assignment_evidence = 'Assignment predates correlation provenance tracking' WHERE owner_user_id IS NOT NULL AND owner_assignment_source IS NULL",
             # Authoritative product identity prevents separate S1/DLP records
             # from overwriting one another after endpoint correlation.
             "ALTER TABLE security_agents    ADD COLUMN IF NOT EXISTS source_id        VARCHAR(255)",

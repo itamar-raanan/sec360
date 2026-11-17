@@ -34,6 +34,10 @@ class Endpoint(Base):
     owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    owner_assignment_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    owner_assignment_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    owner_assignment_evidence: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    owner_assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

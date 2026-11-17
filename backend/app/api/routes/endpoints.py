@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, Query, Response, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -273,7 +274,17 @@ async def bulk_update(
     stmt = (
         sql_update(Endpoint)
         .where(Endpoint.id.in_(ids_as_uuid))
-        .values(owner_user_id=owner_uuid)
+        .values(
+            owner_user_id=owner_uuid,
+            owner_assignment_source="manual",
+            owner_assignment_confidence=1.0,
+            owner_assignment_evidence=(
+                f"Assigned by {current.email}"
+                if owner_uuid is not None
+                else f"Unassigned by {current.email}"
+            ),
+            owner_assigned_at=datetime.now(timezone.utc),
+        )
         .execution_options(synchronize_session="fetch")
     )
     await db.execute(stmt)

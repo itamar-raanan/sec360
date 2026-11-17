@@ -20,6 +20,7 @@ Design principles
 
 import logging
 import re
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
@@ -470,9 +471,27 @@ async def deduplicate_endpoints(db: AsyncSession) -> int:
                     keep, drop = ep_b, ep_a
 
                 # Inherit missing scalar fields onto keep
-                for attr in ("username", "ip_address", "os_version",
-                             "owner_user_id", "serial_number"):
+                for attr in ("username", "ip_address", "os_version", "serial_number"):
                     if not getattr(keep, attr) and getattr(drop, attr):
+                        setattr(keep, attr, getattr(drop, attr))
+
+                # Manual ownership is an analyst decision and wins when two
+                # endpoint records are merged. Otherwise inherit ownership only
+                # when the canonical record has none.
+                should_inherit_owner = (
+                    drop.owner_assignment_source == "manual"
+                    and keep.owner_assignment_source != "manual"
+                ) or (
+                    keep.owner_user_id is None
+                    and keep.owner_assignment_source != "manual"
+                    and drop.owner_user_id is not None
+                )
+                if should_inherit_owner:
+                    for attr in (
+                        "owner_user_id", "owner_assignment_source",
+                        "owner_assignment_confidence", "owner_assignment_evidence",
+                        "owner_assigned_at",
+                    ):
                         setattr(keep, attr, getattr(drop, attr))
 
                 # last_seen: take the most recent (JC owns its own last_seen)
@@ -542,11 +561,12 @@ async def deduplicate_endpoints(db: AsyncSession) -> int:
 
 async def match_user_to_endpoint(db: AsyncSession) -> int:
     """
-    Link every endpoint to its JumpCloud owner by comparing:
-    1. endpoint.username    (set by SentinelOne / Symantec collectors)
-    2. Normalised hostname  (many Mac names embed the username)
+    Link endpoints to users using only exact, unique identity evidence.
 
-    against the JumpCloud user email prefix.
+    Endpoint usernames are authoritative enough for an exact email-local-part
+    match. Hostname, partial-prefix, and first-name fallbacks are deliberately
+    forbidden because they caused plausible-looking but incorrect ownership
+    assignments. Manual analyst assignments are never overwritten.
     """
     from app.models.user import User
     from app.models.endpoint import Endpoint
@@ -557,17 +577,18 @@ async def match_user_to_endpoint(db: AsyncSession) -> int:
     if not users:
         return 0
 
-    # Build look-up structures
-    by_prefix: dict[str, User] = {}          # email-prefix   → User
-    by_firstname: dict[str, list[User]] = {} # first-name     → [User]
-
+    # A local part can occur in multiple domains. Only one exact candidate is
+    # safe for automatic assignment.
+    prefix_candidates: dict[str, list[User]] = {}
     for u in users:
         pfx = email_prefix(u.email)
         if pfx:
-            by_prefix[pfx] = u
-        first = (u.full_name or "").split()[0].lower() if u.full_name else ""
-        if first and len(first) >= 3:
-            by_firstname.setdefault(first, []).append(u)
+            prefix_candidates.setdefault(pfx, []).append(u)
+    by_unique_prefix = {
+        prefix: candidates[0]
+        for prefix, candidates in prefix_candidates.items()
+        if len(candidates) == 1
+    }
 
     endpoints_result = await db.execute(
         select(Endpoint).where(
@@ -578,55 +599,41 @@ async def match_user_to_endpoint(db: AsyncSession) -> int:
 
     matched = 0
     for ep in endpoints:
-        # Collect candidate tokens: username field + hostname-derived token
-        tokens: list[str] = []
+        if ep.owner_assignment_source == "manual":
+            continue
 
-        if ep.username:
-            tokens.append(normalize_username(ep.username))
+        if not ep.username:
+            continue
+        token = normalize_username(ep.username)
+        source = "endpoint_username"
+        confidence = 1.0
 
-        nh = normalize_hostname(ep.hostname)
-        if nh and nh not in tokens:
-            tokens.append(nh)
+        if not token or token in {
+            "admin", "user", "guest", "root", "administrator", "system",
+            "service", "local", "desktop", "laptop", "server",
+        }:
+            continue
 
-        user = None
-        for token in tokens:
-            if not token or token in ("admin", "user", "guest", "root", "administrator"):
-                continue
+        user = by_unique_prefix.get(token)
+        if user is None:
+            continue
 
-            # 1. Exact email-prefix match
-            user = by_prefix.get(token)
-            if user:
-                break
-
-            # 2. email prefix starts with token (token is shorter: "ben" → "benh")
-            if not user and len(token) >= 4:
-                for pfx, u in by_prefix.items():
-                    if pfx.startswith(token):
-                        user = u
-                        break
-            if user:
-                break
-
-            # 3. token starts with email prefix (token has extra chars: "eilamts" → "eilamt")
-            if not user and len(token) >= 4:
-                for pfx, u in by_prefix.items():
-                    if len(pfx) >= 4 and token.startswith(pfx):
-                        user = u
-                        break
-            if user:
-                break
-
-            # 4. First-name fallback (only when exactly one JC user has that first name)
-            if not user:
-                candidates = by_firstname.get(token, [])
-                if len(candidates) == 1:
-                    user = candidates[0]
-            if user:
-                break
-
-        if user and ep.owner_user_id != user.id:
+        changed = ep.owner_user_id != user.id
+        provenance_changed = (
+            ep.owner_assignment_source != source
+            or ep.owner_assignment_evidence is None
+        )
+        if changed or provenance_changed:
             ep.owner_user_id = user.id
-            matched += 1
+            ep.owner_assignment_source = source
+            ep.owner_assignment_confidence = confidence
+            ep.owner_assignment_evidence = (
+                f"Exact {source.replace('_', ' ')} {token!r} matched unique "
+                f"email prefix for {user.email}"
+            )
+            ep.owner_assigned_at = datetime.now(timezone.utc)
+            if changed:
+                matched += 1
 
     await db.flush()
     logger.info("Correlation: linked %d endpoints to users", matched)

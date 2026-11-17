@@ -9,6 +9,12 @@ class SecurityAgent(Base):
     __tablename__ = "security_agents"
     __table_args__ = (
         Index("ix_security_agents_endpoint_product", "endpoint_id", "product_name"),
+        Index(
+            "uq_security_agents_product_source_id",
+            "product_name",
+            "source_id",
+            unique=True,
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -18,6 +24,9 @@ class SecurityAgent(Base):
     product_name: Mapped[str] = mapped_column(
         SAEnum("sentinelone", "symantec", "prisma", "symantec_wss", "other", name="agent_product_enum")
     )
+    # Stable identity from the authoritative product. Without this, two
+    # product records correlated to one SEC360 endpoint overwrite each other.
+    source_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(
         SAEnum("active", "inactive", "unknown", name="agent_status_enum"), default="unknown"
     )

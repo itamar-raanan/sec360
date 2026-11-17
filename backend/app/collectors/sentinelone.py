@@ -407,9 +407,16 @@ class SentinelOneCollector(BaseCollector):
 
         count = 0
         agent_id_map: dict[str, str] = {}  # s1_agent_id → endpoint_id (str)
-        touched_endpoint_ids: set[_uuid.UUID] = set()
+        touched_agent_ids: set[_uuid.UUID] = set()
+        claimed_endpoint_ids: set[_uuid.UUID] = set()
+        seen_source_ids: set[str] = set()
         for item in agents:
             s1_agent_id: str | None = item.get("id")
+            if s1_agent_id:
+                s1_agent_id = str(s1_agent_id)
+                if s1_agent_id in seen_source_ids:
+                    continue
+                seen_source_ids.add(s1_agent_id)
             hostname_raw = item.get("computerName", "")
             # Strip apostrophes and placeholder values at storage time
             hostname = hostname_raw.replace("'", "").replace("\u2019", "").strip()
@@ -418,8 +425,12 @@ class SentinelOneCollector(BaseCollector):
             serial_raw = item.get("serialNumber")
             serial = normalize_serial(serial_raw)
 
+            # SentinelOne's immutable ID is sufficient to retain the record
+            # even when a malformed/partial agent lacks hostname and serial.
             if not hostname and not serial:
-                continue
+                if not s1_agent_id:
+                    continue
+                hostname = f"s1-{s1_agent_id}"
 
             last_seen = None
             if item.get("lastActiveDate"):
@@ -428,9 +439,30 @@ class SentinelOneCollector(BaseCollector):
                 except Exception:
                     pass
 
-            # Serial-first lookup: finds the JumpCloud endpoint even when the
-            # hostname reported by S1 differs (renamed machine, encoding differences, etc.)
-            endpoint, match_method = await find_endpoint(self.db, serial, hostname)
+            # Stable S1 identity wins over mutable serial/hostname correlation.
+            agent = None
+            endpoint = None
+            match_method = "source_id"
+            if s1_agent_id:
+                agent = (await self.db.execute(
+                    select(SecurityAgent).where(
+                        SecurityAgent.product_name == "sentinelone",
+                        SecurityAgent.source_id == str(s1_agent_id),
+                    )
+                )).scalar_one_or_none()
+                if agent:
+                    endpoint = (await self.db.execute(
+                        select(Endpoint).where(Endpoint.id == agent.endpoint_id)
+                    )).scalar_one_or_none()
+
+            # Serial-first lookup finds the JumpCloud endpoint even when the
+            # hostname differs. Never let a second S1 source record claim the
+            # same correlated endpoint in one authoritative snapshot.
+            if not endpoint:
+                endpoint, match_method = await find_endpoint(self.db, serial, hostname)
+                if endpoint and endpoint.id in claimed_endpoint_ids:
+                    endpoint = None
+                    match_method = None
 
             if match_method == "serial":
                 logger.debug("S1: matched %r to endpoint %r via serial %s",
@@ -545,13 +577,16 @@ class SentinelOneCollector(BaseCollector):
                         endpoint.last_seen = last_seen   # keep alive
 
             # Upsert agent
-            agent_result = await self.db.execute(
-                select(SecurityAgent).where(
-                    SecurityAgent.endpoint_id == endpoint.id,
-                    SecurityAgent.product_name == "sentinelone",
-                )
-            )
-            agent = agent_result.scalars().first()
+            if not agent:
+                # Adopt one legacy row after migration, then bind it permanently
+                # to this SentinelOne source record.
+                agent = (await self.db.execute(
+                    select(SecurityAgent).where(
+                        SecurityAgent.endpoint_id == endpoint.id,
+                        SecurityAgent.product_name == "sentinelone",
+                        SecurityAgent.source_id.is_(None),
+                    )
+                )).scalars().first()
 
             agent_status = "active" if item.get("isActive") else "inactive"
             agent_version = item.get("agentVersion")
@@ -560,6 +595,7 @@ class SentinelOneCollector(BaseCollector):
                 agent = SecurityAgent(
                     endpoint_id=endpoint.id,
                     product_name="sentinelone",
+                    source_id=str(s1_agent_id) if s1_agent_id else None,
                     status=agent_status,
                     version=agent_version,
                     last_seen=last_seen,
@@ -570,6 +606,9 @@ class SentinelOneCollector(BaseCollector):
                 )
                 self.db.add(agent)
             else:
+                agent.endpoint_id = endpoint.id
+                if s1_agent_id:
+                    agent.source_id = str(s1_agent_id)
                 agent.status = agent_status
                 if agent_version:
                     agent.version = agent_version
@@ -584,8 +623,9 @@ class SentinelOneCollector(BaseCollector):
 
             if s1_agent_id and endpoint and endpoint.id:
                 agent_id_map[s1_agent_id] = str(endpoint.id)
-            if endpoint and endpoint.id:
-                touched_endpoint_ids.add(endpoint.id)
+            await self.db.flush()
+            touched_agent_ids.add(agent.id)
+            claimed_endpoint_ids.add(endpoint.id)
 
             count += 1
 
@@ -605,7 +645,7 @@ class SentinelOneCollector(BaseCollector):
         pruned = 0
         pruned_endpoint_ids: set[_uuid.UUID] = set()
         for agent in all_s1_agents:
-            if agent.endpoint_id not in touched_endpoint_ids:
+            if agent.id not in touched_agent_ids:
                 pruned_endpoint_ids.add(agent.endpoint_id)
                 await self.db.delete(agent)
                 pruned += 1

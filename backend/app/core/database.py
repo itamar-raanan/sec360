@@ -52,6 +52,10 @@ async def init_db():
             "ALTER TABLE auth_users         ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE",
             "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS source           VARCHAR(50)  DEFAULT 'jumpcloud'",
             "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS serial_number    VARCHAR(100)",
+            # Authoritative product identity prevents separate S1/DLP records
+            # from overwriting one another after endpoint correlation.
+            "ALTER TABLE security_agents    ADD COLUMN IF NOT EXISTS source_id        VARCHAR(255)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_security_agents_product_source_id ON security_agents (product_name, source_id)",
             # Endpoint lifecycle / data-quality review
             "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS lifecycle_state      VARCHAR(32) NOT NULL DEFAULT 'active'",
             "ALTER TABLE endpoints          ADD COLUMN IF NOT EXISTS lifecycle_reason     TEXT",

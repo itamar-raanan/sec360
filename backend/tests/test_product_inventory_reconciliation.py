@@ -46,6 +46,28 @@ async def test_sentinelone_sync_removes_agents_missing_from_source(db_session):
     assert removed.lifecycle_state == "stale"
 
 
+async def test_sentinelone_source_ids_preserve_normalized_hostname_collisions(db_session):
+    records = [
+        {"id": "s1-alice-laptop", "computerName": "alice-laptop", "isActive": True},
+        {"id": "s1-alice-desktop", "computerName": "alice-desktop", "isActive": True},
+    ]
+    collector = SentinelOneCollector(credentials={"api_key": "test"}, db=db_session)
+    try:
+        first_count, _ = await collector._upsert_agents(records)
+        second_count, _ = await collector._upsert_agents(records)
+    finally:
+        await collector.client.aclose()
+
+    agents = list((await db_session.execute(
+        select(SecurityAgent).where(SecurityAgent.product_name == "sentinelone")
+    )).scalars())
+    assert first_count == second_count == 2
+    assert {agent.source_id for agent in agents} == {
+        "s1-alice-laptop", "s1-alice-desktop",
+    }
+    assert len({agent.endpoint_id for agent in agents}) == 2
+
+
 async def test_wss_sync_removes_only_authoritatively_stale_rows(db_session, monkeypatch):
     installed = Endpoint(hostname="wss-installed", source="jumpcloud")
     removed_app = Endpoint(hostname="wss-removed-app", source="jumpcloud")
@@ -134,3 +156,42 @@ async def test_dlp_sync_does_not_collapse_multiple_devices_for_one_user(db_sessi
     assert {endpoint.hostname for endpoint in endpoints} == {
         "alice-laptop", "alice-desktop", "alice-new-device", "old-dlp",
     }
+
+
+async def test_dlp_agent_ids_preserve_normalized_hostname_collisions(db_session):
+    now = datetime.now(timezone.utc)
+    records = [
+        {
+            "agentid": "dlp-alice-laptop",
+            "agentname": "alice-laptop",
+            "username": "DOMAIN\\alice",
+            "lastconnectiontime": now,
+        },
+        {
+            "agentid": "dlp-alice-desktop",
+            "agentname": "alice-desktop",
+            "username": "DOMAIN\\alice",
+            "lastconnectiontime": now,
+        },
+    ]
+    collector = SymantecCollector(
+        credentials={"db_host": "test", "db_type": "oracle"},
+        db=db_session,
+    )
+    first_count = await collector._upsert_agents(records)
+    second_count = await collector._upsert_agents(records)
+
+    agents = list((await db_session.execute(
+        select(SecurityAgent).where(SecurityAgent.product_name == "symantec")
+    )).scalars())
+    assert first_count == second_count == 2
+    assert {agent.source_id for agent in agents} == {
+        "dlp-alice-laptop", "dlp-alice-desktop",
+    }
+    assert len({agent.endpoint_id for agent in agents}) == 2
+
+    # Correlation must not merge two endpoints backed by distinct authoritative
+    # DLP identities, even though their normalized hostnames collide.
+    await deduplicate_endpoints(db_session)
+    endpoints = list((await db_session.execute(select(Endpoint))).scalars())
+    assert {endpoint.hostname for endpoint in endpoints} == {"alice-laptop", "alice-desktop"}

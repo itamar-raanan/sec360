@@ -136,6 +136,7 @@ class SymantecCollector(BaseCollector):
 
         query = """
             SELECT
+                A.AGENTID,
                 A.AGENTNAME,
                 A.VERSION,
                 A.LASTCONNECTIONTIME,
@@ -174,7 +175,7 @@ class SymantecCollector(BaseCollector):
             conn_str = f"postgresql://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
 
         query = (
-            "SELECT computer_name AS agentname, agent_version AS version, "
+            "SELECT computer_name AS agentid, computer_name AS agentname, agent_version AS version, "
             "last_contact AS lastconnectiontime, NULL AS username, "
             "NULL AS agentstatename, NULL AS agentgroupname "
             "FROM sem_agent"
@@ -223,11 +224,20 @@ class SymantecCollector(BaseCollector):
         )
 
         count = 0
-        touched_endpoint_ids: set[_uuid.UUID] = set()
+        touched_agent_ids: set[_uuid.UUID] = set()
+        claimed_endpoint_ids: set[_uuid.UUID] = set()
+        seen_source_ids: set[str] = set()
         for record in records:
             hostname_raw = record.get("agentname")
             if not hostname_raw:
                 continue
+
+            # Oracle AGENTID is the authoritative DLP identity. The hostname
+            # fallback keeps generic/legacy connectors stable.
+            source_id = str(record.get("agentid") or hostname_raw).strip()
+            if not source_id or source_id in seen_source_ids:
+                continue
+            seen_source_ids.add(source_id)
 
             version     = record.get("version")
             username    = record.get("username")
@@ -265,8 +275,28 @@ class SymantecCollector(BaseCollector):
             if not hostname:
                 continue
 
+            # Reuse the product's prior mapping first. Hostnames and usernames
+            # can change and are not authoritative identities.
+            agent = (await self.db.execute(
+                select(SecurityAgent).where(
+                    SecurityAgent.product_name == "symantec",
+                    SecurityAgent.source_id == source_id,
+                )
+            )).scalar_one_or_none()
+            endpoint = None
+            if agent:
+                endpoint = (await self.db.execute(
+                    select(Endpoint).where(Endpoint.id == agent.endpoint_id)
+                )).scalar_one_or_none()
+
             # ── Endpoint lookup: hostname first, then username fallback ──────
-            endpoint = await find_endpoint_by_hostname(self.db, hostname)
+            if not endpoint:
+                endpoint = await find_endpoint_by_hostname(self.db, hostname)
+                # One authoritative DLP record must map to one inventory
+                # endpoint. A lossy hostname match cannot claim the same target
+                # for another DLP AGENTID in this snapshot.
+                if endpoint and endpoint.id in claimed_endpoint_ids:
+                    endpoint = None
 
             # Username-based fallback: if no hostname match and we have a
             # real username, search JumpCloud endpoints whose username or
@@ -289,6 +319,7 @@ class SymantecCollector(BaseCollector):
                                 or ep_norm_host.startswith(norm_dlp_user)
                                 or norm_dlp_user.startswith(ep_norm_host)):
                             candidates.append(ep)
+                    candidates = [ep for ep in candidates if ep.id not in claimed_endpoint_ids]
                     if len(candidates) == 1:
                         endpoint = candidates[0]
                         logger.info(
@@ -331,18 +362,22 @@ class SymantecCollector(BaseCollector):
                         endpoint.last_seen = last_seen   # keep alive
 
             # ── Upsert Symantec DLP agent record ─────────────────────────────
-            agent_result = await self.db.execute(
-                select(SecurityAgent).where(
-                    SecurityAgent.endpoint_id == endpoint.id,
-                    SecurityAgent.product_name == "symantec",
-                )
-            )
-            agent = agent_result.scalars().first()
+            if not agent:
+                # Adopt one pre-migration row on the matched endpoint. Once it
+                # receives a source_id, subsequent source agents remain distinct.
+                agent = (await self.db.execute(
+                    select(SecurityAgent).where(
+                        SecurityAgent.endpoint_id == endpoint.id,
+                        SecurityAgent.product_name == "symantec",
+                        SecurityAgent.source_id.is_(None),
+                    )
+                )).scalars().first()
 
             if not agent:
                 agent = SecurityAgent(
                     endpoint_id=endpoint.id,
                     product_name="symantec",
+                    source_id=source_id,
                     status=agent_status,
                     version=str(version) if version else None,
                     last_seen=last_seen,
@@ -351,6 +386,8 @@ class SymantecCollector(BaseCollector):
                 )
                 self.db.add(agent)
             else:
+                agent.endpoint_id = endpoint.id
+                agent.source_id = source_id
                 agent.status = agent_status
                 if version:
                     agent.version = str(version)
@@ -360,7 +397,9 @@ class SymantecCollector(BaseCollector):
                 agent.agent_state = agent_state
                 agent.agent_group = agent_group
 
-            touched_endpoint_ids.add(endpoint.id)
+            await self.db.flush()
+            touched_agent_ids.add(agent.id)
+            claimed_endpoint_ids.add(endpoint.id)
             count += 1
 
         await self.db.flush()
@@ -376,7 +415,7 @@ class SymantecCollector(BaseCollector):
         pruned = 0
         pruned_endpoint_ids: set[_uuid.UUID] = set()
         for agent in existing_dlp:
-            if agent.endpoint_id not in touched_endpoint_ids:
+            if agent.id not in touched_agent_ids:
                 pruned_endpoint_ids.add(agent.endpoint_id)
                 await self.db.delete(agent)
                 pruned += 1

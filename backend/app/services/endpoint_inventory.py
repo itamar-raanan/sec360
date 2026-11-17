@@ -9,6 +9,27 @@ def current_endpoint_clause():
     return Endpoint.is_active.is_(True) & (Endpoint.lifecycle_state == "active")
 
 
+def restore_endpoint_from_inventory(endpoint, source: str) -> bool:
+    """Restore an automatically stale endpoint when a live source reports it.
+
+    A canonical JumpCloud endpoint can disappear from JumpCloud while still
+    being authoritatively present in SentinelOne or DLP. Product evidence must
+    therefore restore the shared endpoint to the current inventory. Explicit
+    analyst lifecycle choices remain untouched.
+    """
+    if endpoint.lifecycle_state in {"ignored", "decommissioned"}:
+        return False
+    if endpoint.is_active and endpoint.lifecycle_state == "active":
+        return False
+
+    endpoint.is_active = True
+    endpoint.lifecycle_state = "active"
+    endpoint.lifecycle_reason = None
+    endpoint.lifecycle_changed_at = None
+    endpoint.lifecycle_changed_by = None
+    return True
+
+
 async def retire_orphaned_source_endpoints(db, source: str, endpoint_ids: set) -> int:
     """Retire source-owned endpoints after their final inventory evidence is removed.
 

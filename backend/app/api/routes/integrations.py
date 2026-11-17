@@ -377,6 +377,9 @@ async def sync_integration(
         config.last_sync = now
         await db.flush()
         await audit_action("sync_integration", "integration", integration_type, request, db, current, {"success": False, "error": result["error"]})
+        # The frontend refreshes integration state as soon as this response is
+        # received. Commit first so that refetch cannot observe the old state.
+        await db.commit()
         return SyncResult(
             success=False,
             message=result["error"],
@@ -406,6 +409,9 @@ async def sync_integration(
 
             await capture_inventory_changes(db)
         await audit_action("sync_integration", "integration", integration_type, request, db, current, {"success": True, "records_synced": count})
+        # Make the completed inventory, correlation, compliance, and risk
+        # rebuild visible before clients invalidate and refetch their caches.
+        await db.commit()
         return SyncResult(
             success=True,
             message=f"Sync completed. {count} records synced.",

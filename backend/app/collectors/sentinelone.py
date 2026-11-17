@@ -122,15 +122,20 @@ class SentinelOneCollector(BaseCollector):
             return {"success": False, "message": f"Error: {str(e)}"}
 
     async def collect(self) -> dict:
-        if not self.api_token:
-            return {"records_synced": 0, "error": "No API token configured"}
+        """Collect the complete SentinelOne dataset.
+
+        The scheduled collector uses this path so application vulnerabilities
+        continue to refresh automatically. Interactive inventory refreshes can
+        call :meth:`collect_inventory` instead and avoid waiting for hundreds
+        of thousands of vulnerability findings.
+        """
+        inventory_result = await self.collect_inventory()
+        if inventory_result.get("error"):
+            return inventory_result
+
+        agent_id_map = inventory_result.pop("agent_id_map")
+        count = inventory_result["agents_synced"]
         try:
-            await validate_outbound_url(self.base_url)
-            agents = await self._fetch_agents()
-            count, agent_id_map = await self._upsert_agents(agents)
-            # An empty completed inventory must also reconcile every stale WSS
-            # observation, so this always runs.
-            await self._collect_app_agents(agent_id_map)
             if self.application_vulnerabilities_enabled:
                 risks = await self._fetch_application_vulnerabilities()
                 vulnerability_count = await self._upsert_application_vulnerabilities(risks, agent_id_map)
@@ -145,6 +150,27 @@ class SentinelOneCollector(BaseCollector):
             }
         except Exception as e:
             logger.error(f"SentinelOne: collect failed: {e}", exc_info=True)
+            return {"records_synced": 0, "error": str(e)}
+
+    async def collect_inventory(self) -> dict:
+        """Collect endpoint agents and WSS presence without the large risk feed."""
+        if not self.api_token:
+            return {"records_synced": 0, "error": "No API token configured"}
+        try:
+            await validate_outbound_url(self.base_url)
+            agents = await self._fetch_agents()
+            count, agent_id_map = await self._upsert_agents(agents)
+            # An empty completed inventory must also reconcile every stale WSS
+            # observation, so this always runs.
+            await self._collect_app_agents(agent_id_map)
+            return {
+                "records_synced": count,
+                "agents_synced": count,
+                # Kept private to the full collector; API responses remove it.
+                "agent_id_map": agent_id_map,
+            }
+        except Exception as e:
+            logger.error(f"SentinelOne: inventory collect failed: {e}", exc_info=True)
             return {"records_synced": 0, "error": str(e)}
 
     async def _fetch_agents(self) -> list:

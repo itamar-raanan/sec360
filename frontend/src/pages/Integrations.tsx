@@ -890,7 +890,7 @@ function IntegrationPanel({
   })
 
   const syncMutation = useMutation({
-    mutationFn: () => syncIntegration(config!.integration_type),
+    mutationFn: (scope: 'full' | 'inventory' = 'full') => syncIntegration(config!.integration_type, scope),
     onSuccess: async (data) => {
       setTestResult(data)
       // A product sync can change endpoint ownership, product presence,
@@ -1128,9 +1128,32 @@ function IntegrationPanel({
                           <button onClick={() => testMutation.mutate()} disabled={testMutation.isPending} className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] hover:border-[var(--accent)]/50 text-sm text-zinc-300 hover:text-white transition-colors disabled:opacity-50">
                             {testMutation.isPending ? <Loader2 size={14} className="animate-spin text-zinc-400" /> : <Settings2 size={14} className="text-zinc-400" />} Test Connection
                           </button>
-                          {catalog?.supportsSync !== false && <button onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending} className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--accent)]/10 border border-[var(--accent)]/30 hover:bg-[var(--accent)]/20 text-sm text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50">
-                            {syncMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} {syncMutation.isPending ? 'Syncing...' : 'Sync Now'}
-                          </button>}
+                          {catalog?.supportsSync !== false && (
+                            <>
+                              <button
+                                onClick={() => syncMutation.mutate(config.integration_type === 'sentinelone' ? 'inventory' : 'full')}
+                                disabled={syncMutation.isPending}
+                                className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--accent)]/10 border border-[var(--accent)]/30 hover:bg-[var(--accent)]/20 text-sm text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50"
+                              >
+                                {syncMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                                {syncMutation.isPending
+                                  ? 'Syncing...'
+                                  : config.integration_type === 'sentinelone'
+                                    ? 'Sync Endpoint Inventory'
+                                    : 'Sync Now'}
+                              </button>
+                              {config.integration_type === 'sentinelone' && config.available_features?.includes('application_vulnerabilities') && (
+                                <button
+                                  onClick={() => syncMutation.mutate('full')}
+                                  disabled={syncMutation.isPending}
+                                  className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] hover:border-violet-500/40 text-sm text-zinc-400 hover:text-violet-300 transition-colors disabled:opacity-50"
+                                  title="Also downloads the complete SentinelOne application-vulnerability dataset and may take several minutes"
+                                >
+                                  <ShieldCheck size={14} /> Full Sync Including Vulnerabilities
+                                </button>
+                              )}
+                            </>
+                          )}
                         </>
                       )}
 

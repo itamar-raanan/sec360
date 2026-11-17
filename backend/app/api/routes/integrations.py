@@ -2,9 +2,9 @@ import csv
 import io
 import logging
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, select
 
@@ -355,6 +355,7 @@ async def test_integration(
 async def sync_integration(
     integration_type: str,
     request: Request,
+    scope: Literal["full", "inventory"] = Query("full"),
     db: AsyncSession = Depends(get_db),
     current: AuthUser = Depends(require_role("admin")),
 ):
@@ -368,7 +369,12 @@ async def sync_integration(
     if not config.credentials:
         return SyncResult(success=False, message="No credentials configured")
 
-    result = await _run_collect(integration_type, config.credentials)
+    inventory_only = integration_type == "sentinelone" and scope == "inventory"
+    result = await _run_collect(
+        integration_type,
+        config.credentials,
+        inventory_only=inventory_only,
+    )
 
     now = datetime.now(timezone.utc)
     if result.get("error"):
@@ -414,7 +420,12 @@ async def sync_integration(
         await db.commit()
         return SyncResult(
             success=True,
-            message=f"Sync completed. {count} records synced.",
+            message=(
+                f"Endpoint inventory sync completed. {count} agents synced. "
+                "Application vulnerabilities were not refreshed."
+                if inventory_only
+                else f"Sync completed. {count} records synced."
+            ),
             records_synced=count,
         )
 
@@ -432,7 +443,12 @@ async def _run_test(integration_type: str, credentials: dict, db: AsyncSession) 
         return {"success": False, "message": f"Unexpected error: {str(e)}"}
 
 
-async def _run_collect(integration_type: str, credentials: dict) -> dict:
+async def _run_collect(
+    integration_type: str,
+    credentials: dict,
+    *,
+    inventory_only: bool = False,
+) -> dict:
     """Run a collector in its own isolated DB session so failures never contaminate the caller's transaction."""
     async with AsyncSessionLocal() as session:
         try:
@@ -441,7 +457,12 @@ async def _run_collect(integration_type: str, credentials: dict) -> dict:
                 return {"records_synced": 0, "error": f"Unknown integration type: {integration_type}"}
             collector = collector_class(credentials=credentials, db=session)
 
-            result = await collector.collect()
+            if inventory_only and hasattr(collector, "collect_inventory"):
+                result = await collector.collect_inventory()
+                # Internal correlation data is not part of the API result.
+                result.pop("agent_id_map", None)
+            else:
+                result = await collector.collect()
 
             if result.get("error"):
                 await session.rollback()

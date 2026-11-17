@@ -20,8 +20,10 @@ export const testIntegration = async (type: string): Promise<{ success: boolean;
   return data
 }
 
-export const syncIntegration = async (type: string): Promise<{ success: boolean; message: string; records_synced?: number }> => {
-  const { data } = await apiClient.post(`/integrations/${type}/sync`)
+export type IntegrationSyncScope = 'full' | 'inventory'
+
+export const syncIntegration = async (type: string, scope: IntegrationSyncScope = 'full'): Promise<{ success: boolean; message: string; records_synced?: number }> => {
+  const { data } = await apiClient.post(`/integrations/${type}/sync`, undefined, { params: { scope } })
   return data
 }
 

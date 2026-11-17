@@ -49,6 +49,7 @@ async def test_on_prem_collector_skips_application_vulnerability_api(monkeypatch
     clear_risks = AsyncMock(return_value=0)
     monkeypatch.setattr(collector, "_fetch_agents", AsyncMock(return_value=[]))
     monkeypatch.setattr(collector, "_upsert_agents", AsyncMock(return_value=(0, {})))
+    monkeypatch.setattr(collector, "_collect_app_agents", AsyncMock())
     monkeypatch.setattr(collector, "_fetch_application_vulnerabilities", fetch_risks)
     monkeypatch.setattr(collector, "_upsert_application_vulnerabilities", clear_risks)
     try:
@@ -62,6 +63,30 @@ async def test_on_prem_collector_skips_application_vulnerability_api(monkeypatch
         "records_synced": 0,
         "agents_synced": 0,
         "vulnerabilities_synced": 0,
+    }
+
+
+async def test_inventory_only_sync_skips_cloud_vulnerability_feed(monkeypatch):
+    collector = SentinelOneCollector(credentials={"api_key": "test"})
+    fetch_risks = AsyncMock()
+    monkeypatch.setattr(collector, "_fetch_agents", AsyncMock(return_value=[{"id": "agent-1"}]))
+    monkeypatch.setattr(
+        collector,
+        "_upsert_agents",
+        AsyncMock(return_value=(1, {"agent-1": "00000000-0000-0000-0000-000000000001"})),
+    )
+    monkeypatch.setattr(collector, "_collect_app_agents", AsyncMock())
+    monkeypatch.setattr(collector, "_fetch_application_vulnerabilities", fetch_risks)
+    try:
+        result = await collector.collect_inventory()
+    finally:
+        await collector.client.aclose()
+
+    fetch_risks.assert_not_awaited()
+    assert result["records_synced"] == 1
+    assert result["agents_synced"] == 1
+    assert result["agent_id_map"] == {
+        "agent-1": "00000000-0000-0000-0000-000000000001"
     }
 
 

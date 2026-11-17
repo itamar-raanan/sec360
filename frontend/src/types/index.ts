@@ -81,6 +81,10 @@ export interface Endpoint {
   risk_score_override: number | null
   risk_score_note: string | null
   owner_user_id: string | null
+  owner_assignment_source: string | null
+  owner_assignment_confidence: number | null
+  owner_assignment_evidence: string | null
+  owner_assigned_at: string | null
   owner: {
     id: string
     full_name: string

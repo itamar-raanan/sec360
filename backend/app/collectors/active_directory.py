@@ -254,10 +254,24 @@ class ActiveDirectoryCollector:
         )).scalars().all()
         linked = 0
         for endpoint in endpoints:
+            if endpoint.owner_assignment_source == "manual":
+                continue
             user = users_by_prefix.get(normalize_username(endpoint.username or ""))
-            if user is not None and endpoint.owner_user_id != user.id:
+            if user is not None and (
+                endpoint.owner_user_id != user.id
+                or endpoint.owner_assignment_source != "active_directory_username"
+            ):
+                changed = endpoint.owner_user_id != user.id
                 endpoint.owner_user_id = user.id
-                linked += 1
+                endpoint.owner_assignment_source = "active_directory_username"
+                endpoint.owner_assignment_confidence = 1.0
+                endpoint.owner_assignment_evidence = (
+                    f"Exact endpoint username {endpoint.username!r} matched "
+                    f"unique email prefix {user.email.split('@', 1)[0]!r}"
+                )
+                endpoint.owner_assigned_at = datetime.now(timezone.utc)
+                if changed:
+                    linked += 1
 
         await self.db.flush()
         return linked

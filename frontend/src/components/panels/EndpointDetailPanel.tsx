@@ -561,6 +561,20 @@ export function EndpointDetailPanel({ endpointId }: { endpointId: string }) {
                     <span className="text-xs text-yellow-600">No owner linked</span>
                   </div>
                 )}
+                {ep.owner_assignment_source && (
+                  <InfoRow
+                    icon={Tag}
+                    label="Assignment"
+                    value={`${ep.owner_assignment_source.split('_').join(' ')}${ep.owner_assignment_confidence != null ? ` · ${Math.round(ep.owner_assignment_confidence * 100)}%` : ''}`}
+                  />
+                )}
+                {ep.owner_assignment_evidence && (
+                  <div className="flex items-start gap-3 px-4 py-2.5">
+                    <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-400" />
+                    <span className="w-24 flex-shrink-0 text-xs text-zinc-500">Evidence</span>
+                    <span className="min-w-0 text-xs leading-5 text-zinc-300">{ep.owner_assignment_evidence}</span>
+                  </div>
+                )}
               </div>
             </div>
 

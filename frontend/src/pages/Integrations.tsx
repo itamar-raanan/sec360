@@ -891,9 +891,32 @@ function IntegrationPanel({
 
   const syncMutation = useMutation({
     mutationFn: () => syncIntegration(config!.integration_type),
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       setTestResult(data)
-      queryClient.invalidateQueries({ queryKey: ['integrations'] })
+      // A product sync can change endpoint ownership, product presence,
+      // compliance, risk, users, and product-owned feature datasets. Mark all
+      // affected views stale so navigating away from this panel never shows
+      // the pre-sync inventory.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['integrations'] }),
+        queryClient.invalidateQueries({ queryKey: ['endpoints'] }),
+        queryClient.invalidateQueries({ queryKey: ['endpoints-all'] }),
+        queryClient.invalidateQueries({ queryKey: ['endpoint-detail'] }),
+        queryClient.invalidateQueries({ queryKey: ['compliance'] }),
+        queryClient.invalidateQueries({ queryKey: ['compliance-dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['compliance-endpoints'] }),
+        queryClient.invalidateQueries({ queryKey: ['risk'] }),
+        queryClient.invalidateQueries({ queryKey: ['users'] }),
+        queryClient.invalidateQueries({ queryKey: ['users-all'] }),
+        queryClient.invalidateQueries({ queryKey: ['user-identity'] }),
+        queryClient.invalidateQueries({ queryKey: ['application-vulnerability-summary'] }),
+        queryClient.invalidateQueries({ queryKey: ['application-vulnerability-facets'] }),
+        queryClient.invalidateQueries({ queryKey: ['application-vulnerabilities'] }),
+        queryClient.invalidateQueries({ queryKey: ['dlp-policy-exclusions'] }),
+        queryClient.invalidateQueries({ queryKey: ['puppet-facts'] }),
+        queryClient.invalidateQueries({ queryKey: ['puppet-facts-summary'] }),
+        queryClient.invalidateQueries({ queryKey: ['puppet-facts-facets'] }),
+      ])
     },
     onError: (err: Error) => setTestResult({ success: false, message: err.message }),
   })

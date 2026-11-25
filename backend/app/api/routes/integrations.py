@@ -1,6 +1,7 @@
 import csv
 import io
 import logging
+from time import perf_counter
 from datetime import datetime, timezone
 from typing import List, Literal
 
@@ -369,12 +370,14 @@ async def sync_integration(
     if not config.credentials:
         return SyncResult(success=False, message="No credentials configured")
 
-    inventory_only = integration_type == "sentinelone" and scope == "inventory"
+    started = perf_counter()
+    inventory_only = integration_type in {"sentinelone", "symantec_dlp"} and scope == "inventory"
     result = await _run_collect(
         integration_type,
         config.credentials,
         inventory_only=inventory_only,
     )
+    logger.info("Integration sync [%s]: collection finished in %.2fs", integration_type, perf_counter() - started)
 
     now = datetime.now(timezone.utc)
     if result.get("error"):
@@ -407,9 +410,17 @@ async def sync_integration(
             from app.engines.compliance import run_full_compliance
             from app.engines.risk import update_all_risk_scores
 
-            await run_full_correlation(db)
-            await run_full_compliance(db)
-            await update_all_risk_scores(db)
+            for phase, engine in (
+                ("correlation", run_full_correlation),
+                ("compliance", run_full_compliance),
+                ("risk", update_all_risk_scores),
+            ):
+                phase_started = perf_counter()
+                await engine(db)
+                logger.info(
+                    "Integration sync [%s]: %s finished in %.2fs",
+                    integration_type, phase, perf_counter() - phase_started,
+                )
         else:
             from app.services.change_tracking import capture_inventory_changes
 
@@ -418,13 +429,16 @@ async def sync_integration(
         # Make the completed inventory, correlation, compliance, and risk
         # rebuild visible before clients invalidate and refetch their caches.
         await db.commit()
+        elapsed = perf_counter() - started
+        logger.info("Integration sync [%s]: committed in %.2fs total", integration_type, elapsed)
         return SyncResult(
             success=True,
             message=(
                 f"Endpoint inventory sync completed. {count} agents synced. "
-                "Application vulnerabilities were not refreshed."
+                f"{'Application vulnerabilities' if integration_type == 'sentinelone' else 'DLP policies'} were not refreshed. "
+                f"Completed in {elapsed:.1f}s."
                 if inventory_only
-                else f"Sync completed. {count} records synced."
+                else f"Sync completed. {count} records synced in {elapsed:.1f}s."
             ),
             records_synced=count,
         )

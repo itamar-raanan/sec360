@@ -730,6 +730,15 @@ Production Docker log rotation is configured for the backend and frontend. Appli
 
 Use **Integration Store → Test** to validate network access and credentials without waiting for a scheduled collection. Use **Sync** to run that integration immediately.
 
+For SentinelOne and Symantec DLP, **Sync Endpoint Inventory** refreshes agent inventory, endpoint mappings, Compliance, and risk. It skips SentinelOne's large vulnerability feed or DLP's policy-exclusion query. Use **Full Sync Including Vulnerabilities** or **Full Sync Including Policies** when those datasets also need an immediate refresh; scheduled collection continues to include them. API callers can request the fast path with `POST /api/integrations/symantec_dlp/sync?scope=inventory` or the equivalent SentinelOne URL. Omitting `scope` retains the full-sync behavior.
+
+For slow DLP syncs, inspect the Oracle query, agent updates, and post-processing durations:
+
+```bash
+docker compose -f docker-compose.prod.yml logs --since=30m backend \
+  | grep -E 'Integration sync|Symantec: (inventory query|synced|policy query)'
+```
+
 For Network Map sources, run `docker compose run --rm sec360-network-collector --once` in `collector/` and inspect its logs. Cisco WLC host-key verification is strict by default. FortiGate requires HTTPS. MikroTik SwOS may use HTTP Digest on a trusted management network because many SwOS deployments do not provide HTTPS; keep that traffic isolated and prefer HTTPS where the device supports it. Full collector deployment and troubleshooting instructions are in `collector/README.md`.
 
 For container-level DNS troubleshooting:

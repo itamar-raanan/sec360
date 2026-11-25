@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, func, select
 
 from app.services.endpoint_inventory import current_endpoint_clause
+from app.services.posture_snapshot import PostureSnapshot, load_posture_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,9 @@ def _version_ok(installed: str | None, minimum: str | None) -> bool:
         return True   # unparseable → don't penalise
 
 
-async def evaluate_endpoint(endpoint_id, db: AsyncSession, required_agents=None):
+async def evaluate_endpoint(
+    endpoint_id, db: AsyncSession, required_agents=None, *, snapshot: PostureSnapshot | None = None,
+):
     """Evaluate compliance for a single endpoint and its connected agents."""
     from app.models.endpoint import Endpoint
     from app.models.agent import SecurityAgent
@@ -37,34 +40,40 @@ async def evaluate_endpoint(endpoint_id, db: AsyncSession, required_agents=None)
     from app.models.system_settings import SystemSettings
     from app.services.compliance_agents import endpoint_agent_presence, load_required_compliance_agents
 
-    result = await db.execute(
-        select(Endpoint).where(
-            Endpoint.id == endpoint_id,
-            current_endpoint_clause(),
+    if snapshot is not None:
+        endpoint = snapshot.endpoints.get(endpoint_id)
+    else:
+        result = await db.execute(
+            select(Endpoint).where(
+                Endpoint.id == endpoint_id,
+                current_endpoint_clause(),
+            )
         )
-    )
-    endpoint = result.scalar_one_or_none()
+        endpoint = result.scalar_one_or_none()
     if not endpoint:
         return None
 
-    agents_result = await db.execute(
-        select(SecurityAgent).where(SecurityAgent.endpoint_id == endpoint_id)
-    )
-    agents = agents_result.scalars().all()
-    if required_agents is None:
-        required_agents = await load_required_compliance_agents(db)
-    agent_presence = await endpoint_agent_presence(
-        endpoint_id, agents, required_agents, db
-    )
-    excluded_agent_keys = set((await db.execute(
-        select(ComplianceExclusion.agent_key).where(
-            ComplianceExclusion.endpoint_id == endpoint_id,
-            ComplianceExclusion.agent_key != "*",
+    if snapshot is not None:
+        agents = snapshot.agents.get(endpoint_id, [])
+        required_agents = snapshot.required_agents
+        agent_presence = snapshot.agent_presence(endpoint_id)
+        excluded_agent_keys = snapshot.exclusions.get(endpoint_id, set()) - {"*"}
+        cfg = snapshot.settings
+    else:
+        agents_result = await db.execute(
+            select(SecurityAgent).where(SecurityAgent.endpoint_id == endpoint_id)
         )
-    )).scalars().all())
-
-    # Load min-version thresholds from settings (row id=1)
-    cfg = (await db.execute(select(SystemSettings).where(SystemSettings.id == 1))).scalar_one_or_none()
+        agents = agents_result.scalars().all()
+        if required_agents is None:
+            required_agents = await load_required_compliance_agents(db)
+        agent_presence = await endpoint_agent_presence(endpoint_id, agents, required_agents, db)
+        excluded_agent_keys = set((await db.execute(
+            select(ComplianceExclusion.agent_key).where(
+                ComplianceExclusion.endpoint_id == endpoint_id,
+                ComplianceExclusion.agent_key != "*",
+            )
+        )).scalars().all())
+        cfg = (await db.execute(select(SystemSettings).where(SystemSettings.id == 1))).scalar_one_or_none()
     min_s1_ver  = (cfg.min_s1_version  or "").strip() if cfg else ""
     min_dlp_ver = (cfg.min_dlp_version or "").strip() if cfg else ""
     min_wss_ver = (cfg.min_wss_version or "").strip() if cfg else ""
@@ -136,10 +145,13 @@ async def evaluate_endpoint(endpoint_id, db: AsyncSession, required_agents=None)
     now = datetime.now(timezone.utc)
 
     # ── Upsert compliance record ─────────────────────────────────────────────
-    cs_result = await db.execute(
-        select(ComplianceStatus).where(ComplianceStatus.endpoint_id == endpoint_id)
-    )
-    cs = cs_result.scalar_one_or_none()
+    if snapshot is not None:
+        cs = snapshot.statuses.get(endpoint_id)
+    else:
+        cs_result = await db.execute(
+            select(ComplianceStatus).where(ComplianceStatus.endpoint_id == endpoint_id)
+        )
+        cs = cs_result.scalar_one_or_none()
 
     if cs:
         cs.edr_installed          = edr_installed
@@ -169,6 +181,8 @@ async def evaluate_endpoint(endpoint_id, db: AsyncSession, required_agents=None)
             last_evaluated        = now,
         )
         db.add(cs)
+        if snapshot is not None:
+            snapshot.statuses[endpoint_id] = cs
 
     return cs
 
@@ -178,13 +192,11 @@ async def run_full_compliance(db: AsyncSession) -> dict:
     from app.models.endpoint import Endpoint
     from app.models.compliance import ComplianceStatus
 
-    from app.services.compliance_agents import load_required_compliance_agents
     from app.services.endpoint_inventory import reconcile_source_backed_endpoints
 
     restored = await reconcile_source_backed_endpoints(db)
     if restored:
         logger.info("Compliance: restored %d source-backed endpoints to inventory", restored)
-    required_agents = await load_required_compliance_agents(db)
     active_endpoint_ids = select(Endpoint.id).where(current_endpoint_clause())
     stale_count = await db.scalar(
         select(func.count()).select_from(ComplianceStatus).where(
@@ -198,13 +210,13 @@ async def run_full_compliance(db: AsyncSession) -> dict:
             )
         )
 
-    result = await db.execute(active_endpoint_ids)
-    endpoint_ids = [row[0] for row in result.fetchall()]
+    snapshot = await load_posture_snapshot(db, current_only=True)
+    endpoint_ids = list(snapshot.endpoints)
 
     evaluated = 0
     for eid in endpoint_ids:
         try:
-            await evaluate_endpoint(eid, db, required_agents=required_agents)
+            await evaluate_endpoint(eid, db, snapshot=snapshot)
             evaluated += 1
         except Exception as e:
             logger.error(f"Compliance: Failed to evaluate endpoint {eid}: {e}")
@@ -212,6 +224,7 @@ async def run_full_compliance(db: AsyncSession) -> dict:
     try:
         from app.services.change_tracking import capture_inventory_changes
 
+        await db.flush()
         changes_logged = await capture_inventory_changes(db)
         if changes_logged:
             logger.info("Compliance: recorded %d inventory changes", changes_logged)

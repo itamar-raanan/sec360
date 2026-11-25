@@ -1136,14 +1136,14 @@ function IntegrationPanel({
                           {catalog?.supportsSync !== false && (
                             <>
                               <button
-                                onClick={() => syncMutation.mutate(config.integration_type === 'sentinelone' ? 'inventory' : 'full')}
+                                onClick={() => syncMutation.mutate(['sentinelone', 'symantec_dlp'].includes(config.integration_type) ? 'inventory' : 'full')}
                                 disabled={syncMutation.isPending}
                                 className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--accent)]/10 border border-[var(--accent)]/30 hover:bg-[var(--accent)]/20 text-sm text-emerald-400 hover:text-emerald-300 transition-colors disabled:opacity-50"
                               >
                                 {syncMutation.isPending ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                                 {syncMutation.isPending
                                   ? 'Syncing...'
-                                  : config.integration_type === 'sentinelone'
+                                  : ['sentinelone', 'symantec_dlp'].includes(config.integration_type)
                                     ? 'Sync Endpoint Inventory'
                                     : 'Sync Now'}
                               </button>
@@ -1155,6 +1155,16 @@ function IntegrationPanel({
                                   title="Also downloads the complete SentinelOne application-vulnerability dataset and may take several minutes"
                                 >
                                   <ShieldCheck size={14} /> Full Sync Including Vulnerabilities
+                                </button>
+                              )}
+                              {config.integration_type === 'symantec_dlp' && (
+                                <button
+                                  onClick={() => syncMutation.mutate('full')}
+                                  disabled={syncMutation.isPending}
+                                  className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] hover:border-violet-500/40 text-sm text-zinc-400 hover:text-violet-300 transition-colors disabled:opacity-50"
+                                  title="Also refreshes DLP policy exclusions and change tracking; this can take longer than endpoint inventory"
+                                >
+                                  <ShieldCheck size={14} /> Full Sync Including Policies
                                 </button>
                               )}
                             </>

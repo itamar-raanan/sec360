@@ -214,19 +214,53 @@ class SymantecCollector(BaseCollector):
 
     async def _upsert_agents(self, records: list) -> int:
         import uuid as _uuid
-        from sqlalchemy import select
+        from sqlalchemy import exists, func, select
         from app.models.endpoint import Endpoint
         from app.models.agent import SecurityAgent
-        from app.engines.correlation import (
-            find_endpoint_by_hostname,
-            normalize_username,
-            normalize_hostname,
-        )
         from app.services.endpoint_inventory import restore_endpoint_from_inventory
+
+        # Legacy correlation can leave two authoritative DLP IDs attached to
+        # one endpoint. Plan the repair against the complete snapshot before
+        # processing rows, so Oracle result order cannot choose the winner.
+        source_hostnames = {}
+        for record in records:
+            hostname = self._clean_hostname(record.get("agentname"))
+            source_id = str(record.get("agentid") or record.get("agentname") or "").strip()
+            if hostname and source_id:
+                source_hostnames.setdefault(source_id, hostname)
+        existing_agents = (await self.db.execute(
+            select(SecurityAgent).where(SecurityAgent.product_name == "symantec")
+        )).scalars().all()
+        agents_by_source = {agent.source_id: agent for agent in existing_agents if agent.source_id}
+        mapped_endpoint_ids = {agent.endpoint_id for agent in existing_agents}
+        endpoints_by_id = {
+            endpoint.id: endpoint
+            for endpoint in (await self.db.execute(
+                select(Endpoint).where(Endpoint.id.in_(mapped_endpoint_ids))
+            )).scalars()
+        }
+        current_sources_by_endpoint: dict[_uuid.UUID, list[str]] = {}
+        for agent in existing_agents:
+            if agent.source_id in source_hostnames:
+                current_sources_by_endpoint.setdefault(agent.endpoint_id, []).append(agent.source_id)
+        keep_source_by_endpoint: dict[_uuid.UUID, str | None] = {}
+        for endpoint_id, source_ids in current_sources_by_endpoint.items():
+            if len(source_ids) < 2:
+                continue
+            endpoint = endpoints_by_id.get(endpoint_id)
+            exact_matches = [
+                source_id for source_id in source_ids
+                if endpoint and self._clean_hostname(endpoint.hostname).casefold()
+                == source_hostnames[source_id].casefold()
+            ]
+            # With no unique name match, no source record has sufficient
+            # evidence to inherit the shared endpoint's identity or exceptions.
+            keep_source_by_endpoint[endpoint_id] = exact_matches[0] if len(exact_matches) == 1 else None
 
         count = 0
         touched_agent_ids: set[_uuid.UUID] = set()
         claimed_endpoint_ids: set[_uuid.UUID] = set()
+        reassigned_endpoint_ids: set[_uuid.UUID] = set()
         seen_source_ids: set[str] = set()
         for record in records:
             hostname_raw = record.get("agentname")
@@ -278,61 +312,39 @@ class SymantecCollector(BaseCollector):
 
             # Reuse the product's prior mapping first. Hostnames and usernames
             # can change and are not authoritative identities.
-            agent = (await self.db.execute(
-                select(SecurityAgent).where(
-                    SecurityAgent.product_name == "symantec",
-                    SecurityAgent.source_id == source_id,
+            agent = agents_by_source.get(source_id)
+            endpoint = endpoints_by_id.get(agent.endpoint_id) if agent else None
+            if endpoint and (
+                endpoint.id in keep_source_by_endpoint
+                and keep_source_by_endpoint[endpoint.id] != source_id
+            ):
+                reassigned_endpoint_ids.add(endpoint.id)
+                logger.info(
+                    "Symantec: repairing shared endpoint mapping for agent %s; source hostname %r, previous endpoint %r",
+                    source_id, hostname, endpoint.hostname,
                 )
-            )).scalar_one_or_none()
-            endpoint = None
-            if agent:
-                endpoint = (await self.db.execute(
-                    select(Endpoint).where(Endpoint.id == agent.endpoint_id)
-                )).scalar_one_or_none()
+                endpoint = None
+            if endpoint and endpoint.id in claimed_endpoint_ids:
+                endpoint = None
 
-            # ── Endpoint lookup: hostname first, then username fallback ──────
+            # An exact hostname can link a previously unmapped DLP agent to
+            # another source. Usernames and lossy hostname slugs identify a
+            # person, not a machine, and must not select its endpoint.
             if not endpoint:
-                endpoint = await find_endpoint_by_hostname(self.db, hostname)
-                # One authoritative DLP record must map to one inventory
-                # endpoint. A lossy hostname match cannot claim the same target
-                # for another DLP AGENTID in this snapshot.
-                if endpoint and endpoint.id in claimed_endpoint_ids:
-                    endpoint = None
-
-            # Username-based fallback: if no hostname match and we have a
-            # real username, search JumpCloud endpoints whose username or
-            # normalised hostname matches the DLP username prefix.
-            if not endpoint and username:
-                norm_dlp_user = normalize_username(username)
-                if norm_dlp_user and norm_dlp_user not in (
-                    "admin", "administrator", "user", "guest", "root", "system"
-                ) and len(norm_dlp_user) >= 4:
-                    result = await self.db.execute(
-                        select(Endpoint).where(Endpoint.source == "jumpcloud")
+                candidates = (await self.db.execute(
+                    select(Endpoint).where(
+                        func.lower(Endpoint.hostname) == hostname.lower(),
+                        Endpoint.id.not_in(claimed_endpoint_ids),
+                        ~exists().where(
+                            SecurityAgent.endpoint_id == Endpoint.id,
+                            SecurityAgent.product_name == "symantec",
+                            SecurityAgent.source_id.is_not(None),
+                            SecurityAgent.source_id != source_id,
+                        ),
                     )
-                    jc_endpoints = result.scalars().all()
-                    candidates = []
-                    for ep in jc_endpoints:
-                        ep_norm_user = normalize_username(ep.username or "")
-                        ep_norm_host = normalize_hostname(ep.hostname)
-                        if (ep_norm_user == norm_dlp_user
-                                or ep_norm_host == norm_dlp_user
-                                or ep_norm_host.startswith(norm_dlp_user)
-                                or norm_dlp_user.startswith(ep_norm_host)):
-                            candidates.append(ep)
-                    candidates = [ep for ep in candidates if ep.id not in claimed_endpoint_ids]
-                    if len(candidates) == 1:
-                        endpoint = candidates[0]
-                        logger.info(
-                            "Symantec: matched %r → %r via unique username %r",
-                            hostname, endpoint.hostname, norm_dlp_user,
-                        )
-                    elif len(candidates) > 1:
-                        logger.info(
-                            "Symantec: skipped ambiguous username match for %r; "
-                            "%d endpoints use %r",
-                            hostname, len(candidates), norm_dlp_user,
-                        )
+                )).scalars().all()
+                if len(candidates) == 1:
+                    endpoint = candidates[0]
 
             if not endpoint:
                 # Create new endpoint sourced from Symantec
@@ -346,6 +358,8 @@ class SymantecCollector(BaseCollector):
                 await self.db.flush()
             else:
                 restore_endpoint_from_inventory(endpoint, "symantec_dlp")
+                if endpoint.source == "symantec":
+                    endpoint.hostname = hostname
                 if endpoint.source == "jumpcloud":
                     # JC-owned: only fill in missing fields
                     if username and not endpoint.username:
@@ -394,6 +408,8 @@ class SymantecCollector(BaseCollector):
                 agent.agent_group = agent_group
 
             await self.db.flush()
+            agents_by_source[source_id] = agent
+            endpoints_by_id[endpoint.id] = endpoint
             touched_agent_ids.add(agent.id)
             claimed_endpoint_ids.add(endpoint.id)
             count += 1
@@ -409,7 +425,7 @@ class SymantecCollector(BaseCollector):
             )
         ).scalars().all()
         pruned = 0
-        pruned_endpoint_ids: set[_uuid.UUID] = set()
+        pruned_endpoint_ids: set[_uuid.UUID] = set(reassigned_endpoint_ids)
         for agent in existing_dlp:
             if agent.id not in touched_agent_ids:
                 pruned_endpoint_ids.add(agent.endpoint_id)

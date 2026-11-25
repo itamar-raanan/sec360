@@ -102,6 +102,7 @@ async def test_wss_scope_contributes_to_endpoint_risk_without_double_counting(
     db_session,
 ):
     from app.engines.risk import endpoint_risk_score
+    from app.models.integration import IntegrationConfig
 
     endpoint = Endpoint(hostname="wss-risk", is_active=True, source="jumpcloud")
     db_session.add(endpoint)
@@ -112,6 +113,10 @@ async def test_wss_scope_contributes_to_endpoint_risk_without_double_counting(
         risk_weight_no_wss=15,
         risk_weight_wss_version=10,
         risk_weight_no_user=10,
+    ))
+    db_session.add(IntegrationConfig(
+        integration_type="sentinelone", display_name="SentinelOne",
+        credentials={"api_key": "test"}, is_enabled=True, status="connected",
     ))
     compliance = ComplianceStatus(
         endpoint_id=endpoint.id,

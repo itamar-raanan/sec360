@@ -19,6 +19,31 @@ async def _admin_headers(client: AsyncClient) -> dict[str, str]:
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
+async def test_dlp_inventory_sync_scope_refreshes_posture_without_policy_refresh(
+    client: AsyncClient, db_session, admin_user, monkeypatch,
+):
+    config = IntegrationConfig(
+        integration_type="symantec_dlp", display_name="Symantec DLP",
+        credentials={"db_host": "test", "db_type": "oracle"},
+        is_enabled=True, status="connected",
+    )
+    db_session.add(config)
+    await db_session.commit()
+    collect = AsyncMock(return_value={"records_synced": 602})
+    monkeypatch.setattr("app.api.routes.integrations._run_collect", collect)
+    response = await client.post(
+        "/api/integrations/symantec_dlp/sync?scope=inventory",
+        headers=await _admin_headers(client),
+    )
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+    assert response.json()["records_synced"] == 602
+    assert "DLP policies were not refreshed" in response.json()["message"]
+    assert "Completed in" in response.json()["message"]
+    assert collect.call_args.kwargs["inventory_only"] is True
+    assert config.records_synced == "602"
+
+
 async def test_catalog_contains_only_the_default_store_products(
     client: AsyncClient, admin_user
 ):

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from time import perf_counter
 from typing import Any
 from datetime import datetime, timezone
 
@@ -85,12 +86,29 @@ class SymantecCollector(BaseCollector):
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, _run)
 
-    async def collect(self) -> dict:
+    async def collect_inventory(self) -> dict:
+        """Refresh agent identities and endpoint mappings without policy SQL."""
         if not self.db_host:
             return {"records_synced": 0, "error": "No database host configured"}
         try:
+            started = perf_counter()
             records = await self._query_dlp_agents()
+            logger.info("Symantec: inventory query returned %d rows in %.2fs", len(records), perf_counter() - started)
+            started = perf_counter()
             count = await self._upsert_agents(records)
+            logger.info("Symantec: synced %d agent records in %.2fs", count, perf_counter() - started)
+            return {"records_synced": count}
+        except Exception as e:
+            logger.error("Symantec: inventory collect failed: %s", e, exc_info=True)
+            return {"records_synced": 0, "error": str(e)}
+
+    async def collect(self) -> dict:
+        """Scheduled/full refresh includes optional policy change tracking."""
+        inventory_result = await self.collect_inventory()
+        if inventory_result.get("error"):
+            return inventory_result
+        try:
+            count = inventory_result["records_synced"]
             policy_count = 0
             policy_changes = 0
             if self._is_oracle():
@@ -98,6 +116,7 @@ class SymantecCollector(BaseCollector):
                     from app.services.dlp_policy_search import query_dlp_policy_exclusions
                     from app.services.dlp_policy_tracking import capture_dlp_policy_changes
 
+                    started = perf_counter()
                     policy_rows, truncated = await query_dlp_policy_exclusions({
                         "db_host": self.db_host,
                         "db_port": self.db_port,
@@ -105,6 +124,7 @@ class SymantecCollector(BaseCollector):
                         "db_user": self.db_user,
                         "db_password": self.db_password,
                     })
+                    logger.info("Symantec: policy query returned %d rows in %.2fs", len(policy_rows), perf_counter() - started)
                     policy_count = len(policy_rows)
                     # Isolate optional policy tracking so a schema-specific
                     # failure cannot leave partial snapshots in this sync.

@@ -8,6 +8,7 @@ from app.collectors.symantec import SymantecCollector
 from app.collectors.jumpcloud import JumpCloudCollector
 from app.engines.correlation import deduplicate_endpoints
 from app.models.agent import SecurityAgent
+from app.models.compliance import ComplianceExclusion
 from app.models.endpoint import Endpoint
 
 
@@ -252,6 +253,117 @@ async def test_dlp_agent_ids_preserve_normalized_hostname_collisions(db_session)
     await deduplicate_endpoints(db_session)
     endpoints = list((await db_session.execute(select(Endpoint))).scalars())
     assert {endpoint.hostname for endpoint in endpoints} == {"alice-laptop", "alice-desktop"}
+
+
+@pytest.mark.parametrize("reverse_order", [False, True])
+@pytest.mark.parametrize("target_exists", [False, True])
+async def test_dlp_repairs_existing_shared_mapping_using_source_hostnames(db_session, reverse_order, target_exists):
+    """Reproduce the production collision: 4402 and 459 on the same endpoint."""
+    canonical = Endpoint(
+        hostname="Lirans-MacBook-Pro-3", source="jumpcloud", username="liran",
+        owner_assignment_source="manual", owner_assignment_evidence="Unassigned by analyst",
+    )
+    db_session.add(canonical)
+    await db_session.flush()
+    canonical_id = canonical.id
+    db_session.add(ComplianceExclusion(
+        endpoint_id=canonical.id, agent_key="symantec_dlp",
+        reason="Exception for the original Mac only", created_by="analyst@example.test",
+    ))
+    target_id = None
+    if target_exists:
+        target = Endpoint(hostname="liran-P6792-28494", source="sentinelone")
+        db_session.add(target)
+        await db_session.flush()
+        target_id = target.id
+        db_session.add(SecurityAgent(
+            endpoint_id=target.id, product_name="sentinelone", source_id="s1-other-machine",
+        ))
+    agents = [
+        SecurityAgent(endpoint_id=canonical.id, product_name="symantec", source_id=source_id)
+        for source_id in ("4402", "459")
+    ]
+    db_session.add_all(agents)
+    await db_session.flush()
+    original_agent_ids = {agent.source_id: agent.id for agent in agents}
+    records = [
+        {"agentid": 4402, "agentname": "liran-P6792-28494", "username": "DOMAIN\\liran", "agentstatename": "Blocked"},
+        {"agentid": 459, "agentname": "Lirans-MacBook-Pro-3", "username": "DOMAIN\\liran", "agentstatename": "Disabled"},
+    ]
+    if reverse_order:
+        records.reverse()
+    collector = SymantecCollector(credentials={"db_host": "test", "db_type": "oracle"}, db=db_session)
+    try:
+        for _ in range(2):
+            assert await collector._upsert_agents(records) == 2
+            await db_session.commit()
+            db_session.expire_all()
+            await deduplicate_endpoints(db_session)
+            await db_session.commit()
+            db_session.expire_all()
+            rows = (await db_session.execute(
+                select(SecurityAgent.id, SecurityAgent.source_id, Endpoint.id, Endpoint.hostname)
+                .join(Endpoint, SecurityAgent.endpoint_id == Endpoint.id)
+                .where(SecurityAgent.product_name == "symantec")
+            )).all()
+            by_source = {row.source_id: row for row in rows}
+            assert len(rows) == 2
+            assert by_source["459"].hostname == "Lirans-MacBook-Pro-3"
+            assert by_source["459"][2] == canonical_id
+            assert by_source["4402"].hostname == "liran-P6792-28494"
+            assert by_source["4402"][2] != canonical_id
+            if target_id:
+                assert by_source["4402"][2] == target_id
+            assert {row.source_id: row[0] for row in rows} == original_agent_ids
+            assert (await db_session.get(Endpoint, canonical_id)).owner_assignment_source == "manual"
+            assert (await db_session.get(Endpoint, by_source["4402"][2])).owner_assignment_source is None
+            exclusions = (await db_session.execute(select(ComplianceExclusion))).scalars().all()
+            assert [item.endpoint_id for item in exclusions] == [canonical_id]
+            assert len((await db_session.execute(select(Endpoint.id))).all()) == 2
+    finally:
+        await collector.client.aclose()
+
+
+async def test_dlp_does_not_assign_a_new_device_by_username_only(db_session):
+    canonical = Endpoint(hostname="alice-macbook-pro", source="jumpcloud", username="alice")
+    db_session.add(canonical)
+    await db_session.flush()
+    canonical_id = canonical.id
+    collector = SymantecCollector(credentials={"db_host": "test", "db_type": "oracle"}, db=db_session)
+    try:
+        assert await collector._upsert_agents([
+            {"agentid": 123, "agentname": "alice-workstation-123", "username": "DOMAIN\\alice"},
+        ]) == 1
+    finally:
+        await collector.client.aclose()
+    agent = (await db_session.execute(select(SecurityAgent))).scalar_one()
+    assert agent.endpoint_id != canonical_id
+    endpoint = await db_session.get(Endpoint, agent.endpoint_id)
+    assert endpoint.hostname == "alice-workstation-123"
+
+
+async def test_new_dlp_agent_cannot_claim_a_machine_reserved_for_an_existing_id(db_session):
+    canonical = Endpoint(hostname="shared-source-hostname", source="jumpcloud")
+    db_session.add(canonical)
+    await db_session.flush()
+    canonical_id = canonical.id
+    db_session.add(SecurityAgent(
+        endpoint_id=canonical.id, product_name="symantec", source_id="459",
+    ))
+    await db_session.flush()
+    collector = SymantecCollector(credentials={"db_host": "test", "db_type": "oracle"}, db=db_session)
+    try:
+        # The new agent appears before the existing agent in the API response.
+        assert await collector._upsert_agents([
+            {"agentid": 4402, "agentname": "shared-source-hostname"},
+            {"agentid": 459, "agentname": "shared-source-hostname"},
+        ]) == 2
+    finally:
+        await collector.client.aclose()
+    agents = (await db_session.execute(select(SecurityAgent))).scalars().all()
+    by_source = {agent.source_id: agent for agent in agents}
+    assert by_source["459"].endpoint_id == canonical_id
+    assert by_source["4402"].endpoint_id != canonical_id
 
 
 async def test_dlp_restores_stale_canonical_endpoint_but_not_analyst_state(db_session):

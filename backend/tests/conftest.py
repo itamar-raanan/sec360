@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from app.core.database import Base
 from app.core.security import hash_password
 from app import models as _models  # noqa: F401 — register every table with Base.metadata
+from app.models.system_settings import SystemSettings  # noqa: F401 — auth policy table must exist before the first client request
 from app.models.user import AuthUser
 
 

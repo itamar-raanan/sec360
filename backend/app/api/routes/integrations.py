@@ -402,7 +402,7 @@ async def sync_integration(
         # Agent integrations change the compliance requirement set. Rebuild
         # posture immediately so "Sync now" is reflected without waiting for
         # the scheduled post-collection cycle.
-        if integration_type in {"sentinelone", "symantec_dlp", "puppet"}:
+        if integration_type in {"jumpcloud", "active_directory", "sentinelone", "symantec_dlp", "puppet"}:
             from app.engines.correlation import run_full_correlation
             from app.engines.compliance import run_full_compliance
             from app.engines.risk import update_all_risk_scores

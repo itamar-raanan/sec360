@@ -128,9 +128,9 @@ export default function Dashboard() {
   const { openPanel } = usePanelStore()
 
   const users = useQuery({ queryKey: ['users', 'total'], queryFn: () => fetchUsers({ limit: 1 }) })
-  const endpoints = useQuery({ queryKey: ['endpoints', 'total'], queryFn: () => fetchEndpoints({ limit: 1 }) })
+  const endpoints = useQuery({ queryKey: ['endpoints', 'total'], queryFn: () => fetchEndpoints({ limit: 1 }), refetchInterval: 60_000 })
   const unassigned = useQuery({ queryKey: ['endpoints', 'unassigned'], queryFn: () => fetchEndpoints({ unassigned: true, limit: 1 } as Parameters<typeof fetchEndpoints>[0]) })
-  const compliance = useQuery({ queryKey: ['compliance', 'dashboard'], queryFn: fetchComplianceDashboard })
+  const compliance = useQuery({ queryKey: ['compliance', 'dashboard'], queryFn: fetchComplianceDashboard, refetchInterval: 60_000 })
   const risk = useQuery({ queryKey: ['risk', 'summary'], queryFn: fetchRiskSummary })
   const riskyUsers = useQuery({ queryKey: ['risk', 'users', 'top'], queryFn: () => fetchRiskyUsers({ min_score: 50, limit: 5 }) })
   const riskyEndpoints = useQuery({ queryKey: ['risk', 'endpoints', 'top'], queryFn: () => fetchRiskyEndpoints({ min_score: 75, limit: 5 }) })
@@ -182,9 +182,9 @@ export default function Dashboard() {
   ] : []
 
   const coverage = {
-    edr: totalEndpoints - (issues?.no_edr ?? 0),
-    dlp: totalEndpoints - (issues?.no_dlp ?? 0),
-    wss: totalEndpoints - (issues?.no_wss ?? 0),
+    edr: compliance.data?.inventory_agent_counts?.sentinelone ?? 0,
+    dlp: compliance.data?.inventory_agent_counts?.symantec_dlp ?? 0,
+    wss: compliance.data?.inventory_agent_counts?.symantec_wss ?? 0,
   }
 
   const isLoading = users.isLoading || endpoints.isLoading || compliance.isLoading || risk.isLoading

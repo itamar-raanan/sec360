@@ -30,6 +30,49 @@ def restore_endpoint_from_inventory(endpoint, source: str) -> bool:
     return True
 
 
+def inventory_evidence_clause():
+    """A retained security agent or Puppet node keeps a machine in inventory.
+
+    Connectivity is deliberately not a presence check: an offline S1/DLP
+    agent still exists in its authoritative product inventory.
+    """
+    from sqlalchemy import exists
+
+    from app.models.agent import SecurityAgent
+    from app.models.endpoint import Endpoint
+    from app.models.puppet import PuppetNode
+
+    return exists().where(SecurityAgent.endpoint_id == Endpoint.id) | exists().where(
+        PuppetNode.endpoint_id == Endpoint.id
+    )
+
+
+async def reconcile_source_backed_endpoints(db) -> int:
+    """Repair legacy hidden inventory before evaluating compliance.
+
+    This also handles partial collection cycles where another source has
+    hidden a machine and the security product cannot be collected this cycle.
+    Explicit ignored/decommissioned records must stay outside inventory.
+    """
+    from sqlalchemy import select
+
+    from app.models.endpoint import Endpoint
+
+    await db.flush()
+    endpoints = (await db.execute(
+        select(Endpoint).where(
+            Endpoint.lifecycle_state.in_(("active", "stale")),
+            ~current_endpoint_clause(),
+            inventory_evidence_clause(),
+        )
+    )).scalars().all()
+    for endpoint in endpoints:
+        restore_endpoint_from_inventory(endpoint, "retained_product_inventory")
+    if endpoints:
+        await db.flush()
+    return len(endpoints)
+
+
 async def retire_orphaned_source_endpoints(db, source: str, endpoint_ids: set) -> int:
     """Retire source-owned endpoints after their final inventory evidence is removed.
 
@@ -42,29 +85,20 @@ async def retire_orphaned_source_endpoints(db, source: str, endpoint_ids: set) -
 
     from datetime import datetime, timezone
 
-    from sqlalchemy import exists, select
+    from sqlalchemy import select
 
-    from app.models.agent import SecurityAgent
     from app.models.endpoint import Endpoint
-    from app.models.puppet import PuppetNode
 
     candidates = list((await db.execute(
         select(Endpoint).where(
             Endpoint.id.in_(endpoint_ids),
             Endpoint.source == source,
             Endpoint.lifecycle_state.in_(("active", "stale")),
+            ~inventory_evidence_clause(),
         )
     )).scalars())
     retired = 0
     for endpoint in candidates:
-        has_agent = await db.scalar(select(exists().where(
-            SecurityAgent.endpoint_id == endpoint.id,
-        )))
-        has_puppet = await db.scalar(select(exists().where(
-            PuppetNode.endpoint_id == endpoint.id,
-        )))
-        if has_agent or has_puppet:
-            continue
         endpoint.is_active = False
         endpoint.lifecycle_state = "stale"
         endpoint.lifecycle_reason = f"Removed from {source} inventory"

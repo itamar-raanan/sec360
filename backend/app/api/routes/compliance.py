@@ -67,6 +67,26 @@ async def get_compliance_dashboard(
         select(func.count()).select_from(Endpoint).where(current_endpoint_clause())
     ) or 0
 
+    # Deployment totals describe actual inventory, including approved compliance
+    # exceptions. Deriving these as total minus compliance issues incorrectly
+    # counted missing/excluded or not-yet-evaluated endpoints as installed.
+    from app.models.agent import SecurityAgent
+
+    inventory_agent_counts = {
+        "sentinelone": 0,
+        "symantec_dlp": 0,
+        "symantec_wss": 0,
+    }
+    product_keys = {"sentinelone": "sentinelone", "symantec": "symantec_dlp", "symantec_wss": "symantec_wss"}
+    inventory_agents = (await db.execute(
+        select(SecurityAgent.product_name, func.count(func.distinct(SecurityAgent.endpoint_id)))
+        .join(Endpoint, SecurityAgent.endpoint_id == Endpoint.id)
+        .where(current_endpoint_clause(), SecurityAgent.product_name.in_(product_keys))
+        .group_by(SecurityAgent.product_name)
+    )).all()
+    for product, count in inventory_agents:
+        inventory_agent_counts[product_keys[product]] = count
+
     def issue_metric(enabled, condition, label, agent_key=None):
         if agent_key:
             condition = condition & ~_has_exclusion(agent_key)
@@ -144,6 +164,7 @@ async def get_compliance_dashboard(
             "agent_coverage": agent_coverage,
             "excluded_total": excluded_total,
             "inventory_total": inventory_total,
+            "inventory_agent_counts": inventory_agent_counts,
         }
 
     # ── OS breakdown via SQL GROUP BY ─────────────────────────────────────────
@@ -264,6 +285,7 @@ async def get_compliance_dashboard(
         "agent_coverage": agent_coverage,
         "excluded_total": excluded_total,
         "inventory_total": inventory_total,
+        "inventory_agent_counts": inventory_agent_counts,
     }
 
 

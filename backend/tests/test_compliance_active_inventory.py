@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import AsyncClient
@@ -9,6 +10,7 @@ from app.models.agent import SecurityAgent
 from app.models.compliance import ComplianceStatus
 from app.models.endpoint import Endpoint
 from app.models.integration import IntegrationConfig
+from app.models.compliance import ComplianceExclusion
 
 
 pytestmark = pytest.mark.asyncio
@@ -150,3 +152,135 @@ async def test_full_evaluation_keeps_old_available_records(db_session):
         select(func.count()).select_from(ComplianceStatus)
     )
     assert remaining == 3
+
+
+async def test_security_inventory_and_compliance_counts_survive_source_removal(
+    client: AsyncClient, db_session, admin_user
+):
+    """Compare the actual APIs after a later JumpCloud sync and a legacy repair."""
+    from app.collectors.jumpcloud import JumpCloudCollector
+
+    products = ("sentinelone", "symantec", "symantec_wss")
+    endpoints = []
+    for product in products:
+        for state in ("active", "stale", "ignored", "decommissioned"):
+            endpoint = Endpoint(
+                hostname=f"{product}-{state}", source="jumpcloud",
+                is_active=state == "active", lifecycle_state=state,
+            )
+            db_session.add(endpoint)
+            await db_session.flush()
+            db_session.add(SecurityAgent(
+                endpoint_id=endpoint.id, product_name=product,
+                status="inactive", source_id=f"{product}-{state}",
+            ))
+            endpoints.append(endpoint)
+    excluded = Endpoint(hostname="compliance-exception", source="jumpcloud")
+    db_session.add(excluded)
+    await db_session.flush()
+    db_session.add_all([
+        SecurityAgent(endpoint_id=excluded.id, product_name="sentinelone", status="active"),
+        ComplianceExclusion(
+            endpoint_id=excluded.id, agent_key="*",
+            reason="Approved exception", created_by="analyst@example.test",
+        ),
+        IntegrationConfig(
+            integration_type="sentinelone", display_name="SentinelOne",
+            credentials={"api_key": "test"}, is_enabled=True, status="connected",
+        ),
+        IntegrationConfig(
+            integration_type="symantec_dlp", display_name="Symantec DLP",
+            credentials={"db_host": "test"}, is_enabled=True, status="connected",
+        ),
+    ])
+    await db_session.flush()
+    collector = JumpCloudCollector(credentials={"api_key": "test"}, db=db_session)
+    await collector._upsert_systems([])
+    result = await run_full_compliance(db_session)
+    await db_session.commit()
+    assert result["total"] == result["evaluated"] == 7
+
+    headers = await _login(client)
+    inventory = await client.get("/api/endpoints?limit=100", headers=headers)
+    dashboard = await client.get("/api/compliance/dashboard", headers=headers)
+    compliance = await client.get("/api/compliance/endpoints", headers=headers)
+    assert inventory.status_code == dashboard.status_code == compliance.status_code == 200
+    assert int(inventory.headers["x-total-count"]) == dashboard.json()["inventory_total"] == 7
+    assert int(compliance.headers["x-total-count"]) == dashboard.json()["summary"]["total"] == 6
+    coverage = {item["key"]: item for item in dashboard.json()["agent_coverage"]}
+    for product, key in zip(products, ("sentinelone", "symantec_dlp", "symantec_wss")):
+        visible = sum(
+            any(agent["product_name"] == product for agent in endpoint["agents"])
+            for endpoint in inventory.json()
+        )
+        # The full exception is intentionally visible in Endpoints while not
+        # counting towards Compliance. Connectivity does not reduce coverage.
+        assert visible == (3 if product == "sentinelone" else 2)
+        assert dashboard.json()["inventory_agent_counts"][key] == visible
+        assert coverage[key]["has"] == 2
+    assert dashboard.json()["excluded_total"] == 1
+    for endpoint in endpoints:
+        if endpoint.hostname.endswith(("-ignored", "-decommissioned")):
+            assert endpoint.is_active is False
+
+
+async def test_dashboard_deployment_count_does_not_require_a_compliance_snapshot(
+    client: AsyncClient, db_session, admin_user
+):
+    endpoint = Endpoint(hostname="new-s1-device", source="sentinelone")
+    db_session.add(endpoint)
+    await db_session.flush()
+    db_session.add(SecurityAgent(
+        endpoint_id=endpoint.id, product_name="sentinelone", status="inactive",
+    ))
+    await db_session.commit()
+
+    response = await client.get("/api/compliance/dashboard", headers=await _login(client))
+    assert response.status_code == 200
+    assert response.json()["summary"]["total"] == 0
+    assert response.json()["inventory_total"] == 1
+    assert response.json()["inventory_agent_counts"] == {
+        "sentinelone": 1, "symantec_dlp": 0, "symantec_wss": 0,
+    }
+
+
+@pytest.mark.parametrize("integration_type", ["jumpcloud", "active_directory"])
+async def test_manual_directory_sync_refreshes_security_coverage(
+    client: AsyncClient, db_session, admin_user, monkeypatch, integration_type
+):
+    endpoint = Endpoint(
+        hostname="retained-security-device", source="jumpcloud",
+        is_active=False, lifecycle_state="stale",
+    )
+    db_session.add(endpoint)
+    await db_session.flush()
+    db_session.add_all([
+        SecurityAgent(endpoint_id=endpoint.id, product_name="sentinelone", status="inactive"),
+        IntegrationConfig(
+            integration_type=integration_type, display_name=integration_type,
+            credentials={"test": "configured"}, is_enabled=True, status="connected",
+        ),
+        IntegrationConfig(
+            integration_type="sentinelone", display_name="SentinelOne",
+            credentials={"api_key": "test"}, is_enabled=True, status="connected",
+        ),
+    ])
+    await db_session.commit()
+    # External collection is outside the regression; exercise real inventory
+    # restoration, Compliance rebuilding, transaction commit, and API reads.
+    monkeypatch.setattr(
+        "app.api.routes.integrations._run_collect",
+        AsyncMock(return_value={"records_synced": 0}),
+    )
+    monkeypatch.setattr("app.engines.risk.update_all_risk_scores", AsyncMock())
+    headers = await _login(client)
+    response = await client.post(f"/api/integrations/{integration_type}/sync", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["success"] is True
+
+    inventory = await client.get("/api/endpoints?has_s1=true", headers=headers)
+    dashboard = await client.get("/api/compliance/dashboard", headers=headers)
+    assert inventory.status_code == dashboard.status_code == 200
+    assert int(inventory.headers["x-total-count"]) == 1
+    coverage = {item["key"]: item for item in dashboard.json()["agent_coverage"]}
+    assert coverage["sentinelone"]["has"] == 1

@@ -319,6 +319,7 @@ function EndpointList({ filters, agents, onRemoveFilter, onClearFilters }: {
   const { data: endpoints = [], isLoading } = useQuery<ComplianceEndpoint[]>({
     queryKey: ['compliance-endpoints', filterSignature || 'default', search],
     queryFn: () => apiClient.get(`/compliance/endpoints?${params.toString()}`).then(r => r.data),
+    refetchInterval: 60_000,
   })
 
   const displayed = filters.length ? endpoints : endpoints.filter(e => e.status !== 'compliant')
@@ -482,6 +483,7 @@ export default function Compliance() {
   const { data, isLoading, refetch, isRefetching } = useQuery<ComplianceDashboard>({
     queryKey: ['compliance-dashboard'],
     queryFn: () => apiClient.get('/compliance/dashboard').then(r => r.data),
+    refetchInterval: 60_000,
   })
 
   const evaluateMutation = useMutation({
@@ -621,6 +623,7 @@ export default function Compliance() {
           {agentCoverage.length > 0 && (
             <div className="rounded-xl card p-4">
               <div className="mb-1 text-xs font-medium text-zinc-400">Agent coverage</div>
+              <p className="mb-3 text-xs text-zinc-500">Approved exceptions are excluded from coverage. Endpoints shows all installed products.</p>
               <p className="mb-3 text-[11px] leading-4 text-zinc-600">Enabled, configured endpoint agents remain compliance requirements during connection errors.</p>
               <div className="space-y-3">
                 {agentCoverage.map(agent => {

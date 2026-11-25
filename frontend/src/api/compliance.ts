@@ -35,6 +35,11 @@ export interface ComplianceDashboardData {
   }
   excluded_total: number
   inventory_total: number
+  inventory_agent_counts: {
+    sentinelone: number
+    symantec_dlp: number
+    symantec_wss: number
+  }
   agent_coverage: Array<{
     key: string
     label: string

@@ -521,8 +521,8 @@ class JumpCloudCollector:
 
         await self.db.flush()
 
-        # Prune: any JumpCloud-sourced endpoint not seen in this sync was removed
-        # from JumpCloud — mark it inactive so it disappears from the UI.
+        # Removal from JumpCloud alone does not remove the physical endpoint:
+        # retained S1, DLP, WSS, or Puppet evidence must keep it available.
         jc_endpoints = (
             await self.db.execute(
                 select(Endpoint).where(
@@ -531,13 +531,13 @@ class JumpCloudCollector:
                 )
             )
         ).scalars().all()
-        pruned = 0
-        for ep in jc_endpoints:
-            if ep.id not in touched_ids:
-                ep.is_active = False
-                if ep.lifecycle_state == "active":
-                    ep.lifecycle_state = "stale"
-                pruned += 1
+        from app.services.endpoint_inventory import retire_orphaned_source_endpoints
+
+        pruned = await retire_orphaned_source_endpoints(
+            self.db,
+            "jumpcloud",
+            {ep.id for ep in jc_endpoints if ep.id not in touched_ids},
+        )
         if pruned:
             logger.info("JumpCloud: marked %d removed systems as inactive", pruned)
             await self.db.flush()

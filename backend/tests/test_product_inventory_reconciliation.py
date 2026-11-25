@@ -5,12 +5,43 @@ from sqlalchemy import select
 
 from app.collectors.sentinelone import SentinelOneCollector
 from app.collectors.symantec import SymantecCollector
+from app.collectors.jumpcloud import JumpCloudCollector
 from app.engines.correlation import deduplicate_endpoints
 from app.models.agent import SecurityAgent
 from app.models.endpoint import Endpoint
 
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.mark.parametrize("product", ["sentinelone", "symantec", "symantec_wss"])
+async def test_jumpcloud_removal_cannot_hide_security_product_inventory(db_session, product):
+    endpoint = Endpoint(hostname="removed-from-jc-only", source="jumpcloud")
+    orphan = Endpoint(hostname="removed-from-everywhere", source="jumpcloud")
+    ignored = Endpoint(
+        hostname="analyst-ignored", source="jumpcloud",
+        is_active=False, lifecycle_state="ignored",
+    )
+    db_session.add_all([endpoint, orphan, ignored])
+    await db_session.flush()
+    db_session.add_all([
+        SecurityAgent(endpoint_id=endpoint.id, product_name=product, status="inactive"),
+        SecurityAgent(endpoint_id=ignored.id, product_name=product, status="active"),
+    ])
+    await db_session.flush()
+
+    collector = JumpCloudCollector(credentials={"api_key": "test"}, db=db_session)
+    # Include repeated JC refreshes: the count must not depend on another
+    # successful S1/DLP refresh reviving this machine afterwards.
+    await collector._upsert_systems([])
+    await collector._upsert_systems([])
+
+    assert endpoint.is_active is True
+    assert endpoint.lifecycle_state == "active"
+    assert orphan.is_active is False
+    assert orphan.lifecycle_state == "stale"
+    assert ignored.is_active is False
+    assert ignored.lifecycle_state == "ignored"
 
 
 async def test_sentinelone_sync_removes_agents_missing_from_source(db_session):

@@ -1052,6 +1052,11 @@ function IntegrationPanel({
                         <span className="text-zinc-300">{config.records_synced}</span>
                       </div>
                     )}
+                    {config.integration_type === 'sentinelone' && config.records_synced && (
+                      <p className="text-xs leading-5 text-zinc-500">
+                        Records synced may include application vulnerabilities. See Endpoints for installed S1 and WSS counts.
+                      </p>
+                    )}
                     {config.last_error && (
                       <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-xs text-red-400 flex items-start gap-2">
                         <AlertCircle size={13} className="flex-shrink-0 mt-0.5" />

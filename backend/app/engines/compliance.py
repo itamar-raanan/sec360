@@ -179,7 +179,11 @@ async def run_full_compliance(db: AsyncSession) -> dict:
     from app.models.compliance import ComplianceStatus
 
     from app.services.compliance_agents import load_required_compliance_agents
+    from app.services.endpoint_inventory import reconcile_source_backed_endpoints
 
+    restored = await reconcile_source_backed_endpoints(db)
+    if restored:
+        logger.info("Compliance: restored %d source-backed endpoints to inventory", restored)
     required_agents = await load_required_compliance_agents(db)
     active_endpoint_ids = select(Endpoint.id).where(current_endpoint_clause())
     stale_count = await db.scalar(

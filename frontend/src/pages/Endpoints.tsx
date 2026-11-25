@@ -17,6 +17,7 @@ import type { Endpoint } from '../types'
 import { useEndpointProductTags } from '../hooks/useEndpointProductTags'
 import { useConnectedIntegrations } from '../hooks/useConnectedIntegrations'
 import { connectedLastActivity, primaryEndpointActivity } from '../utils/endpointActivity'
+import { endpointHasProduct } from '../utils/endpointProductPresence'
 
 interface AuthUserDetail {
   id: string
@@ -26,14 +27,6 @@ interface AuthUserDetail {
 }
 
 interface EndpointProductOption { key: string; label: string }
-
-type EndpointProductState = 'has' | 'missing' | 'excluded' | 'unassessed'
-
-function endpointProductState(ep: Endpoint, key: string): EndpointProductState {
-  if (ep.compliance_excluded || ep.excluded_agents?.includes(key)) return 'excluded'
-  if (!ep.compliance_status) return 'unassessed'
-  return ep.compliance_status.agent_presence?.[key] ? 'has' : 'missing'
-}
 
 const relTime = (iso: string) => formatDistanceToNow(new Date(iso), { addSuffix: true })
 
@@ -282,6 +275,7 @@ export default function Endpoints() {
   const { data: raw = [], isLoading } = useQuery<Endpoint[]>({
     queryKey: ['endpoints-all'],
     queryFn: async () => (await apiClient.get('/endpoints?limit=2000')).data,
+    refetchInterval: 60_000,
   })
   const { tags: enabledProductTags, enabled: productEnabled } = useEndpointProductTags()
   const { connected, configured } = useConnectedIntegrations()
@@ -329,8 +323,8 @@ export default function Endpoints() {
       // agents
       const agents = ep.agents ?? []
       endpointProducts.forEach(item => {
-        const state = endpointProductState(ep, item.key)
-        if (state === 'has' || state === 'missing') agent[`${item.key}:${state}`]++
+        const state = endpointHasProduct(ep, item.key) ? 'has' : 'missing'
+        agent[`${item.key}:${state}`]++
       })
       if (agents.some(a => a.status === 'inactive')) agent.disabled_agent++
       // agent status
@@ -392,7 +386,7 @@ export default function Endpoints() {
           return activeAgentFilters.some(value => {
             if (value === 'disabled_agent') return hasDisabledAgent
             const [key, state] = value.split(':')
-            return endpointProductState(ep, key) === state
+            return (endpointHasProduct(ep, key) ? 'has' : 'missing') === state
           })
         })
       }
